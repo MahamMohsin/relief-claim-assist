@@ -20,9 +20,11 @@ const roleEntries = Object.entries(personas) as [Persona, (typeof personas)[Pers
 const tools = Object.keys(apps) as MiniApp[];
 
 export function Workspace({ initialProfile, showLogin = false }: { initialProfile: Profile | null; showLogin?: boolean }) {
-  const [showAuthModal, setShowAuthModal] = useState(showLogin || !initialProfile);
-  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [profile, setProfile] = useState(initialProfile);
+  const [showAuthModal, setShowAuthModal] = useState(showLogin || !initialProfile);
+  // When not logged in, the login screen is the only gateway: background is blurred and clicking out is impossible
+  const isLocked = !profile;
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [openApps, setOpenApps] = useState<MiniApp[]>([]);
   const [activeApp, setActiveApp] = useState<MiniApp | null>(null);
   const [windowState, setWindowState] = useState<Record<MiniApp, { sizePreset?: "compact" | "default" | "wide" | "max"; maximized?: boolean }>>({} as any);
@@ -253,7 +255,12 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
   } : null;
 
   return (
-    <div className={lite ? "workspace lite" : "workspace"}>
+    <div
+      className={
+        (lite ? "workspace lite" : "workspace") +
+        (isLocked ? " locked-workspace" : "")
+      }
+    >
       {/* Apple macOS Full-Width Top Menu Bar */}
       <header className="macos-menubar">
         <div className="macos-menu-left">
@@ -692,11 +699,14 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
 
       {/* Pip Login Screen (Companion Robot & LED Matrix Interactive Loop) */}
       <PipLoginModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
+        isOpen={showAuthModal || isLocked}
+        onClose={() => {
+          if (!isLocked) setShowAuthModal(false);
+        }}
         onSelectPersona={signIn}
         busy={busy}
         offline={offline}
+        canDismiss={!isLocked}
       />
     </div>
   );

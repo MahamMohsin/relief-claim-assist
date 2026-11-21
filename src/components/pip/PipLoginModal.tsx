@@ -13,10 +13,11 @@ const ARROW =
 
 interface PipLoginModalProps {
   isOpen: boolean;
-  onClose: () => void;
+  onClose?: () => void;
   onSelectPersona: (persona: Persona) => void;
   busy: Persona | "signout" | null;
   offline: boolean;
+  canDismiss?: boolean;
 }
 
 export function PipLoginModal({
@@ -25,6 +26,7 @@ export function PipLoginModal({
   onSelectPersona,
   busy,
   offline,
+  canDismiss = false,
 }: PipLoginModalProps) {
   const stage = useRef<HTMLDivElement>(null);
 
@@ -101,15 +103,22 @@ export function PipLoginModal({
   );
 
   return (
-    <div className={s.pipModalOverlay} onClick={onClose}>
-      <button
-        type="button"
-        className={s.closeButton}
-        onClick={onClose}
-        aria-label="Close login dialog"
-      >
-        <X size={20} />
-      </button>
+    <div
+      className={s.pipModalOverlay}
+      onClick={(e) => {
+        if (canDismiss && onClose) onClose();
+      }}
+    >
+      {canDismiss && onClose && (
+        <button
+          type="button"
+          className={s.closeButton}
+          onClick={onClose}
+          aria-label="Close login dialog"
+        >
+          <X size={20} />
+        </button>
+      )}
 
       <div
         className={s.stage}

@@ -65,7 +65,16 @@ h3 { font-weight: 680; }
 small { font-size: .82rem; }
 p { color: var(--soft-ink); }
 svg { flex-shrink: 0; }
-.workspace { min-height: 100dvh; }
+/* Locked workspace state when login is mandatory */
+.locked-workspace .macos-menubar,
+.locked-workspace .content,
+.locked-workspace .site-footer,
+.locked-workspace .bottom-shell {
+  filter: blur(14px) brightness(0.85);
+  pointer-events: none;
+  user-select: none;
+  transition: filter 0.4s ease;
+}
 .topbar { background: var(--white); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 6; }
 .topbar-inner, .controls > div, .content, .site-footer, .top-notice { max-width: 1178px; margin: 0 auto; }
 .topbar-inner { padding: .8rem 1rem; display: flex; justify-content: space-between; align-items: center; gap: .7rem; flex-wrap: wrap; }
