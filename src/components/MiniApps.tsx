@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { AlertCircle, ArrowLeft, ArrowUpDown, AudioLines, CalendarDays, Check, ChevronRight, CircleDollarSign, LoaderCircle, LockKeyhole, MessageSquare, Paperclip, Plus, Search, UsersRound } from "lucide-react";
+import { AlertCircle, ArrowLeft, ArrowUpDown, AudioLines, CalendarDays, Check, CheckCircle2, ChevronRight, CircleDollarSign, FileCheck, LoaderCircle, LockKeyhole, MessageSquare, Paperclip, Plus, Search, ShieldAlert, Sparkles, UsersRound, XCircle } from "lucide-react";
 import { api, HttpError } from "@/src/lib/client";
 import { getDraft, resolveDraft, saveDraft, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
-import type { Action, Audit, Claim, Family, MiniApp, Payload, Privacy, Profile, Rule, RuleConfig, UIAction } from "@/src/lib/contracts";
+import type { Action, Audit, Claim, ClaimSummaryResult, Family, MiniApp, Payload, Privacy, Profile, Rule, RuleConfig, UIAction } from "@/src/lib/contracts";
 import { speakText } from "./os/speech";
 import { cuaEngine } from "./os/cuaEngine";
 import { PolicyChatView } from "./PolicyChatView";
@@ -617,6 +617,12 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "accepted" | "rejected">("all");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  // AI Summary & Quick Action States
+  const [aiSummary, setAiSummary] = useState<ClaimSummaryResult | null>(null);
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const [quickBusy, setQuickBusy] = useState<Record<string, "approve" | "reject" | null>>({});
+
   useEffect(() => {
     cuaEngine.search.review = setQuery;
     return () => { delete cuaEngine.search.review; };
@@ -640,18 +646,106 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
     if (!claim) return;
     setBusy(true); setProblem(""); setNotice("");
     try {
-      const updated = await api<Claim>(action, action === "review" ? { claimId: claim.id, decision, reason, reasonUr } : { claimId: claim.id, outcome });
+      const updated = await api<Claim>(action, action === "review"
+        ? { claimId: claim.id, decision, reason, reasonUr, aiSummary: aiSummary?.summary || claim.ai_summary }
+        : { claimId: claim.id, outcome });
       setDecision(["approved", "rejected"].includes(updated.status) ? "close" : "assign");
-      setNotice(action === "review" ? "Officer decision recorded." : outcome === "paid" ? "Simulated payment issued." : "Simulated payment failed. The officer can retry it.");
+      setNotice(action === "review" ? "Officer decision recorded and sent to applicant." : outcome === "paid" ? "Simulated payment issued." : "Simulated payment failed. The officer can retry it.");
       setReason(""); setReasonUr(""); ctx.refresh();
     } catch (error) { setProblem(getMessage(error)); }
     finally { setBusy(false); }
   }
 
+  async function produceSummary() {
+    if (!claim) return;
+    setAiSummaryLoading(true);
+    setProblem("");
+    try {
+      const result = await api<ClaimSummaryResult>("claim_summary", { claimId: claim.id });
+      setAiSummary(result);
+      if (["submitted", "in_review", "needs_proof"].includes(claim.status)) {
+        if (result.recommendation === "approve") {
+          setDecision(claim.status === "needs_proof" ? "assign" : "approve");
+        } else if (result.recommendation === "reject") {
+          setDecision("reject");
+        } else if (result.recommendation === "more_proof") {
+          setDecision("more_proof");
+        }
+      }
+      setReason(result.reason);
+      setReasonUr(result.reasonUr);
+      setNotice("AI case assessment produced. Recommended decision and plain-language reasons populated.");
+    } catch (error) {
+      setProblem(getMessage(error));
+    } finally {
+      setAiSummaryLoading(false);
+    }
+  }
+
+  async function quickDecide(chosenDecision: "approve" | "reject") {
+    if (!claim) return;
+    setBusy(true);
+    setProblem("");
+    setNotice("");
+    try {
+      let finalReason = reason;
+      let finalReasonUr = reasonUr;
+      let finalSummary = aiSummary?.summary || claim.ai_summary;
+
+      if (!finalReason || finalReason.length < 5 || !finalSummary) {
+        const generated = await api<ClaimSummaryResult>("claim_summary", { claimId: claim.id });
+        setAiSummary(generated);
+        finalReason = generated.reason;
+        finalReasonUr = generated.reasonUr;
+        finalSummary = generated.summary;
+        setReason(finalReason);
+        setReasonUr(finalReasonUr);
+      }
+
+      const updated = await api<Claim>("review", {
+        claimId: claim.id,
+        decision: chosenDecision,
+        reason: finalReason,
+        reasonUr: finalReasonUr,
+        aiSummary: finalSummary,
+      });
+
+      setDecision(["approved", "rejected"].includes(updated.status) ? "close" : "assign");
+      setNotice(`Decision recorded as ${chosenDecision === "approve" ? "APPROVED" : "REJECTED"} with AI summary sent to applicant.`);
+      ctx.refresh();
+    } catch (error) {
+      setProblem(getMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleQuickCardReview(item: Claim, chosenDecision: "approve" | "reject") {
+    setQuickBusy(prev => ({ ...prev, [item.id]: chosenDecision }));
+    setProblem("");
+    setNotice("");
+    try {
+      await api<{ ok: boolean; claim: Claim; summary: ClaimSummaryResult }>("quick_review", {
+        claimId: item.id,
+        decision: chosenDecision,
+      });
+      setNotice(`${item.citizen_name || "Claim"}: ${chosenDecision === "approve" ? "Accepted" : "Rejected"} with AI summary sent to applicant.`);
+      ctx.refresh();
+    } catch (err) {
+      setProblem(getMessage(err));
+    } finally {
+      setQuickBusy(prev => ({ ...prev, [item.id]: null }));
+    }
+  }
+
   function pick(item: Claim) {
     setSelected(item.id);
     setDecision(["approved", "rejected"].includes(item.status) ? "close" : "assign");
-    setNotice(""); setProblem("");
+    setNotice("");
+    setProblem("");
+    setReason(item.citizen_reason_en || "");
+    setReasonUr(item.citizen_reason_ur || "");
+    setAiSummary(null);
   }
 
   if (claim) return <div className="view-stack claim-detail-view">
@@ -659,7 +753,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
       <button
         type="button"
         className="claim-detail-back-btn"
-        onClick={() => { setSelected(""); setNotice(""); setProblem(""); }}
+        onClick={() => { setSelected(""); setNotice(""); setProblem(""); setAiSummary(null); }}
       >
         <ArrowLeft size={16} />
         <span>Board</span>
@@ -667,11 +761,207 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
     </div>
     <Panel>
       <div className="panel-head">
-        <div><h2>{claim.citizen_name}</h2><p className="breakable">{claim.id}</p></div>
+        <div>
+          <h2>{claim.citizen_name}</h2>
+          <p className="breakable">{claim.id}</p>
+        </div>
+        <div className="detail-head-actions">
+          <StateTag value={claim.status} />
+          <button
+            type="button"
+            className="ai-summary-produce-btn"
+            disabled={aiSummaryLoading || busy || ctx.offline}
+            onClick={() => void produceSummary()}
+            title="Produce comprehensive AI summary taking profile, documents, and rules into account"
+          >
+            {aiSummaryLoading ? <LoaderCircle size={14} className="spin" /> : <Sparkles size={14} />}
+            <span>Produce AI Summary</span>
+          </button>
+        </div>
       </div>
-      <div className="facts two"><div><small>Rule version</small><strong>v{claim.rule_version_used ?? "–"}</strong></div><div><small>Payment</small><strong>{title(claim.payment_status)}</strong></div></div>
+
+      <div className="facts two">
+        <div><small>Rule version</small><strong>v{claim.rule_version_used ?? "–"}</strong></div>
+        <div><small>Payment</small><strong>{title(claim.payment_status)}</strong></div>
+      </div>
       <p>{claim.handoff_notes}</p>
       {Boolean(claim.reports) && <Notice text={String(claim.reports) + " missing payment report(s) on this case."} warning />}
+
+      {/* AI Summary Assessment Card */}
+      <div className="ai-summary-card">
+        <div className="ai-summary-card-head">
+          <div className="ai-summary-card-title">
+            <Sparkles size={16} color="#3b82f6" />
+            <span>AI Case Assessment</span>
+          </div>
+          {aiSummary ? (
+            <div className="ai-summary-meta-row">
+              <span className={`ai-summary-rec-badge ${aiSummary.recommendation}`}>
+                {aiSummary.recommendation === "approve" ? <CheckCircle2 size={13} /> : aiSummary.recommendation === "reject" ? <XCircle size={13} /> : <AlertCircle size={13} />}
+                Recommended: {aiSummary.recommendation.replace("_", " ")}
+              </span>
+              <span className="ai-summary-confidence-tag">
+                Reliability: {Math.round(aiSummary.confidence * 100)}%
+              </span>
+            </div>
+          ) : claim.ai_summary ? (
+            <div className="ai-summary-meta-row">
+              <span className="ai-summary-confidence-tag">Saved on file</span>
+              <button
+                type="button"
+                className="ai-summary-produce-btn"
+                disabled={aiSummaryLoading || busy || ctx.offline}
+                onClick={() => void produceSummary()}
+              >
+                {aiSummaryLoading ? <LoaderCircle size={14} className="spin" /> : <Sparkles size={14} />}
+                <span>Re-generate Analysis</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="ai-summary-produce-btn"
+              disabled={aiSummaryLoading || busy || ctx.offline}
+              onClick={() => void produceSummary()}
+            >
+              {aiSummaryLoading ? <LoaderCircle size={14} className="spin" /> : <Sparkles size={14} />}
+              <span>Produce AI Summary</span>
+            </button>
+          )}
+        </div>
+
+        {aiSummaryLoading ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.8rem", color: "#475569" }}>
+            <LoaderCircle size={18} className="spin" />
+            <span>Analyzing applicant profile, VLM documents, tamper risks, and rule eligibility...</span>
+          </div>
+        ) : aiSummary ? (
+          <>
+            <div className="ai-summary-text">{aiSummary.summary}</div>
+            {aiSummary.checks.length > 0 && (
+              <div className="ai-summary-checks-grid">
+                {aiSummary.checks.map(chk => (
+                  <div key={chk.label} className={`ai-summary-check-item ${chk.status}`}>
+                    {chk.status === "pass" ? (
+                      <CheckCircle2 size={15} color="#16a34a" style={{ flexShrink: 0, marginTop: 2 }} />
+                    ) : chk.status === "warn" ? (
+                      <AlertCircle size={15} color="#d97706" style={{ flexShrink: 0, marginTop: 2 }} />
+                    ) : (
+                      <XCircle size={15} color="#dc2626" style={{ flexShrink: 0, marginTop: 2 }} />
+                    )}
+                    <div>
+                      <strong>{chk.label}</strong>
+                      <p>{chk.detail}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="ai-summary-risk-flags">
+              <small style={{ color: "#64748b", fontWeight: 650, marginRight: 4 }}>Risk evaluation:</small>
+              {aiSummary.riskFlags.map(f => (
+                <span key={f} className={`ai-summary-flag-tag ${f.startsWith("None") ? "ai-summary-flag-clean" : ""}`}>
+                  {f.startsWith("None") ? <Check size={11} /> : <ShieldAlert size={11} />}
+                  {f}
+                </span>
+              ))}
+            </div>
+          </>
+        ) : claim.ai_summary ? (
+          <div className="ai-summary-text">{claim.ai_summary}</div>
+        ) : (
+          <p style={{ margin: 0, fontSize: "0.82rem", color: "#64748b" }}>
+            Click <strong>Produce AI Summary</strong> to run an automated evaluation across the applicant's profile data, VLM-extracted documents, tamper signals, blur scores, and eligibility rules.
+          </p>
+        )}
+      </div>
+
+      <Notice text={problem} warning /><Notice text={notice} />
+
+      {/* Record Decision on Top */}
+      {claim.status !== "closed" && (
+        <div className="record-decision-top-card">
+          <div className="record-decision-top-card-head">
+            <h3>Officer Decision</h3>
+            {aiSummary && (
+              <span className={`ai-summary-rec-badge ${aiSummary.recommendation}`}>
+                Rec: {aiSummary.recommendation}
+              </span>
+            )}
+          </div>
+          <form onSubmit={event => { event.preventDefault(); void update("review"); }}>
+            <label>
+              Officer action
+              <select value={decision} onChange={event => setDecision(event.target.value as keyof typeof reviewOptions)}>
+                {(Object.entries(reviewOptions) as [keyof typeof reviewOptions, string][])
+                  .filter(([key]) => ["approved", "rejected"].includes(claim.status) ? key === "close" : key !== "close" && !(key === "approve" && claim.status === "needs_proof"))
+                  .map(([key, label]) => <option value={key} key={key}>{label}</option>)}
+              </select>
+            </label>
+            <label>
+              Plain-language reason
+              <textarea
+                required
+                minLength={5}
+                maxLength={600}
+                placeholder="Reason explaining the decision (sent directly to the applicant)..."
+                value={reason}
+                onChange={event => setReason(event.target.value)}
+              />
+            </label>
+            <label>
+              Urdu reason <small>(optional)</small>
+              <textarea
+                lang="ur"
+                dir="rtl"
+                maxLength={600}
+                placeholder="درخواست گزار کے لیے اردو میں تفصیلی وجہ..."
+                value={reasonUr}
+                onChange={event => setReasonUr(event.target.value)}
+              />
+            </label>
+            <div className="actions">
+              <button className="primary" disabled={busy || ctx.offline}>Record decision</button>
+              {!["approved", "rejected"].includes(claim.status) && (
+                <>
+                  <button
+                    type="button"
+                    className="btn-quick-accept"
+                    disabled={busy || ctx.offline || claim.status === "needs_proof"}
+                    onClick={() => void quickDecide("approve")}
+                    title="Accept case with AI summary generated & sent to applicant"
+                  >
+                    <CheckCircle2 size={14} /> Accept with AI Summary
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-quick-reject"
+                    disabled={busy || ctx.offline}
+                    onClick={() => void quickDecide("reject")}
+                    title="Reject case with AI summary generated & sent to applicant"
+                  >
+                    <XCircle size={14} /> Reject with AI Summary
+                  </button>
+                </>
+              )}
+              {claim.status === "approved" && claim.payment_status !== "paid" && <>
+                <button className="secondary" type="button" disabled={busy || ctx.offline} onClick={() => void update("disburse")}>
+                  {claim.payment_status === "failed" ? "Retry simulated payment" : "Issue simulated payment"}
+                </button>
+                {claim.payment_status === "pending" && <button className="secondary" type="button" disabled={busy || ctx.offline}
+                  onClick={() => void update("disburse", "failed")}>Simulate payment failure</button>}
+              </>}
+            </div>
+            <div className="decision-info-caption">
+              Recording a decision saves the case outcome and sends the plain-language summary & reasons directly to the applicant.
+            </div>
+          </form>
+        </div>
+      )}
+
+      {claim.payment && <p className="receipt">{claim.payment.raast_ref} · {currency(claim.payment.amount_pkr)} · {title(claim.payment.status)}</p>}
+
+      {/* Applicant Profile with Photos & VLM Details */}
       <ApplicantProfilePanel
         citizenId={claim.citizen_id}
         claimIncome={claim.payload_json.monthly_income}
@@ -679,29 +969,21 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
         offline={ctx.offline}
         version={ctx.version}
       />
-      <div className="rows">{claim.documents?.map(doc => <div className="list-row static" key={doc.id}><div><strong>{title(doc.doc_type)}</strong>
-        <small>{doc.tamper_reason ?? doc.ocr_json.summary ?? "No model report"}</small>
-        {doc.blur_score !== null && <small>Blur score {pc(doc.blur_score)}</small>}
-        {doc.ocr_json.fields && <small>{Object.entries(doc.ocr_json.fields).map(([field, value]) => title(field) + ": " + value).join(" · ")}</small>}
-        {doc.file_url && <a className="text-link" href={doc.file_url} target="_blank" rel="noreferrer">Open synthetic image</a>}
-      </div><StateTag value={doc.verified_status} /></div>)}</div>
-      <Notice text={problem} warning /><Notice text={notice} />
-      {claim.status !== "closed" && <form onSubmit={event => { event.preventDefault(); void update("review"); }}>
-        <label>Officer action<select value={decision} onChange={event => setDecision(event.target.value as keyof typeof reviewOptions)}>
-          {(Object.entries(reviewOptions) as [keyof typeof reviewOptions, string][]).filter(([key]) => ["approved", "rejected"].includes(claim.status) ? key === "close" : key !== "close" && !(key === "approve" && claim.status === "needs_proof")).map(([key, label]) => <option value={key} key={key}>{label}</option>)}
-        </select></label>
-        <label>Plain-language reason<textarea required minLength={5} maxLength={600} value={reason} onChange={event => setReason(event.target.value)} /></label>
-        <label>Urdu reason <small>(optional)</small><textarea lang="ur" dir="rtl" maxLength={600} value={reasonUr} onChange={event => setReasonUr(event.target.value)} /></label>
-        <div className="actions"><button className="primary" disabled={busy || ctx.offline}>Record decision</button>
-          {claim.status === "approved" && claim.payment_status !== "paid" && <>
-            <button className="secondary" type="button" disabled={busy || ctx.offline} onClick={() => void update("disburse")}>
-              {claim.payment_status === "failed" ? "Retry simulated payment" : "Issue simulated payment"}
-            </button>
-            {claim.payment_status === "pending" && <button className="secondary" type="button" disabled={busy || ctx.offline}
-              onClick={() => void update("disburse", "failed")}>Simulate payment failure</button>}
-          </>}</div>
-      </form>}
-      {claim.payment && <p className="receipt">{claim.payment.raast_ref} · {currency(claim.payment.amount_pkr)} · {title(claim.payment.status)}</p>}
+
+      <div className="rows">
+        {claim.documents?.map(doc => (
+          <div className="list-row static" key={doc.id}>
+            <div>
+              <strong>{title(doc.doc_type)}</strong>
+              <small>{doc.tamper_reason ?? doc.ocr_json.summary ?? "No model report"}</small>
+              {doc.blur_score !== null && <small>Blur score {pc(doc.blur_score)}</small>}
+              {doc.ocr_json.fields && <small>{Object.entries(doc.ocr_json.fields).map(([field, value]) => title(field) + ": " + value).join(" · ")}</small>}
+              {doc.file_url && <a className="text-link" href={doc.file_url} target="_blank" rel="noreferrer">Open synthetic image</a>}
+            </div>
+            <StateTag value={doc.verified_status} />
+          </div>
+        ))}
+      </div>
     </Panel>
   </div>;
 
@@ -782,7 +1064,14 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                   const verified = docs.filter(doc => ["genuine", "readable"].includes(doc.verified_status)).length;
                   const initials = (item.citizen_name ?? "?").split(" ").map(word => word[0]).slice(0, 2).join("");
                   const confColor = item.ai_confidence === null ? "#737373" : item.ai_confidence < 0.5 ? "#b91c1c" : item.ai_confidence < 0.75 ? "#b45309" : "#15803d";
-                  return <button type="button" key={item.id} className="kanban-card" onClick={() => pick(item)}>
+                  return <div
+                    role="button"
+                    tabIndex={0}
+                    key={item.id}
+                    className="kanban-card"
+                    onClick={() => pick(item)}
+                    onKeyDown={e => { if (e.key === "Enter" || e.key === " ") pick(item); }}
+                  >
                     <div className="kanban-card-top">
                       <span
                         className="kanban-tag"
@@ -809,13 +1098,62 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                         </span>
                       </div>
                     </div>
+
+                    {item.ai_summary && (
+                      <div className="kanban-summary-snippet" title={item.ai_summary}>
+                        <Sparkles size={11} color="#3b82f6" />
+                        <span>{item.ai_summary.slice(0, 52)}...</span>
+                      </div>
+                    )}
+
+                    {["submitted", "in_review", "needs_proof"].includes(item.status) && (
+                      <div className="kanban-card-quick-actions" onClick={e => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="kanban-quick-btn kanban-quick-accept"
+                          disabled={Boolean(quickBusy[item.id]) || item.status === "needs_proof"}
+                          onClick={e => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            void handleQuickCardReview(item, "approve");
+                          }}
+                          title="Accept with AI Summary: analyzes profile, documents, and rules, then accepts and sends summary to applicant"
+                        >
+                          {quickBusy[item.id] === "approve" ? (
+                            <LoaderCircle size={12} className="spin" />
+                          ) : (
+                            <CheckCircle2 size={12} />
+                          )}
+                          <span>Accept w/ AI</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="kanban-quick-btn kanban-quick-reject"
+                          disabled={Boolean(quickBusy[item.id])}
+                          onClick={e => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            void handleQuickCardReview(item, "reject");
+                          }}
+                          title="Reject with AI Summary: analyzes profile, documents, and rules, then rejects and sends summary to applicant"
+                        >
+                          {quickBusy[item.id] === "reject" ? (
+                            <LoaderCircle size={12} className="spin" />
+                          ) : (
+                            <XCircle size={12} />
+                          )}
+                          <span>Reject w/ AI</span>
+                        </button>
+                      </div>
+                    )}
+
                     <div className="kanban-card-foot">
                       <span className="kanban-avatar" aria-hidden="true">{initials}</span>
                       {Boolean(item.reports) && <span className="kanban-meta"><MessageSquare size={12} /> {item.reports}</span>}
                       <span className="kanban-meta"><Paperclip size={12} /> {docs.length}</span>
                       <span className="kanban-meta kanban-date"><CalendarDays size={12} /> {new Date(item.updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
                     </div>
-                  </button>;
+                  </div>;
                 })}
             </section>;
           })}
