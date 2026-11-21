@@ -7,7 +7,41 @@ import { classifyScam } from "@/src/lib/ai/jev";
 import { answerPolicy } from "@/src/lib/ai/rag";
 
 export const names = ["ui_control", "jev_classify_and_route", "claim_draft_upsert", "claim_step_navigate", "mock_dpi_verify", "policy_rag_search", "escalate_to_officer"];
-export const miniApp = z.enum(["claim", "scam", "policy", "privacy", "family", "review", "rules", "audit"]);
+const appKeys = ["claim", "scam", "policy", "privacy", "family", "review", "rules", "audit"] as const;
+export const miniApp = z.enum(appKeys);
+
+// Map whatever the model sends ("Scam Shield", "scam_shield", "open the scam app") to a canonical key.
+const appAliases: Record<string, (typeof appKeys)[number]> = {};
+for (const key of appKeys) appAliases[key] = key;
+Object.assign(appAliases, {
+  reliefclaim: "claim", claims: "claim", newclaim: "claim",
+  scamshield: "scam", scamapp: "scam", fraud: "scam",
+  policyask: "policy", ask: "policy",
+  myprivacy: "privacy",
+  familyswitch: "family", switchfamily: "family",
+  reviewdesk: "review", queue: "review",
+  rulestudio: "rules",
+  auditvault: "audit",
+} satisfies Record<string, (typeof appKeys)[number]>);
+
+export function resolveApp(value: unknown): (typeof appKeys)[number] | null {
+  const norm = String(value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (!norm) return null;
+  const exact = appAliases[norm];
+  if (exact) return exact;
+  // Loose contains-match for phrases, longest alias first so "scamshield" wins over "scam".
+  const alias = Object.keys(appAliases).sort((left, right) => right.length - left.length).find(key => norm.includes(key));
+  return alias ? appAliases[alias] : null;
+}
+
+export function resolveStep(value: unknown): "evidence" | "review" | "submit" | null {
+  const norm = String(value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (norm.includes("evidence") || norm.includes("attach") || norm.includes("document")) return "evidence";
+  if (norm.includes("submit") || norm.includes("finish")) return "submit";
+  if (norm.includes("review")) return "review";
+  return null;
+}
+
 export type PiContext = {
   profile: Profile;
   citizenId: string | null;
@@ -22,10 +56,11 @@ const textResult = (value: unknown) => ({ content: [{ type: "text" as const, tex
 export function registerTools(pi: ExtensionAPI, context: PiContext) {
   const { profile, citizenId, emit } = context;
   pi.registerTool({
-    name: "ui_control", label: "Navigate", description: "Open one mini-app that the current persona can access.",
-    parameters: Type.Object({ app: Type.String({ maxLength: 20 }) }),
+    name: "ui_control", label: "Navigate", description: "Open one mini-app for the user. Use the app key: claim, scam (Scam Shield), policy, privacy, family, review, rules, audit — display names like \"Scam Shield\" also work.",
+    parameters: Type.Object({ app: Type.String({ maxLength: 40 }) }),
     async execute(_id, input) {
-      const app = miniApp.parse(input.app);
+      const app = resolveApp(input.app);
+      if (!app) throw new ApiError(400, `Unknown app "${input.app}". Use one of: ${appKeys.join(", ")}.`);
       if (!canOpen(profile.role, app)) throw new ApiError(403, "Your role cannot open this app.");
       emit({ type: "open_mini_app", app });
       return textResult({ opened: app });
@@ -60,11 +95,13 @@ export function registerTools(pi: ExtensionAPI, context: PiContext) {
   });
   pi.registerTool({
     name: "claim_step_navigate", label: "Advance claim step", description: "Advance the claim creation screen when user says they have done evidence, want to review, or want to submit the claim.",
-    parameters: Type.Object({ step: Type.Union([Type.Literal("evidence"), Type.Literal("review"), Type.Literal("submit")]) }),
+    parameters: Type.Object({ step: Type.String({ maxLength: 30, description: "evidence | review | submit" }) }),
     async execute(_id, input) {
+      const step = resolveStep(input.step);
+      if (!step) throw new ApiError(400, `Unknown step "${input.step}". Use: evidence, review, or submit.`);
       emit({ type: "open_mini_app", app: "claim" });
-      emit({ type: "advance_claim_step", step: input.step });
-      return textResult({ navigatedToStep: input.step });
+      emit({ type: "advance_claim_step", step });
+      return textResult({ navigatedToStep: step });
     },
   });
   pi.registerTool({

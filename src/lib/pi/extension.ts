@@ -2,7 +2,7 @@ import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { canOpen, type MiniApp } from "@/src/lib/contracts";
 import { mimoModel } from "@/src/lib/ai/mimo";
 import { gateway } from "@/src/lib/server";
-import { names, registerTools, type PiContext } from "./tools";
+import { names, registerTools, resolveApp, type PiContext } from "./tools";
 
 export function createReliefExtension(context: PiContext, locale: "en" | "ur"): ExtensionFactory {
   return pi => {
@@ -24,7 +24,7 @@ export function createReliefExtension(context: PiContext, locale: "en" | "ur"): 
         + "2. Never say 'I can't click review or finish for you', 'I never approve or submit claims', or 'Officers make the decision'. You CAN take action on their behalf. "
         + "3. When the user supplies household size and income, call claim_draft_upsert to fill the form. "
         + "4. When the user says they have attached evidence, want to proceed, review, or submit/finish, call claim_step_navigate with step 'evidence', 'review', or 'submit' to execute it for them. "
-        + "5. You can navigate apps with ui_control. Guide and execute for the user smoothly. "
+        + "5. You can navigate apps with ui_control — app keys: claim (Relief Claim), scam (Scam Shield), policy (Policy Ask), privacy (My Privacy), family (Family Switch), review (Review Desk), rules (Rule Studio), audit (Audit Vault). Always open the app for the user; never ask them to open it themselves. "
         + "Keep replies under 40 words, warm, confident, natural and concise. Reply in " + (locale === "ur" ? "Urdu, unless the request is clearly English." : "English."),
     }));
 
@@ -32,13 +32,19 @@ export function createReliefExtension(context: PiContext, locale: "en" | "ur"): 
       try {
         await gateway("agent_guard", { citizenId: context.citizenId });
         const familyTool = ["claim_draft_upsert", "escalate_to_officer"].includes(event.toolName);
-        const navigationDenied = event.toolName === "ui_control" && !canOpen(context.profile.role, event.input.app as MiniApp);
+        const requestedApp = event.toolName === "ui_control" ? resolveApp(event.input.app) : null;
+        const unknownApp = event.toolName === "ui_control" && !requestedApp;
+        const navigationDenied = Boolean(requestedApp) && !canOpen(context.profile.role, requestedApp as MiniApp);
         const scamDenied = event.toolName === "jev_classify_and_route" && !canOpen(context.profile.role, "scam");
-        if (!names.includes(event.toolName) || navigationDenied || scamDenied
+        if (!names.includes(event.toolName) || unknownApp || navigationDenied || scamDenied
             || (familyTool && (!context.citizenId || !canOpen(context.profile.role, "claim")))
             || (event.toolName === "claim_draft_upsert" && context.confidence < context.threshold)) {
-          await trace("tool_blocked", "denied", { tool: event.toolName, toolCallId: event.toolCallId });
-          return { block: true, reason: "This assistant action is outside the permitted role, consent, or confidence." };
+          await trace("tool_blocked", "denied", { tool: event.toolName, toolCallId: event.toolCallId, app: requestedApp ?? String((event.input as Record<string, unknown>)?.app ?? "") });
+          const reason = unknownApp
+            ? "Unknown app name. Use one of: claim, scam, policy, privacy, family, review, rules, audit (display names like \"Scam Shield\" also work)."
+            : navigationDenied ? "Your role cannot open that app. Try a different app."
+            : "This assistant action is outside the permitted role, consent, or confidence.";
+          return { block: true, reason };
         }
         started.set(event.toolCallId, Date.now());
         await trace("tool_call", "started", { tool: event.toolName, toolCallId: event.toolCallId, inputs: Object.keys(event.input) });
