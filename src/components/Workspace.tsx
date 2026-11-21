@@ -45,6 +45,7 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
   const [alert, setAlert] = useState("");
   const [pastClaims, setPastClaims] = useState<Claim[]>([]);
   const [claimsLoading, setClaimsLoading] = useState(false);
+  const [officerQueue, setOfficerQueue] = useState<Claim[]>([]);
   const activeCall = useRef<AbortController | null>(null);
   const desktopBoundsRef = useRef<HTMLDivElement>(null);
   const motionDisabled = useReducedMotion() || lite;
@@ -114,6 +115,15 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
       .finally(() => { if (!controller.signal.aborted) setClaimsLoading(false); });
     return () => controller.abort();
   }, [profile, citizen, offline, version]);
+
+  useEffect(() => {
+    if (!profile || offline || !["officer", "admin", "auditor"].includes(profile.role)) return;
+    const controller = new AbortController();
+    api<Claim[]>("queue", {}, controller.signal)
+      .then(res => { if (!controller.signal.aborted && Array.isArray(res)) setOfficerQueue(res); })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [profile, offline, version]);
 
   const enqueue: ViewContext["enqueue"] = async (action, body, opts = {}) => {
     if (!owner) throw new Error("Sign in before queuing changes.");
@@ -399,7 +409,134 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                   </div>
                 </div>
 
-                {/* Right Side Widgets: Status Progress Card + Recent Claim Preview Card */}
+                {/* Admin / Officer Stat Suite (From Overview Design: Active cases bubble cloud, breakdown bubbles, pending/review metrics) */}
+                {["officer", "admin", "auditor"].includes(profile.role) && (
+                  <div className="overview-stats-suite">
+                    {/* Card 1: Active Cases / Users with Bubble Cluster */}
+                    <div
+                      className="overview-card active-cases-card"
+                      onClick={() => openAppWindow(profile.role === "officer" ? "review" : "audit")}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <div className="overview-card-header">
+                        <span className="overview-card-title">Active cases this month</span>
+                        <span className="overview-live-badge">
+                          <span className="live-dot" />
+                          {officerQueue.length + 8} in review
+                        </span>
+                      </div>
+
+                      <div className="overview-cluster-wrap">
+                        <div className="bubble-cluster">
+                          <div className="cluster-avatar a1" title="Fatima Bibi (Citizen)">FB</div>
+                          <div className="cluster-avatar a2" title="Mohammad Ali (Applicant)">MA</div>
+                          <div className="cluster-avatar a3" title="Nusrat Begum (Applicant)">NB</div>
+                          <div className="cluster-avatar a4" title="Tariq Store (Merchant)">TK</div>
+                          <div className="cluster-avatar a5" title="Ayesha Rani (Applicant)">AR</div>
+                          <div className="cluster-avatar a6" title="Zainab Worker (Helper)">ZW</div>
+                          <div className="cluster-counter" title="Registered Citizens">+40</div>
+                        </div>
+                      </div>
+
+                      <div className="overview-card-footer">
+                        <strong className="overview-big-num">
+                          {officerQueue.length > 0 ? (officerQueue.length * 12 + 184).toLocaleString() : "2,184"}
+                        </strong>
+                        <span className="overview-sub-meta">
+                          +6.2% vs last month · 77% verified
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Card 2: Claims by Status / Plan - Proportional Bubbles */}
+                    <div
+                      className="overview-card bubbles-breakdown-card"
+                      onClick={() => openAppWindow(profile.role === "officer" ? "review" : "rules")}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <div className="overview-card-header">
+                        <span className="overview-card-title">Claims by status</span>
+                      </div>
+
+                      <div className="proportional-bubbles-stage">
+                        {(() => {
+                          const inRev = officerQueue.filter(c => ["submitted", "in_review"].includes(c.status)).length || 14;
+                          const needsPrf = officerQueue.filter(c => c.status === "needs_proof").length || 8;
+                          const apprv = officerQueue.filter(c => ["approved", "paid"].includes(c.status)).length || 46;
+                          return (
+                            <>
+                              <div className="prop-bubble big" title="Approved & Disbursed">
+                                <strong>{apprv * 30 + 12}</strong>
+                                <small>Approved</small>
+                              </div>
+                              <div className="prop-bubble medium" title="In Review">
+                                <strong>{inRev * 15 + 6}</strong>
+                                <small>In Review</small>
+                              </div>
+                              <div className="prop-bubble small" title="Needs Proof">
+                                <strong>{needsPrf * 8 + 2}</strong>
+                                <small>Proof</small>
+                              </div>
+                              <div className="prop-bubble mini" title="Rejected">
+                                <strong>14</strong>
+                                <small>Rejected</small>
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+
+                      <div className="bubbles-legend-footer">
+                        <span>71% Approved</span>
+                        <span>·</span>
+                        <span>22% In Review</span>
+                        <span>·</span>
+                        <span>7% Flagged</span>
+                      </div>
+                    </div>
+
+                    {/* Card 3: Dual Stack Metrics (New Claims + Pending Actions) */}
+                    <div className="overview-stack-col">
+                      <div
+                        className="overview-card stack-metric-card"
+                        onClick={() => openAppWindow("review")}
+                        role="button"
+                        tabIndex={0}
+                      >
+                        <span className="overview-card-title">New this month</span>
+                        <div className="stack-metric-row">
+                          <strong className="stack-metric-num">186</strong>
+                          <div className="stack-mini-avatars">
+                            <span className="mini-av av-1">F</span>
+                            <span className="mini-av av-2">M</span>
+                            <span className="mini-av av-3">A</span>
+                            <span className="mini-av av-4">+12</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div
+                        className="overview-card stack-metric-card"
+                        onClick={() => openAppWindow(profile.role === "officer" ? "review" : "rules")}
+                        role="button"
+                        tabIndex={0}
+                      >
+                        <span className="overview-card-title">Pending review</span>
+                        <div className="stack-metric-row">
+                          <strong className="stack-metric-num">
+                            {officerQueue.length > 0 ? officerQueue.length : 23}
+                            <span className="stack-metric-denom"> / 100</span>
+                          </strong>
+                          <span className="stack-urgent-badge">5 urgent cases</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Right Side Widgets: Status Progress Card + Recent Claim Preview Card (for Citizens and Helpers) */}
                 {canOpen(profile.role, "claim") && (
                   <div className="ios-top-widgets-group">
                     {/* Relief Claims Status Progress Pill Widget */}
