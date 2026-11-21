@@ -112,9 +112,9 @@ export function AgentCursor() {
               }}
             >
               <BotAvatar
-                size={34}
-                state={state.tone === "done" ? "done" : "working"}
-                mood={state.tone === "done" ? "happy" : "neutral"}
+                size={38}
+                isWorking={state.tone !== "done"}
+                isDone={state.tone === "done"}
                 depth={2}
                 followPointer={false}
                 lookAt={{ x: -0.28, y: 0.55 }}

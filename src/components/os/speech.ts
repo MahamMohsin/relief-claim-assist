@@ -68,7 +68,7 @@ export function queueSpeakSegment(text: string, locale: "en" | "ur", localOnly: 
             player.onerror = () => finish(false);
             void player.play().catch(() => finish(false));
           });
-          if (played) return "Spoken with Cartesia";
+          if (played) return "Ready";
         }
       } catch { /* Browser speech handles unavailable upstream audio. */ }
     }
@@ -93,7 +93,7 @@ export function queueSpeakSegment(text: string, locale: "en" | "ur", localOnly: 
       utterance.onerror = () => finish(false);
       window.speechSynthesis.speak(utterance);
     });
-    return version !== playbackVersion ? "Playback stopped" : spoken ? "Spoken with browser voice" : "Speech playback is unavailable";
+    return version !== playbackVersion ? "Playback stopped" : spoken ? "Ready" : "Speech playback is unavailable";
   }).catch(() => "Speech playback is unavailable");
   return scheduled;
 }

@@ -27,6 +27,10 @@ export interface BotAvatarProps {
   depth?: number;
   followPointer?: boolean;
   lookAt?: { x: number; y: number } | null;
+  isSpeaking?: boolean;
+  isWorking?: boolean;
+  isListening?: boolean;
+  isDone?: boolean;
   onClick?: () => void;
   className?: string;
   title?: string;
@@ -35,18 +39,38 @@ export interface BotAvatarProps {
 export function BotAvatar({
   state = "idle",
   mood = "neutral",
-  size = 38,
+  size = 46, // Prominent, cute and bigger
   color = "#ffffff", // Pure cute white ghost
   eyeColor = "#111111", // Deep dark pill eyes
   depth = 3,
   followPointer = true,
   lookAt = null,
+  isSpeaking = false,
+  isWorking = false,
+  isListening = false,
+  isDone = false,
   onClick,
   className = "",
-  title = "Cute Ghost Assistant",
+  title = "Ghost Assistant",
 }: BotAvatarProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const avatarRef = useRef<ReturnType<typeof mountAvatar> | null>(null);
+
+  // Compute resolved state and mood based on activity
+  const resolvedState: "idle" | "thinking" | "working" | "waiting" | "blocked" | "done" =
+    isDone
+      ? "done"
+      : isSpeaking || isWorking
+        ? "working"
+        : isListening
+          ? "thinking"
+          : state;
+
+  const resolvedMood: "neutral" | "happy" =
+    isDone || isSpeaking ? "happy" : mood;
+
+  const shouldFollowPointer =
+    !isSpeaking && !isWorking && !isDone && !lookAt && followPointer;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -56,9 +80,9 @@ export function BotAvatar({
         color,
         eyeColor,
         depth,
-        state,
-        mood,
-        followPointer: lookAt ? false : followPointer,
+        state: resolvedState,
+        mood: resolvedMood,
+        followPointer: shouldFollowPointer,
         lookAt,
         label: "Ghost Bot Avatar",
       });
@@ -75,18 +99,29 @@ export function BotAvatar({
   useEffect(() => {
     if (avatarRef.current) {
       avatarRef.current.update({
-        state,
-        mood,
-        followPointer: lookAt ? false : followPointer,
+        state: resolvedState,
+        mood: resolvedMood,
+        followPointer: shouldFollowPointer,
         lookAt,
       });
     }
-  }, [state, mood, followPointer, lookAt]);
+  }, [resolvedState, resolvedMood, shouldFollowPointer, lookAt]);
+
+  const classes = [
+    "bot-avatar-host",
+    isSpeaking ? "is-speaking" : "",
+    isWorking ? "is-working" : "",
+    isListening ? "is-listening" : "",
+    isDone ? "is-done" : "",
+    className,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div
       ref={containerRef}
-      className={`bot-avatar-host ${className}`}
+      className={classes}
       onClick={onClick}
       style={{
         width: size,

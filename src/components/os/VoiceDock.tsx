@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from "react";
-import { AudioLines, Mic, Send, Volume2, X } from "lucide-react";
+import { ChevronDown, MessageSquare, Mic, Send, Volume2, X } from "lucide-react";
 import type { MiniApp, Profile, UIAction } from "@/src/lib/contracts";
 import { transcribe } from "@/src/lib/client";
 import { useVoiceStream } from "@/src/lib/useVoiceStream";
@@ -35,6 +35,9 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   const [lang, setLang] = useState(profile.locale);
   const [input, setInput] = useState("");
   const [working, setWorking] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [justFinished, setJustFinished] = useState(false);
+  const finishedTimerRef = useRef<number | null>(null);
   const [stage, setStage] = useState("Relief assistant");
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState(false);
@@ -43,6 +46,45 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   // answer that replaces the last.
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [chatHidden, setChatHidden] = useState(false);
+
+  const storageKey = `relief_chat_history_${citizenId || profile.id || profile.role || "citizen"}`;
+
+  // Load chat history from localStorage for each persona/citizen interaction
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const raw = localStorage.getItem(storageKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setTurns(parsed);
+            setExpanded(true);
+            setHasEngagedVoice(true);
+          } else {
+            setTurns([]);
+          }
+        } else {
+          setTurns([]);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load chat history from localStorage", e);
+    }
+  }, [storageKey]);
+
+  // Persist chat history to localStorage on changes
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        if (turns.length > 0) {
+          localStorage.setItem(storageKey, JSON.stringify(turns));
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to persist chat history to localStorage", e);
+    }
+  }, [turns, storageKey]);
 
   const [hasEngagedVoice, setHasEngagedVoice] = useState(false);
   const [clipRecording, setClipRecording] = useState(false);
@@ -77,12 +119,6 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   recordingRef.current = recording;
   const startingMicRef = useRef(false);
   startingMicRef.current = startingMic;
-  const recordingStage = clipRecording
-    ? "Recording · tap mic to send"
-    : dgVoice.status === "listening"
-      ? "Listening · tap mic or release T to send"
-      : null;
-  const displayedStage = recordingStage ?? (startingMic ? "Starting microphone" : stage);
 
   useEffect(() => {
     inputRef.current = input;
@@ -160,6 +196,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     const prompt = raw.trim();
     if (!prompt) return;
     setExpanded(true);
+    setChatHidden(false);
     setInput("");
     inputRef.current = "";
     liveSpeechRef.current = "";
@@ -209,11 +246,12 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
       }
       await receiveActions(response, event => {
         switch (event.type) {
-          case "phase": setStage(event.message); break;
-          case "tool_execution_start": setStage("Pi · " + event.tool.replaceAll("_", " ")); break;
-          case "tool_execution_end": setStage("Pi · guiding on screen"); break;
+          case "phase": break;
+          case "tool_execution_start": break;
+          case "tool_execution_end": break;
           case "message_update": {
             accumulatedAnswer += event.text;
+            setChatHidden(false);
 
             // The answer streams into its own bubble as it arrives.
             const turnId = assistantTurnId.current;
@@ -235,11 +273,14 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
           }
           case "error": setError(event.message); break;
           case "agent_settled": {
-            setStage(event.model === "local-guidance" ? "Guided action ready" : "Ready · " + event.model);
+            setStage("Relief assistant");
             // Speak any trailing text that didn't end in punctuation
             const remaining = accumulatedAnswer.slice(spokenLength).trim();
             if (remaining.length > 0) speak(remaining);
             resumeMic();
+            setJustFinished(true);
+            if (finishedTimerRef.current) window.clearTimeout(finishedTimerRef.current);
+            finishedTimerRef.current = window.setTimeout(() => setJustFinished(false), 2600);
             break;
           }
           case "ui_action": {
@@ -248,9 +289,10 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
               // Counted like any other spoken segment, so the mic waits for the
               // question to finish being read out.
               speechPending.current += 1;
-              void speakText(event.action.question, lang, lite).then(status => {
+              setSpeaking(true);
+              void speakText(event.action.question, lang, lite).then(() => {
                 speechPending.current = Math.max(0, speechPending.current - 1);
-                if (status !== "Playback stopped") setStage(status);
+                if (speechPending.current === 0) setSpeaking(false);
                 resumeMic();
               });
             }
@@ -273,17 +315,18 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   // mic only reopens once the assistant has finished talking.
   function speak(text: string) {
     speechPending.current += 1;
+    setSpeaking(true);
     let settled = false;
-    const done = (status: string) => {
+    const done = () => {
       if (settled) return;
       settled = true;
       speechPending.current = Math.max(0, speechPending.current - 1);
-      if (status !== "Playback stopped") setStage(status);
+      if (speechPending.current === 0) setSpeaking(false);
       resumeMic();
     };
     void queueSpeakSegment(text, lang, lite || offline).then(done);
     // A speech engine that never reports back must not hold the mic shut.
-    window.setTimeout(() => done("Playback unavailable"), Math.max(10000, text.length * 250));
+    window.setTimeout(() => done(), Math.max(10000, text.length * 250));
   }
 
   // The mic reopens by itself once the assistant has finished speaking, so a
@@ -302,7 +345,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
       inputRef.current = "";
     }
     autoMicArmed.current = false;
-    setStage("Listening again — speak to continue");
+    setStage("Relief assistant");
     void startRecording();
   }
 
@@ -430,11 +473,14 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     active.current = null;
     run?.controller.abort();
     stopSpeaking();
+    speechPending.current = 0;
+    setSpeaking(false);
+    setJustFinished(false);
     cuaEngine.cancel();
     // An explicit stop ends the exchange: the mic stays where the person left it.
     autoMicArmed.current = false;
     setWorking(false);
-    setStage("Assistant stopped");
+    setStage("Relief assistant");
     if (run) void fetch("/api/agent/stream", {
       method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ runId: run.id, citizenId }),
     }).catch(() => {});
@@ -444,6 +490,8 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     onAction({ type: "open_mini_app", app });
     setClarify(null);
     stopSpeaking();
+    speechPending.current = 0;
+    setSpeaking(false);
   }
 
   /** Cancel whatever is in flight: the recording, the running request, or the
@@ -451,13 +499,17 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   function cancel() {
     if (recording) void stopRecording(false);
     if (working) stop();
+    stopSpeaking();
+    speechPending.current = 0;
+    setSpeaking(false);
+    setJustFinished(false);
     autoMicArmed.current = false;
     setInput("");
     inputRef.current = "";
     liveSpeechRef.current = "";
     setError("");
     setClarify(null);
-    setStage("Cancelled");
+    setStage("Relief assistant");
   }
 
   function submit(event: FormEvent) { event.preventDefault(); void command(input); }
@@ -470,12 +522,40 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   const lastAssistantId = [...filledTurns].reverse().find(turn => turn.role === "assistant")?.id;
 
   return <section className={"voice-dock-glass" + (hasEngagedVoice ? " voice-revealed" : "") + (recording ? " is-recording" : "") + (working ? " is-working" : "") + (clarify ? " clarifying" : "")} aria-label="Relief voice assistant">
-    {expanded && (filledTurns.length > 0 || error || clarify) && <div className="voice-reply-glass">
-      {hiddenCount > 0 && (
-        <button type="button" className="voice-history-toggle" onClick={() => setHistoryOpen(open => !open)}>
-          {historyOpen ? "Hide earlier messages" : `View ${hiddenCount} earlier message${hiddenCount === 1 ? "" : "s"}`}
+    {/* If chat has messages and is hidden by the user, show top-right "Bring chat back" pill */}
+    {chatHidden && filledTurns.length > 0 && (
+      <div className="voice-bring-back-bar">
+        <button
+          type="button"
+          className="voice-bring-back-btn"
+          onClick={() => setChatHidden(false)}
+          aria-label="Bring chat back"
+          title="Bring chat back"
+        >
+          <MessageSquare size={13} />
+          <span>Bring chat back ({filledTurns.length})</span>
         </button>
-      )}
+      </div>
+    )}
+
+    {expanded && (filledTurns.length > 0 || error || clarify) && !chatHidden && <div className="voice-reply-glass">
+      <div className="voice-reply-header">
+        {hiddenCount > 0 ? (
+          <button type="button" className="voice-history-toggle" onClick={() => setHistoryOpen(open => !open)}>
+            {historyOpen ? "Hide earlier messages" : `View ${hiddenCount} earlier message${hiddenCount === 1 ? "" : "s"}`}
+          </button>
+        ) : <span />}
+        <button
+          type="button"
+          className="voice-hide-chat-btn"
+          onClick={() => setChatHidden(true)}
+          aria-label="Hide chat"
+          title="Hide chat"
+        >
+          <ChevronDown size={14} />
+          <span>Hide chat</span>
+        </button>
+      </div>
       <div className="voice-chat">
         {visibleTurns.map(turn => (
           <div key={turn.id} className={"voice-chat-turn " + turn.role}>
@@ -484,7 +564,15 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
               <p>{turn.text}</p>
             </div>
             {turn.role === "assistant" && turn.id === lastAssistantId && (
-              <button type="button" className="glass-icon-btn" onClick={() => void speakText(turn.text.slice(0, 1400), lang, lite || offline).then(setStage)} aria-label="Play assistant response">
+              <button
+                type="button"
+                className="glass-icon-btn"
+                onClick={() => {
+                  setSpeaking(true);
+                  void speakText(turn.text.slice(0, 1400), lang, lite || offline).then(() => setSpeaking(false));
+                }}
+                aria-label="Play assistant response"
+              >
                 <Volume2 size={16} />
               </button>
             )}
@@ -497,9 +585,11 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     <div className="voice-glass-main">
       <form className={"voice-glass-form" + (isMultiline ? " multiline" : "")} onSubmit={submit}>
         <BotAvatar
-          state={working ? "working" : recording || startingMic ? "thinking" : "idle"}
-          mood={clarify ? "neutral" : turns.length > 0 && !working ? "happy" : "neutral"}
-          size={38}
+          size={46}
+          isWorking={working}
+          isSpeaking={speaking}
+          isListening={recording || startingMic}
+          isDone={justFinished}
           className="voice-dock-bot-avatar"
           onClick={() => {
             textareaRef.current?.focus();
@@ -513,8 +603,8 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
           placeholder={
             recording
               ? lang === "ur"
-                ? "سن رہا ہے… (بھیجنے کے لیے مائیک دبائیں یا T چھوڑیں)"
-                : "Listening… (Tap mic or release T to send)"
+                ? "سن رہا ہے…"
+                : "Listening…"
               : lang === "ur"
                 ? "اپنے بوٹ سے کچھ بھی کہیں، یا بولنے کے لیے T دبائیں..."
                 : "Ask your bot anything to do, or hold T to talk..."
@@ -532,12 +622,6 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
             }
           }}
         />
-        {(working || clarify || startingMic || recording || stage !== "Relief assistant") && (
-          <span className="glass-inline-status" title={displayedStage} role="status">
-            {recordingStage ? <AudioLines className="recording-wave" size={13} aria-hidden="true" /> : <span className="inline-spin-dot" aria-hidden="true" />}
-            <span className="inline-stage-text">{displayedStage}</span>
-          </span>
-        )}
         <button type="button" className="glass-lang-pill" aria-label="Switch voice language" onClick={() => setLang(value => value === "en" ? "ur" : "en")}>
           {lang === "ur" ? "اردو" : "EN"}
         </button>
