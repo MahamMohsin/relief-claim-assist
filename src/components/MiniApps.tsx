@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { AlertCircle, ArrowLeft, AudioLines, CalendarDays, Check, ChevronRight, CircleDollarSign, Flag, LoaderCircle, LockKeyhole, MessageSquare, Paperclip, Plus, Search, UsersRound } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { AlertCircle, ArrowLeft, ArrowUpDown, AudioLines, CalendarDays, Check, ChevronRight, CircleDollarSign, LoaderCircle, LockKeyhole, MessageSquare, Paperclip, Plus, Search, UsersRound } from "lucide-react";
 import { api, HttpError } from "@/src/lib/client";
 import { getDraft, resolveDraft, saveDraft, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
 import type { Action, Audit, Claim, Family, MiniApp, Payload, Privacy, Profile, Rule, RuleConfig, UIAction } from "@/src/lib/contracts";
@@ -615,12 +615,26 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "accepted" | "rejected">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "accepted" | "rejected">("all");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   useEffect(() => {
     cuaEngine.search.review = setQuery;
     return () => { delete cuaEngine.search.review; };
   }, []);
   const claim = data?.find(item => item.id === selected);
+
+  const activeColumns = useMemo(() => {
+    if (statusFilter === "accepted") {
+      return [{ key: "accepted", label: "Accepted Claims", dot: "#16a34a", statuses: ["approved", "closed"] as Claim["status"][] }];
+    }
+    if (statusFilter === "rejected") {
+      return [{ key: "rejected", label: "Rejected Claims", dot: "#dc2626", statuses: ["rejected"] as Claim["status"][] }];
+    }
+    return [
+      { key: "review", label: "To Review", dot: "#111111", statuses: ["submitted", "in_review"] as Claim["status"][] },
+      { key: "proof", label: "Needs proof", dot: "#d97706", statuses: ["needs_proof"] as Claim["status"][] },
+    ];
+  }, [statusFilter]);
 
   async function update(action: "review" | "disburse", outcome: "paid" | "failed" = "paid") {
     if (!claim) return;
@@ -640,12 +654,20 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
     setNotice(""); setProblem("");
   }
 
-  if (claim) return <div className="view-stack">
+  if (claim) return <div className="view-stack claim-detail-view">
+    <div className="claim-detail-sticky-bar">
+      <button
+        type="button"
+        className="claim-detail-back-btn"
+        onClick={() => { setSelected(""); setNotice(""); setProblem(""); }}
+      >
+        <ArrowLeft size={16} />
+        <span>Board</span>
+      </button>
+    </div>
     <Panel>
       <div className="panel-head">
         <div><h2>{claim.citizen_name}</h2><p className="breakable">{claim.id}</p></div>
-        <div className="detail-head-actions"><StateTag value={claim.status} />
-          <button className="secondary" onClick={() => { setSelected(""); setNotice(""); setProblem(""); }}><ArrowLeft size={16} /> Board</button></div>
       </div>
       <div className="facts two"><div><small>Rule version</small><strong>v{claim.rule_version_used ?? "–"}</strong></div><div><small>Payment</small><strong>{title(claim.payment_status)}</strong></div></div>
       <p>{claim.handoff_notes}</p>
@@ -685,10 +707,9 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
 
   const needle = query.trim().toLowerCase();
   const statusMatches = (status: Claim["status"]) => {
-    if (statusFilter === "pending") return ["submitted", "needs_proof", "in_review"].includes(status);
     if (statusFilter === "accepted") return ["approved", "closed"].includes(status);
     if (statusFilter === "rejected") return status === "rejected";
-    return true;
+    return ["submitted", "needs_proof", "in_review"].includes(status);
   };
   const filtered = (data ?? []).filter(item =>
     statusMatches(item.status) &&
@@ -696,27 +717,44 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
 
   return <div className="view-stack">
     <Panel className="kanban-panel">
-      <div className="panel-head"><div><h2>Review queue</h2><p>Board view · lower confidence cases appear first.</p></div><span className="pill neutral">{filtered.length} cases</span></div>
+      <div className="panel-head">
+        <div>
+          <h2>Review queue</h2>
+        </div>
+      </div>
       <div className="kanban-toolbar">
-        <span className="kanban-search" data-cua="review-search"><Search size={15} /><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search citizen or claim ID" aria-label="Search claims" /></span>
-        <div className="kanban-filters" role="tablist" aria-label="Filter by status">
-          {([
-            ["all", "All"],
-            ["pending", "Pending"],
-            ["accepted", "Accepted"],
-            ["rejected", "Rejected"],
-          ] as const).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={statusFilter === key}
-              className={"kanban-filter-btn" + (statusFilter === key ? " active" : "")}
-              onClick={() => setStatusFilter(key)}
-            >
-              {label}
-            </button>
-          ))}
+        <span className="kanban-search" data-cua="review-search">
+          <Search size={15} />
+          <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search citizen or claim ID" aria-label="Search claims" />
+        </span>
+        <div className="kanban-actions-group">
+          <button
+            type="button"
+            className="kanban-sort-btn"
+            onClick={() => setSortOrder(prev => prev === "desc" ? "asc" : "desc")}
+            title={sortOrder === "desc" ? "Currently showing highest reliability score first. Click to show lowest first." : "Currently showing lowest reliability score first. Click to show highest first."}
+          >
+            <ArrowUpDown size={13} />
+            <span>{sortOrder === "desc" ? "Reliability: High → Low" : "Reliability: Low → High"}</span>
+          </button>
+          <div className="kanban-filters" role="tablist" aria-label="Filter by status">
+            {([
+              ["all", "All"],
+              ["accepted", "Accepted"],
+              ["rejected", "Rejected"],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={statusFilter === key}
+                className={"kanban-filter-btn" + (statusFilter === key ? " active" : "")}
+                onClick={() => setStatusFilter(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
       <Notice text={error} warning />
@@ -725,26 +763,33 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
         filtered.length === 0 ?
           <p className="empty">{query ? `No claims match “${query}”.` : "No cases match this filter."}</p> :
         <div className="kanban-board">
-          {kanbanColumns.map(column => {
+          {activeColumns.map(column => {
             const items = filtered.filter(item => column.statuses.includes(item.status));
+            const sortedItems = [...items].sort((a, b) => {
+              const confA = a.ai_confidence ?? 0;
+              const confB = b.ai_confidence ?? 0;
+              return sortOrder === "asc" ? confA - confB : confB - confA;
+            });
             return <section className="kanban-col" key={column.key} aria-label={column.label}>
               <header className="kanban-col-head">
                 <span className="kanban-dot" style={{ background: column.dot }} />
                 <h3>{column.label}</h3>
                 <span className="kanban-count">{items.length}</span>
               </header>
-              {items.length === 0 ? <p className="kanban-empty">No cases here</p> :
-                items.map(item => {
+              {sortedItems.length === 0 ? <p className="kanban-empty">No cases here</p> :
+                sortedItems.map(item => {
                   const docs = item.documents ?? [];
                   const verified = docs.filter(doc => ["genuine", "readable"].includes(doc.verified_status)).length;
-                  const urgent = ["submitted", "in_review", "needs_proof"].includes(item.status)
-                    && (item.status === "needs_proof" || (item.ai_confidence ?? 1) <= 0.55);
                   const initials = (item.citizen_name ?? "?").split(" ").map(word => word[0]).slice(0, 2).join("");
-                  const confColor = item.ai_confidence === null ? "#737373" : item.ai_confidence < 0.5 ? "#525252" : "#111111";
+                  const confColor = item.ai_confidence === null ? "#737373" : item.ai_confidence < 0.5 ? "#b91c1c" : item.ai_confidence < 0.75 ? "#b45309" : "#15803d";
                   return <button type="button" key={item.id} className="kanban-card" onClick={() => pick(item)}>
                     <div className="kanban-card-top">
-                      <span className="kanban-tag">{item.rule_version_used ? "Rule v" + item.rule_version_used : "No rule"}</span>
-                      {urgent && <span className="kanban-tag urgent"><Flag size={10} /> Urgent</span>}
+                      <span
+                        className="kanban-tag"
+                        title={`Eligibility rule version v${item.rule_version_used ?? "1"} locked at submission time`}
+                      >
+                        {item.rule_version_used ? "Rule v" + item.rule_version_used : "No rule"}
+                      </span>
                     </div>
                     <div className="kanban-card-body">
                       <div className="kanban-card-title">{item.citizen_name ?? "Unnamed citizen"}</div>
@@ -752,8 +797,17 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                     </div>
                     <div className="kanban-progress">
                       <ConfidenceRing value={item.ai_confidence} />
-                      <span className="kanban-progress-label">{docs.length ? `${verified}/${docs.length} docs verified` : "No evidence attached"}</span>
-                      <span className="kanban-progress-pct" style={{ color: confColor }}>{item.ai_confidence !== null ? pc(item.ai_confidence) : "—"}</span>
+                      <div className="kanban-progress-details">
+                        <span className="kanban-progress-label">
+                          {docs.length ? `${verified}/${docs.length} docs verified` : "No evidence attached"}
+                        </span>
+                        <span className="kanban-reliability-score" title="AI Verification Reliability Score">
+                          Reliability score:{" "}
+                          <strong style={{ color: confColor }}>
+                            {item.ai_confidence !== null ? pc(item.ai_confidence) : "—"}
+                          </strong>
+                        </span>
+                      </div>
                     </div>
                     <div className="kanban-card-foot">
                       <span className="kanban-avatar" aria-hidden="true">{initials}</span>
