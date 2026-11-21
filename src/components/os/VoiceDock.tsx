@@ -170,12 +170,56 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     }
   }
 
-  function toggleRecord() {
-    if (dgVoice.listening) {
-      dgVoice.stop();
-    } else {
+  // Ref tracking whether a keydown 'T' push-to-talk session is currently active
+  const isPttActive = useRef(false);
+
+  // Global Push-to-Talk with key 'T'
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key.toLowerCase() !== "t") return;
+      // If user is currently typing in an input, textarea, or contentEditable element, don't hijack 'T'
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          (activeEl as HTMLElement).isContentEditable)
+      ) {
+        return;
+      }
+      if (e.repeat || isPttActive.current) return;
+      isPttActive.current = true;
       stopSpeaking();
-      dgVoice.toggle();
+      setHasEngagedVoice(true);
+      void dgVoice.start();
+    }
+
+    function handleKeyUp(e: KeyboardEvent) {
+      if (e.key.toLowerCase() !== "t") return;
+      if (!isPttActive.current) return;
+      isPttActive.current = false;
+      dgVoice.stop();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [dgVoice]);
+
+  function handleActionClick() {
+    if (recording) {
+      // If currently recording, stop recording
+      dgVoice.stop();
+    } else if (input.trim()) {
+      // If user typed or transcribed text is present, send it
+      void command(input);
+    } else {
+      // If input is empty and not recording, start recording
+      stopSpeaking();
+      void dgVoice.start();
     }
   }
 
@@ -207,13 +251,18 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     </div>}
     <div className="voice-glass-main">
       <form className="voice-glass-form" onSubmit={submit}>
-        <button type="button" className={"glass-mic-btn" + (recording ? " recording" : "")} onClick={() => void toggleRecord()} aria-label={recording ? "Stop microphone recording" : "Start microphone recording"}>
-          {recording ? <Square size={15} /> : <Mic size={18} />}
-        </button>
         <input
           className="glass-voice-input"
           aria-label="Type a relief assistant command"
-          placeholder={recording ? (lang === "ur" ? "سن رہا ہے…" : "Listening…") : (lang === "ur" ? "اپنا سوال لکھیں یا مائیک دبائیں…" : "Ask anything or tap mic to speak…")}
+          placeholder={
+            recording
+              ? lang === "ur"
+                ? "سن رہا ہے… (T چھوڑ کر بند کریں)"
+                : "Listening… (Release T to stop)"
+              : lang === "ur"
+                ? "اپنا سوال لکھیں یا مائیک دبائیں (T دبا کر بولیں)…"
+                : "Ask anything, press T to talk, or record…"
+          }
           value={input}
           maxLength={1000}
           onChange={event => setInput(event.target.value)}
@@ -229,8 +278,44 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
           {lang === "ur" ? "اردو" : "EN"}
         </button>
         {working && <button type="button" className="glass-icon-btn stop" aria-label="Stop assistant" onClick={stop}><StopCircle size={18} /></button>}
-        <button type="submit" className="glass-send-btn" disabled={!input.trim()} aria-label="Send command">
-          <Send size={15} />
+        {/* Unified Record / Send Action Button */}
+        <button
+          type={!recording && input.trim() ? "submit" : "button"}
+          className={
+            "glass-action-btn" +
+            (recording ? " recording" : "") +
+            (!recording && input.trim() ? " has-text" : "")
+          }
+          onClick={e => {
+            if (!recording && input.trim()) {
+              // let submit handler handle form submission
+              return;
+            }
+            e.preventDefault();
+            handleActionClick();
+          }}
+          aria-label={
+            recording
+              ? "Stop recording"
+              : input.trim()
+                ? "Send message"
+                : "Record voice (or press T to talk)"
+          }
+          title={
+            recording
+              ? "Stop recording"
+              : input.trim()
+                ? "Send message"
+                : "Record voice (or press T to talk)"
+          }
+        >
+          {recording ? (
+            <Square size={15} />
+          ) : input.trim() ? (
+            <Send size={15} />
+          ) : (
+            <Mic size={17} />
+          )}
         </button>
       </form>
     </div>

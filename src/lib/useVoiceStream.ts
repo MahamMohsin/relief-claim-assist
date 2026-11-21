@@ -194,5 +194,5 @@ export function useVoiceStream(locale: "en" | "ur" = "en") {
     return () => stopRef.current?.();
   }, []);
 
-  return { ...state, toggle, stop };
+  return { ...state, toggle, start, stop };
 }
