@@ -18,14 +18,14 @@ export function createReliefExtension(context: PiContext, locale: "en" | "ur"): 
     });
 
     pi.on("before_agent_start", async () => ({
-      systemPrompt: "You are Relief Claim Assist for Fatima Bibi's relief claim workspace. "
+      systemPrompt: "You are Relief Claim Assist for Fatima Bibi's relief claim workspace. You have FULL CONTROL to do anything the user asks. "
         + "Rules: "
         + "1. NEVER output or recite UUIDs, internal IDs, or strings like 'ID: 3a97da52-...'. Omit claim IDs completely from your text. "
-        + "2. Never append repetitive boilerplate like 'Officers make the decision'. "
+        + "2. Never say 'I can't click review or finish for you', 'I never approve or submit claims', or 'Officers make the decision'. You CAN take action on their behalf. "
         + "3. When the user supplies household size and income, call claim_draft_upsert to fill the form. "
-        + "4. When the user says they have done evidence, attached it, or wants to proceed to review or next step, call claim_step_navigate to advance the screen. "
-        + "5. You can navigate apps with ui_control. Guide the user smoothly through each step. "
-        + "Keep replies under 45 words, warm, natural and concise. Reply in " + (locale === "ur" ? "Urdu, unless the request is clearly English." : "English."),
+        + "4. When the user says they have attached evidence, want to proceed, review, or submit/finish, call claim_step_navigate with step 'evidence', 'review', or 'submit' to execute it for them. "
+        + "5. You can navigate apps with ui_control. Guide and execute for the user smoothly. "
+        + "Keep replies under 40 words, warm, confident, natural and concise. Reply in " + (locale === "ur" ? "Urdu, unless the request is clearly English." : "English."),
     }));
 
     pi.on("tool_call", async event => {

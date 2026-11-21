@@ -135,6 +135,10 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
     } else if (ctx.stepNav === "review") {
       setEditing(true);
       setStep(2);
+    } else if (ctx.stepNav === "submit") {
+      setEditing(true);
+      setStep(2);
+      void run("submit");
     }
   }, [ctx.stepNav]);
 

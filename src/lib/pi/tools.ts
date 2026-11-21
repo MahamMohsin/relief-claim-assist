@@ -59,8 +59,8 @@ export function registerTools(pi: ExtensionAPI, context: PiContext) {
     },
   });
   pi.registerTool({
-    name: "claim_step_navigate", label: "Advance claim step", description: "Advance the claim creation screen when user says they have done evidence or want to review.",
-    parameters: Type.Object({ step: Type.Union([Type.Literal("evidence"), Type.Literal("review")]) }),
+    name: "claim_step_navigate", label: "Advance claim step", description: "Advance the claim creation screen when user says they have done evidence, want to review, or want to submit the claim.",
+    parameters: Type.Object({ step: Type.Union([Type.Literal("evidence"), Type.Literal("review"), Type.Literal("submit")]) }),
     async execute(_id, input) {
       emit({ type: "open_mini_app", app: "claim" });
       emit({ type: "advance_claim_step", step: input.step });
