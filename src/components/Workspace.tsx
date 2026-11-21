@@ -12,8 +12,10 @@ import { syncQueue } from "@/src/lib/offline/syncEngine";
 import { apps } from "./launcher";
 import { MiniApps, type ViewContext } from "./MiniApps";
 import { AuditorGlassSuite, type SafetyMetric } from "./AuditVaultView";
-import { DesktopWindow } from "./DesktopWindow";
+import { DesktopWindow, type LaunchOrigin } from "./DesktopWindow";
 import { VoiceDock } from "./os/VoiceDock";
+import { AgentCursor } from "./os/AgentCursor";
+import { cuaEngine } from "./os/cuaEngine";
 import type { UIAction } from "@/src/lib/contracts";
 
 import { PipLoginModal } from "./pip/PipLoginModal";
@@ -45,6 +47,11 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
     document.querySelector<HTMLElement>(`[data-app-tile="${appId}"]`)?.focus();
   }, [minimizedApps]);
   const [windowState, setWindowState] = useState<Partial<Record<MiniApp, { sizePreset?: WindowPreset; restorePreset?: WindowPreset }>>>({});
+  const [launchOrigins, setLaunchOrigins] = useState<Partial<Record<MiniApp, LaunchOrigin>>>({});
+  const openAppsRef = useRef<MiniApp[]>([]);
+  openAppsRef.current = openApps;
+  const activeAppRef = useRef<MiniApp | null>(null);
+  activeAppRef.current = activeApp;
   const [chooser, setChooser] = useState(showLogin);
   const [family, setFamily] = useState<Family | null>(null);
   const [fixtureOnline, setFixtureOnline] = useState(true);
@@ -256,6 +263,14 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   function openAppWindow(appId: MiniApp) {
     if (!profile || !canOpen(profile.role, appId)) return;
     setAlert("");
+    const iconEl = document.querySelector<HTMLElement>(`[data-cua="app-icon-${appId}"]`);
+    if (iconEl) {
+      const rect = iconEl.getBoundingClientRect();
+      setLaunchOrigins(prev => ({
+        ...prev,
+        [appId]: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+      }));
+    }
     setOpenApps(prev => prev.includes(appId) ? prev : [...prev, appId]);
     focusApp(appId);
   }
@@ -379,22 +394,35 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
     openAppWindow("claim");
   }
 
+  const openAppRef = useRef(openAppWindow);
+  openAppRef.current = openAppWindow;
+  const focusAppRef = useRef(focusApp);
+  focusAppRef.current = focusApp;
+
+  useEffect(() => {
+    cuaEngine.bridge = {
+      isAppOpen: app => openAppsRef.current.includes(app),
+      getOpenApps: () => [...openAppsRef.current],
+      getActiveApp: () => activeAppRef.current,
+      openApp: app => openAppRef.current(app),
+      focusApp: app => focusAppRef.current(app),
+      refresh: () => setVersion(value => value + 1),
+    };
+    return () => {
+      cuaEngine.bridge = null;
+      cuaEngine.cancel();
+    };
+  }, []);
+
   function dispatch(action: UIAction) {
-    switch (action.type) {
-      case "open_mini_app":
-        changeApp(action.app);
-        break;
-      case "prefill_fields":
-        setPrefill(action);
-        setVersion(value => value + 1);
-        break;
-      case "advance_claim_step":
-        setStepNav(action.step);
-        break;
-      case "highlight_alert":
-        setAlert(action.message);
-        break;
+    if (action.type === "highlight_alert") {
+      setAlert(action.message);
+      return;
     }
+    if (action.type === "show_jev_badge" || action.type === "ask_clarification") {
+      return;
+    }
+    cuaEngine.dispatch(action);
   }
 
   const monthStart = (() => { const start = new Date(); start.setDate(1); start.setHours(0, 0, 0, 0); return start; })();
@@ -893,19 +921,20 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                       className={"ios-desktop-app" + (isRunning ? " running" : "") + (isMinimized ? " minimized" : "")}
                       key={id}
                       data-app-tile={id}
+                      data-cua={"app-icon-" + id}
                       aria-label={isMinimized ? item.title + " (minimized, click to restore)" : undefined}
                       onClick={() => openAppWindow(id)}
-                      whileHover={motionDisabled ? undefined : { y: -6, scale: 1.05 }}
-                      whileTap={motionDisabled ? undefined : { scale: 0.94 }}
-                      transition={{ type: "spring", stiffness: 260, damping: 20, mass: 0.8 }}
+                      whileHover={motionDisabled ? undefined : { y: -7, scale: 1.06 }}
+                      whileTap={motionDisabled ? undefined : { scale: 0.91 }}
+                      transition={{ type: "spring", stiffness: 360, damping: 22, mass: 0.7 }}
                     >
-                      <motion.div layoutId={motionDisabled ? undefined : "launch-icon-" + id} className={"ios-desktop-icon " + item.color}>
+                      <div className={"ios-desktop-icon " + item.color}>
                         {"image" in item && item.image ? (
                           <img src={item.image} alt={item.title} className="ios-desktop-icon-img" />
                         ) : (
                           <Icon size={34} strokeWidth={2.1} />
                         )}
-                      </motion.div>
+                      </div>
                       <span className="ios-desktop-label">{item.title}</span>
                       {isRunning && <span className="ios-app-running-dot" />}
                     </motion.button>
@@ -915,6 +944,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
 
               {/* Window Manager: Floating Desktop Windows with White BG, Header Controls & Independent Scroll */}
               <div className="desktop-window-layer" ref={desktopBoundsRef}>
+                <AnimatePresence>
                 {openApps.map((appId, index) => {
                   const appMeta = apps[appId];
                   const isMinimized = minimizedApps.includes(appId);
@@ -939,6 +969,8 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                       preset={preset}
                       zIndex={zIndex}
                       initialOffset={offset}
+                      launchOrigin={launchOrigins[appId]}
+                      motionDisabled={Boolean(motionDisabled)}
                       onFocus={() => focusApp(appId)}
                       titlebar={
                         <>
@@ -974,9 +1006,9 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                         </div>
 
                         <div className="window-title-group">
-                          <motion.span layoutId={motionDisabled ? undefined : "launch-icon-" + appId} className={"window-mini-icon " + appMeta.color}>
+                          <span className={"window-mini-icon " + appMeta.color}>
                             <Icon size={14} />
-                          </motion.span>
+                          </span>
                           <span className="window-title-text">{appMeta.title}</span>
                         </div>
 
@@ -1022,6 +1054,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                     </DesktopWindow>
                   );
                 })}
+                </AnimatePresence>
               </div>
             </div>
           )}
@@ -1050,6 +1083,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
         <VoiceDock key={profile.id + reset} profile={profile} citizenId={citizen} offline={offline} lite={lite} transcript={transcript} onAction={dispatch}
           onQueueAudio={(audio, locale) => enqueue("transcribe", { locale }, { audio })} />
       </div>}
+      {profile && <AgentCursor />}
 
       {chooser && profile && <div className="modal-scrim" onClick={() => setChooser(false)}>
         <section role="dialog" aria-modal="true" aria-label="Switch demo persona" className="modal" onClick={event => event.stopPropagation()}>

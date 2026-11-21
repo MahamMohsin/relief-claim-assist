@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from "react";
-import { AudioLines, ChevronDown, Mic, Send, Square, StopCircle, Volume2 } from "lucide-react";
+import { AudioLines, Mic, Send, StopCircle, Volume2 } from "lucide-react";
 import type { MiniApp, Profile, UIAction } from "@/src/lib/contracts";
 import { transcribe } from "@/src/lib/client";
 import { useVoiceStream } from "@/src/lib/useVoiceStream";
 import { apps } from "../launcher";
 import { receiveActions } from "./UIActionBus";
 import { queueSpeakSegment, speakText, stopSpeaking } from "./speech";
+import { cuaEngine } from "./cuaEngine";
 
 type VoiceProps = {
   profile: Profile;
@@ -33,13 +34,36 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   const [hasEngagedVoice, setHasEngagedVoice] = useState(false);
   const [clipRecording, setClipRecording] = useState(false);
   const [startingMic, setStartingMic] = useState(false);
+  const [isMultiline, setIsMultiline] = useState(false);
   const micStart = useRef<AbortController | null>(null);
   const clip = useRef<{ recorder: MediaRecorder; source: MediaStream; timer: number } | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const autoSendClipRef = useRef(true);
+  const inputRef = useRef("");
+  const liveSpeechRef = useRef("");
 
   const dgVoice = useVoiceStream(lang);
   const recording = dgVoice.listening || clipRecording;
-  const recordingStage = clipRecording ? "Recording a short clip" : dgVoice.status === "listening" ? "Listening · Deepgram" : null;
+  const recordingStage = clipRecording
+    ? "Recording · tap mic to send"
+    : dgVoice.status === "listening"
+      ? "Listening · tap mic or release T to send"
+      : null;
   const displayedStage = recordingStage ?? (startingMic ? "Starting microphone" : stage);
+
+  useEffect(() => {
+    inputRef.current = input;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const style = window.getComputedStyle(el);
+    const lineHeight = parseFloat(style.lineHeight) || 21.5;
+    const padY = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+    const maxHeight = Math.round(lineHeight * 5 + padY);
+    const nextHeight = Math.min(el.scrollHeight, maxHeight);
+    el.style.height = `${Math.max(40, nextHeight)}px`;
+    setIsMultiline(nextHeight > 46);
+  }, [input]);
 
   // Mark voice engaged as soon as user starts speaking or recording
   useEffect(() => {
@@ -51,16 +75,18 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   // Stream live words into input box in real time as user speaks
   useEffect(() => {
     if (dgVoice.listening) {
-      const live = [dgVoice.utterance, dgVoice.partial].filter(Boolean).join(" ");
+      const live = [dgVoice.utterance, dgVoice.partial].filter(Boolean).join(" ").trim();
       if (live) {
+        liveSpeechRef.current = live;
         setInput(live);
       }
     }
   }, [dgVoice.partial, dgVoice.utterance, dgVoice.listening]);
 
-  // When Deepgram detects speech_final (end of speech), auto-populate final text
+  // When Deepgram detects speech_final, keep latest text synced
   useEffect(() => {
     if (dgVoice.lastUtterance) {
+      liveSpeechRef.current = dgVoice.lastUtterance;
       setInput(dgVoice.lastUtterance);
     }
   }, [dgVoice.utteranceId, dgVoice.lastUtterance]);
@@ -100,6 +126,8 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     if (!prompt) return;
     setExpanded(true);
     setInput("");
+    inputRef.current = "";
+    liveSpeechRef.current = "";
     setError("");
     if (offline) {
       setInput(prompt);
@@ -119,6 +147,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
       return;
     }
     stopSpeaking();
+    cuaEngine.cancel();
     setAnswer("");
     setClarify(null);
     setDecision(null);
@@ -129,9 +158,10 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     const run = { id: crypto.randomUUID(), controller: new AbortController() };
     active.current = run;
     try {
+      const screenContext = cuaEngine.getScreenSnapshot();
       const response = await fetch("/api/agent/stream", {
         method: "POST", signal: run.controller.signal, headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, citizenId, runId: run.id, locale: lang }),
+        body: JSON.stringify({ prompt, citizenId, runId: run.id, locale: lang, screenContext }),
       });
       if (!response.ok) {
         const failure = await response.json();
@@ -141,7 +171,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
         switch (event.type) {
           case "phase": setStage(event.message); break;
           case "tool_execution_start": setStage("Pi · " + event.tool.replaceAll("_", " ")); break;
-          case "tool_execution_end": setStage("Pi · preparing reply"); break;
+          case "tool_execution_end": setStage("Pi · guiding on screen"); break;
           case "message_update": {
             accumulatedAnswer += event.text;
             setAnswer(accumulatedAnswer);
@@ -160,7 +190,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
           }
           case "error": setError(event.message); break;
           case "agent_settled": {
-            setStage(event.model === "local-guidance" ? "Local guidance fallback" : "Ready · " + event.model);
+            setStage(event.model === "local-guidance" ? "Guided action ready" : "Ready · " + event.model);
             // Speak any trailing text that didn't end in punctuation
             const remaining = accumulatedAnswer.slice(spokenLength).trim();
             if (remaining.length > 0) {
@@ -191,17 +221,23 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     }
   }
 
-  function stopRecording() {
+  async function stopRecording(autoSend = true) {
     micStart.current?.abort();
     if (clip.current?.recorder.state === "recording") {
+      autoSendClipRef.current = autoSend;
       clip.current.recorder.stop();
-    } else {
-      dgVoice.stop();
+      return;
+    }
+    const flushed = await dgVoice.stopAndFlush();
+    const textToSend = (flushed || liveSpeechRef.current || inputRef.current).trim();
+    if (autoSend && textToSend && mounted.current) {
+      void command(textToSend);
     }
   }
 
   async function startRecording() {
     if (recording || micStart.current) return;
+    liveSpeechRef.current = "";
     const starting = new AbortController();
     micStart.current = starting;
     stopSpeaking();
@@ -224,6 +260,8 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
         audioSource.getTracks().forEach(track => track.stop());
         if (!mounted.current) return;
         setClipRecording(false);
+        const shouldSend = autoSendClipRef.current;
+        autoSendClipRef.current = true;
         const audio = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
         try {
           if (connectivity.current) {
@@ -234,7 +272,11 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
             const text = await transcribe(audio, lang);
             if (!text) throw new Error("No speech detected. Try a short recording or type instead.");
             setInput(text);
-            setStage("Transcript ready");
+            if (shouldSend) {
+              void command(text);
+            } else {
+              setStage("Transcript ready");
+            }
           }
         } catch (error) {
           setExpanded(true);
@@ -244,7 +286,10 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
       recorder.start();
       setError("");
       clip.current = { recorder, source, timer: window.setTimeout(() => {
-        if (recorder.state === "recording") recorder.stop();
+        if (recorder.state === "recording") {
+          autoSendClipRef.current = true;
+          recorder.stop();
+        }
       }, 20000) };
       setClipRecording(true);
       setStage("Recording a short clip");
@@ -265,7 +310,9 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     void startRecording();
     return true;
   });
-  const endPushToTalk = useEffectEvent(stopRecording);
+  const endPushToTalk = useEffectEvent(() => {
+    void stopRecording(true);
+  });
 
   useEffect(() => {
     let held = false;
@@ -298,6 +345,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     active.current = null;
     run?.controller.abort();
     stopSpeaking();
+    cuaEngine.cancel();
     setWorking(false);
     setStage("Assistant stopped");
     if (run) void fetch("/api/agent/stream", {
@@ -323,23 +371,30 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
       </small>}
     </div>}
     <div className="voice-glass-main">
-      <form className="voice-glass-form" onSubmit={submit}>
-        <input
-          className={"glass-voice-input" + (lang === "ur" ? " is-urdu" : "")}
-          dir={lang === "ur" ? "rtl" : "ltr"}
+      <form className={"voice-glass-form" + (isMultiline ? " multiline" : "")} onSubmit={submit}>
+        <textarea
+          ref={textareaRef}
+          rows={1}
+          className="glass-voice-input"
           aria-label="Type a relief assistant command"
           placeholder={
             recording
               ? lang === "ur"
-                ? "سن رہا ہے… (⁦T⁩ چھوڑ کر بند کریں)"
-                : "Listening… (Release T to stop)"
+                ? "سن رہا ہے… (بھیجنے کے لیے مائیک دبائیں یا T چھوڑیں)"
+                : "Listening… (Tap mic or release T to send)"
               : lang === "ur"
-                ? "اپنا سوال لکھیں یا مائیک دبائیں (⁦T⁩ دبا کر بولیں)…"
-                : "Ask anything, press T to talk, or record…"
+                ? "اپنا سوال لکھیں یا مائیک دبائیں (T دبا کر بولیں)…"
+                : "Ask anything, hold T to talk, or tap mic…"
           }
           value={input}
           maxLength={1000}
           onChange={event => setInput(event.target.value)}
+          onKeyDown={event => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              void command(input);
+            }
+          }}
         />
         {(working || clarify || startingMic || recording || stage !== "Relief assistant") && (
           <span className="glass-inline-status" title={displayedStage} role="status">
@@ -351,7 +406,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
           {lang === "ur" ? "اردو" : "EN"}
         </button>
         {working && <button type="button" className="glass-icon-btn stop" aria-label="Stop assistant" onClick={stop}><StopCircle size={18} /></button>}
-        {/* Unified Record / Send Action Button */}
+        {/* Unified Record / Stop-and-Send / Send Action Button */}
         <button
           type={!recording && input.trim() ? "submit" : "button"}
           className={
@@ -361,30 +416,29 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
           }
           onClick={e => {
             if (!recording && input.trim()) {
-              // let submit handler handle form submission
               return;
             }
             e.preventDefault();
-            if (recording) stopRecording();
+            if (recording) void stopRecording(true);
             else void startRecording();
           }}
           aria-label={
             recording
-              ? "Stop recording"
+              ? "Stop recording and send"
               : input.trim()
                 ? "Send message"
-                : "Record voice (or press T to talk)"
+                : "Record voice (or hold T to talk)"
           }
           title={
             recording
-              ? "Stop recording"
+              ? "Stop & send"
               : input.trim()
                 ? "Send message"
-                : "Record voice (or press T to talk)"
+                : "Record voice (or hold T to talk)"
           }
         >
           {recording ? (
-            <Square size={15} />
+            <Send size={15} />
           ) : input.trim() ? (
             <Send size={15} />
           ) : (

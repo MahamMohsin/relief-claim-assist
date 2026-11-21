@@ -9,8 +9,34 @@ import { makeSession } from "@/src/lib/pi/runtime";
 import type { AgentEvent } from "@/src/components/os/UIActionBus";
 
 export const runtime = "nodejs";
-const streamSchema = z.object({ prompt: z.string().trim().min(1).max(1000), runId: uuid, citizenId: uuid.nullish(), locale: z.enum(["en", "ur"]) });
-const controlSchema = streamSchema.omit({ locale: true }).extend({ prompt: z.string().trim().min(1).max(1000).optional() });
+const screenContextSchema = z.object({
+  activeApp: z.string().max(30).nullish(),
+  openApps: z.array(z.string().max(30)).max(12).optional(),
+  claim: z.object({
+    editing: z.boolean(),
+    step: z.string().max(30),
+    monthly_income: z.number(),
+    household_size: z.number(),
+    notes: z.string().max(600),
+    claimId: z.string().max(60).nullish(),
+    docType: z.string().max(30).optional(),
+    fixture: z.string().max(30).optional(),
+    attached: z.string().max(120).optional(),
+  }).optional(),
+  privacy: z.object({
+    field: z.string().max(40),
+    value: z.string().max(160),
+  }).optional(),
+}).optional();
+
+const streamSchema = z.object({
+  prompt: z.string().trim().min(1).max(1000),
+  runId: uuid,
+  citizenId: uuid.nullish(),
+  locale: z.enum(["en", "ur"]),
+  screenContext: screenContextSchema,
+});
+const controlSchema = streamSchema.omit({ locale: true, screenContext: true }).extend({ prompt: z.string().trim().min(1).max(1000).optional() });
 const active = new Map<string, { id: string; citizen: string | null; abort: () => void; steer?: (text: string) => Promise<void> }>();
 
 export async function POST(request: Request) {
@@ -19,7 +45,7 @@ export async function POST(request: Request) {
     if (!input.success) throw new ApiError(400, "Provide a short assistant command.");
     const profile = await gateway<Profile>("profile");
     const citizenId = profile.role === "helper" ? input.data.citizenId ?? null : profile.citizen_id;
-    const { runId, prompt, locale } = input.data;
+    const { runId, prompt, locale, screenContext } = input.data;
     await gateway("agent_guard", { citizenId });
     if (active.has(profile.id)) throw new ApiError(409, "Finish or stop the active assistant request first.");
 
@@ -57,11 +83,32 @@ export async function POST(request: Request) {
           if (cancelled) return;
           confidence = decision.confidence;
           const threshold = scheme.config.confidence_threshold;
-          target = decision.app && canOpen(profile.role, decision.app) ? decision.app : null;
+          const explicitTarget = decision.app && canOpen(profile.role, decision.app) ? decision.app : null;
+          const explicitAccepted = Boolean(explicitTarget) && confidence >= threshold;
+
+          // If the user is already inside an open mini-app and sends a follow-up (e.g., "15000 and 4 people",
+          // "next step", "attach readable sample", "yes save it"), stay in the active app instead of asking
+          // "Which mini-app would you like to open?" unless the prompt explicitly has conflicting intents.
+          const candidateActive = (screenContext?.activeApp ?? (screenContext?.openApps?.length === 1 ? screenContext.openApps[0] : null)) as MiniApp | null;
+          const validActiveApp = candidateActive && Object.hasOwn(appRoles, candidateActive) && canOpen(profile.role, candidateActive)
+            ? candidateActive
+            : null;
+          const continuedInActive = !explicitAccepted && decision.label !== "ambiguous" && Boolean(validActiveApp);
+
+          target = explicitAccepted ? explicitTarget : continuedInActive ? validActiveApp : null;
+          if (continuedInActive) {
+            confidence = Math.max(confidence, threshold, 0.92);
+          }
           const accepted = Boolean(target) && confidence >= threshold;
-          emitAction({ type: "show_jev_badge", label: decision.label, confidence, route: accepted && target ? target : "clarification", model: decision.model });
+          emitAction({
+            type: "show_jev_badge",
+            label: continuedInActive ? `${target} (active context)` : decision.label,
+            confidence,
+            route: accepted && target ? target : "clarification",
+            model: decision.model,
+          });
           await gateway("agent_trace", { citizenId, event: "jev_route", model: decision.model, confidence,
-            outcome: accepted ? target : "clarification", detail: { route: decision.label, threshold, runId } });
+            outcome: accepted ? target : "clarification", detail: { route: decision.label, continuedInActive, threshold, runId } });
           if (!accepted) {
             const options = (Object.keys(appRoles) as MiniApp[]).filter(app => canOpen(profile.role, app)).slice(0, 3);
             emitAction({ type: "ask_clarification", question: locale === "ur"
@@ -70,10 +117,10 @@ export async function POST(request: Request) {
             emit({ type: "agent_settled", model: decision.model });
             return;
           }
-          if (target) emitAction({ type: "open_mini_app", app: target });
+          if (target && !continuedInActive) emitAction({ type: "open_mini_app", app: target });
           emit({ type: "phase", message: "Pi · MiMo Flash" });
           const restored = JSON.stringify(entries).length < 90000 ? entries : [];
-          const runtime = await makeSession({ profile, citizenId, confidence, threshold, ruleVersion: scheme.version, emit: emitAction }, locale, restored);
+          const runtime = await makeSession({ profile, citizenId, confidence, threshold, ruleVersion: scheme.version, screenContext, emit: emitAction }, locale, restored);
           session = runtime.session;
           if (cancelled) return;
           run.steer = async text => {
@@ -111,10 +158,27 @@ export async function POST(request: Request) {
           }
           console.error("Assistant degraded", error instanceof Error ? error.message : "unknown");
           fallback = true;
-          const guidance = target === "policy"
-            ? await answerPolicy(prompt).then(result => result.answer + (result.citations.length ? " [" + result.citations.map(section => section.section_code).join(", ") + "]" : "")).catch(() => "The registry is currently unavailable.")
-            : locale === "ur" ? "اپنی درخواست دیکھنے کے لیے متعلقہ ایپ کھولیں۔ ادائیگی سے پہلے افسر کا فیصلہ ضروری ہے۔"
-            : "Use the selected mini-app to continue. Every payment requires a separate officer decision.";
+          let guidance: string;
+          if (target === "policy") {
+            emitAction({ type: "ask_policy_visual", question: prompt });
+            guidance = await answerPolicy(prompt)
+              .then(result => result.answer + (result.citations.length ? " [" + result.citations.map(section => section.section_code).join(", ") + "]" : ""))
+              .catch(() => "Opened Policy Ask and submitted your question.");
+          } else if (target === "scam") {
+            emitAction({ type: "check_scam_visual", message: prompt });
+            guidance = locale === "ur"
+              ? "اسکیم شیلڈ کھول کر آپ کا پیغام چیک کیا جا رہا ہے۔"
+              : "Opened Scam Shield and started checking your message.";
+          } else if (target === "claim") {
+            emitAction({ type: "start_new_claim" });
+            guidance = locale === "ur"
+              ? "نئی ریلیف درخواست کا فارم کھول دیا گیا ہے۔ اپنی آمدنی اور افراد کی تعداد درج کریں۔"
+              : "Opened Relief Claim and started a new claim form for you. Enter your monthly income and household size to continue.";
+          } else {
+            guidance = locale === "ur"
+              ? "متعلقہ ایپ کھول دی گئی ہے۔ ادائیگی سے پہلے افسر کا فیصلہ ضروری ہے۔"
+              : "Opened the mini-app for you. Every payment requires a separate officer decision.";
+          }
           emit({ type: "message_update", text: guidance });
         } finally {
           clearTimeout(hardTimeout);

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -22,13 +21,20 @@ type Recording = {
   worklet?: AudioWorkletNode;
   poll?: number;
   timeout?: number;
+  flushPending?: () => Promise<string>;
 };
 
 export function useVoiceStream(locale: "en" | "ur") {
   const [state, setState] = useState<VoiceState>(idle);
   const current = useRef<Recording | null>(null);
+  const transcriptRef = useRef({ committed: "", utterance: "", partial: "" });
 
-  const release = useCallback((recording: Recording) => {
+  const combinedText = () => {
+    const { committed, utterance, partial } = transcriptRef.current;
+    return [committed, utterance, partial].filter(Boolean).join(" ").trim();
+  };
+
+  const release = useCallback((recording: Recording, skipDelete = false) => {
     if (current.current === recording) current.current = null;
     recording.controller.abort();
     window.clearInterval(recording.poll);
@@ -36,14 +42,40 @@ export function useVoiceStream(locale: "en" | "ur") {
     recording.worklet?.disconnect();
     recording.media?.getTracks().forEach(track => track.stop());
     void recording.context?.close().catch(() => {});
-    if (recording.id) void fetch("/api/voice/relay", {
-      method: "DELETE", headers: { "x-relief-recording": recording.id },
-    }).catch(() => {});
+    if (!skipDelete && recording.id) {
+      void fetch("/api/voice/relay", {
+        method: "DELETE", headers: { "x-relief-recording": recording.id },
+      }).catch(() => {});
+    }
   }, []);
 
   const stop = useCallback(() => {
     if (current.current) release(current.current);
     setState(previous => ({ ...previous, status: "idle", listening: false }));
+  }, [release]);
+
+  const stopAndFlush = useCallback(async (): Promise<string> => {
+    const recording = current.current;
+    if (!recording) return combinedText();
+    // Stop mic capture immediately so user sees recording stop right away
+    window.clearInterval(recording.poll);
+    window.clearTimeout(recording.timeout);
+    recording.worklet?.disconnect();
+    recording.media?.getTracks().forEach(track => track.stop());
+    void recording.context?.close().catch(() => {});
+    setState(previous => ({ ...previous, status: "idle", listening: false }));
+
+    let finalText = combinedText();
+    if (recording.flushPending) {
+      try {
+        const flushed = await recording.flushPending();
+        if (flushed) finalText = flushed;
+      } catch {
+        // Use best text accumulated so far
+      }
+    }
+    release(recording);
+    return finalText.trim();
   }, [release]);
 
   useEffect(() => () => {
@@ -52,6 +84,7 @@ export function useVoiceStream(locale: "en" | "ur") {
 
   const start = useCallback(async () => {
     if (current.current) return true;
+    transcriptRef.current = { committed: "", utterance: "", partial: "" };
     const recording: Recording = { controller: new AbortController() };
     const signal = recording.controller.signal;
     current.current = recording;
@@ -86,39 +119,79 @@ export function useVoiceStream(locale: "en" | "ur") {
         chunks.push(event.data);
         bytes += event.data.byteLength;
       };
-      recording.poll = window.setInterval(async () => {
-        if (sending || signal.aborted || !bytes) return;
-        sending = true;
+
+      const applyMessages = (messages: Transcript[]) => {
+        for (const message of messages) {
+          const text = message.channel?.alternatives?.[0]?.transcript?.trim();
+          if (!text) continue;
+          if (!message.is_final) {
+            transcriptRef.current.partial = text;
+            const fullUtterance = [transcriptRef.current.committed, transcriptRef.current.utterance].filter(Boolean).join(" ");
+            setState(previous => ({ ...previous, utterance: fullUtterance, partial: text }));
+          } else {
+            const nextUtterance = [transcriptRef.current.utterance, text].filter(Boolean).join(" ");
+            transcriptRef.current.partial = "";
+            if (message.speech_final) {
+              transcriptRef.current.committed = [transcriptRef.current.committed, nextUtterance].filter(Boolean).join(" ");
+              transcriptRef.current.utterance = "";
+              const full = transcriptRef.current.committed;
+              setState(previous => ({
+                ...previous,
+                partial: "",
+                utterance: full,
+                lastUtterance: full,
+                utteranceId: previous.utteranceId + 1,
+              }));
+            } else {
+              transcriptRef.current.utterance = nextUtterance;
+              const full = [transcriptRef.current.committed, nextUtterance].filter(Boolean).join(" ");
+              setState(previous => ({ ...previous, partial: "", utterance: full }));
+            }
+          }
+        }
+      };
+
+      const sendBatch = async (timeoutMs: number, ignoreAbort = false) => {
+        if (!bytes) return;
         const batch = new Blob(chunks, { type: "application/octet-stream" });
         chunks = [];
         bytes = 0;
-        try {
-          const output = await fetch("/api/voice/relay", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/octet-stream", "x-relief-recording": recordingId },
-            body: batch,
-            signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
-          });
-          if (!output.ok) throw new Error("Live transcription disconnected.");
-          const { messages } = await output.json() as { messages: Transcript[] };
-          if (signal.aborted) return;
-          for (const message of messages) {
-            const text = message.channel?.alternatives?.[0]?.transcript?.trim();
-            if (!text) continue;
-            setState(previous => {
-              if (!message.is_final) return { ...previous, partial: text };
-              const utterance = [previous.utterance, text].filter(Boolean).join(" ");
-              return message.speech_final
-                ? { ...previous, partial: "", utterance: "", lastUtterance: utterance, utteranceId: previous.utteranceId + 1 }
-                : { ...previous, partial: "", utterance };
-            });
+        const output = await fetch("/api/voice/relay", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/octet-stream", "x-relief-recording": recordingId },
+          body: batch,
+          signal: ignoreAbort
+            ? AbortSignal.timeout(timeoutMs)
+            : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
+        });
+        if (!output.ok) throw new Error("Live transcription disconnected.");
+        const { messages } = await output.json() as { messages: Transcript[] };
+        if (!ignoreAbort && signal.aborted) return;
+        applyMessages(messages);
+      };
+
+      recording.flushPending = async () => {
+        if (bytes > 0) {
+          try {
+            await sendBatch(900, true);
+          } catch {
+            // ignore flush timeout
           }
+        }
+        return combinedText();
+      };
+
+      recording.poll = window.setInterval(async () => {
+        if (sending || signal.aborted || !bytes) return;
+        sending = true;
+        try {
+          await sendBatch(5000);
         } catch {
           if (signal.aborted) return;
           release(recording);
           setState(previous => ({ ...previous, listening: false, status: "error", error: "Live transcription disconnected. Use 2G Lite mode for a short recording." }));
         } finally { sending = false; }
-      }, 280);
+      }, 240);
       recording.timeout = window.setTimeout(stop, 20000);
       setState({ ...idle, status: "listening", listening: true });
       return true;
@@ -130,5 +203,5 @@ export function useVoiceStream(locale: "en" | "ur") {
     }
   }, [locale, release, stop]);
 
-  return { ...state, start, stop };
+  return { ...state, start, stop, stopAndFlush };
 }

@@ -16,6 +16,7 @@ import { prepareDocumentImage } from "@/src/lib/compressImage";
 import type { ScamResult } from "@/src/lib/contracts";
 import type { ViewContext } from "./MiniApps";
 import { speakText, stopSpeaking } from "./os/speech";
+import { cuaEngine } from "./os/cuaEngine";
 import {
   ChatComposer,
   ChatComposerDrawer,
@@ -150,9 +151,20 @@ export function ScamChatView({ ctx }: { ctx: ViewContext }) {
   const [busy, setBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const activeController = useRef<AbortController | null>(null);
+  const submitRef = useRef<(rawText: string, explicitImage?: PendingImage | null) => Promise<void>>(async () => {});
 
   useEffect(() => {
+    cuaEngine.scam = {
+      setDraft: value => {
+        setDraft(value);
+        setInputError("");
+      },
+      check: text => {
+        void submitRef.current(text, null);
+      },
+    };
     return () => {
+      if (cuaEngine.scam) cuaEngine.scam = null;
       activeController.current?.abort();
       stopSpeaking();
     };
@@ -269,6 +281,8 @@ export function ScamChatView({ ctx }: { ctx: ViewContext }) {
       }
     }
   }
+
+  submitRef.current = submitCheck;
 
   async function reportMissingPayment(turn: ScamTurn) {
     const ref = turn.result?.payment?.raast_ref || turn.result?.detected_reference;
@@ -419,6 +433,7 @@ export function ScamChatView({ ctx }: { ctx: ViewContext }) {
         density="balanced"
         emptyState={emptyState}
         composer={
+          <div data-cua="scam-composer" style={{ width: "100%" }}>
           <ChatComposer
             value={draft}
             onChange={value => {
@@ -507,6 +522,7 @@ export function ScamChatView({ ctx }: { ctx: ViewContext }) {
               ) : undefined
             }
           />
+          </div>
         }
       >
         {turns.length > 0 ? (

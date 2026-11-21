@@ -6,6 +6,7 @@ import { api, HttpError } from "@/src/lib/client";
 import { getDraft, resolveDraft, saveDraft, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
 import type { Action, Audit, Claim, Family, MiniApp, Payload, Privacy, Profile, Rule, RuleConfig, UIAction } from "@/src/lib/contracts";
 import { speakText } from "./os/speech";
+import { cuaEngine } from "./os/cuaEngine";
 import { PolicyChatView } from "./PolicyChatView";
 import { ScamChatView } from "./ScamChatView";
 import { AuditVaultView, type SafetyMetric } from "./AuditVaultView";
@@ -133,6 +134,70 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
   const [opened, setOpened] = useState<string>();
   const previousPrefill = useRef<ViewContext["prefill"]>(null);
   const scope = ctx.citizen ?? "self";
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
+  const stepRef = useRef(step);
+  stepRef.current = step;
+  const snapshotRef = useRef({
+    editing,
+    step: (["household", "evidence", "review"] as const)[step] ?? "household",
+    monthly_income: details.monthly_income,
+    household_size: details.household_size,
+    notes: details.notes,
+    claimId,
+    docType,
+    fixture,
+    attached,
+  });
+  snapshotRef.current = {
+    editing,
+    step: (["household", "evidence", "review"] as const)[step] ?? "household",
+    monthly_income: details.monthly_income,
+    household_size: details.household_size,
+    notes: details.notes,
+    claimId,
+    docType,
+    fixture,
+    attached,
+  };
+  const startRef = useRef<(item?: Claim) => void>(() => {});
+  const runRef = useRef<(action: "draft" | "submit" | "evidence") => Promise<void>>(async () => {});
+
+  useEffect(() => {
+    cuaEngine.claim = {
+      isEditing: () => editingRef.current,
+      getStep: () => stepRef.current,
+      getSnapshot: () => ({ ...snapshotRef.current }),
+      startNew: () => startRef.current(),
+      setField: (field, value) => {
+        setDetails(current => ({ ...current, [field]: value }));
+      },
+      setClaimId: id => {
+        setClaimId(id);
+        setPendingDraft(undefined);
+      },
+      setStep: next => {
+        setEditing(true);
+        setStep(next);
+      },
+      setDocType: next => setDocType(next),
+      setFixture: next => {
+        setImage(null);
+        setFile(null);
+        setFixture(next);
+      },
+      attachEvidence: async () => {
+        await runRef.current("evidence");
+      },
+      saveDraft: async () => {
+        await runRef.current("draft");
+      },
+      setMessage: msg => setMessage(msg),
+    };
+    return () => {
+      if (cuaEngine.claim) cuaEngine.claim = null;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -249,6 +314,9 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
     } finally { setBusy(false); }
   }
 
+  startRef.current = start;
+  runRef.current = run;
+
   async function readImage(file: File | undefined) {
     if (!file) return;
     if (file.size > 2_000_000) { setFault("Choose a synthetic image under 2 MB."); return; }
@@ -289,36 +357,46 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
       {step === 0 && <form onSubmit={event => { event.preventDefault(); setStep(1); }}>
         <VStack gap={3} paddingBlockStart={3}>
           <HStack gap={3} wrap="wrap">
-            <div style={{ flex: 1, minWidth: 180 }}>
+            <div data-cua="claim-income-input" style={{ flex: 1, minWidth: 180 }}>
               <NumberInput label="Monthly household income (PKR)" value={details.monthly_income} onChange={value => setDetails({ ...details, monthly_income: value ?? 0 })} min={0} isRequired width="100%" />
             </div>
-            <div style={{ flex: 1, minWidth: 180 }}>
+            <div data-cua="claim-household-input" style={{ flex: 1, minWidth: 180 }}>
               <NumberInput label="People in household" value={details.household_size} onChange={value => setDetails({ ...details, household_size: value ?? 1 })} min={1} isRequired width="100%" />
             </div>
           </HStack>
-          <TextArea label="Additional details" value={details.notes} onChange={value => setDetails({ ...details, notes: value })} placeholder="Optional information for the officer" isOptional />
+          <div data-cua="claim-notes-input" style={{ width: "100%" }}>
+            <TextArea label="Additional details" value={details.notes} onChange={value => setDetails({ ...details, notes: value })} placeholder="Optional information for the officer" isOptional />
+          </div>
           <HStack gap={2} wrap="wrap">
-            <Button type="submit" variant="primary" label="Continue to evidence" endContent={<ChevronRight size={16} />} />
-            <Button variant="secondary" label="Save draft" isDisabled={busy} onClick={() => void run("draft")} />
+            <span data-cua="claim-continue-evidence" style={{ display: "inline-flex" }}>
+              <Button type="submit" variant="primary" label="Continue to evidence" endContent={<ChevronRight size={16} />} />
+            </span>
+            <span data-cua="claim-save-draft" style={{ display: "inline-flex" }}>
+              <Button variant="secondary" label="Save draft" isDisabled={busy} onClick={() => void run("draft")} />
+            </span>
           </HStack>
         </VStack>
       </form>}
       {step === 1 && <VStack gap={3} paddingBlockStart={3}>
         <HStack gap={3} wrap="wrap">
-          <div style={{ flex: 1, minWidth: 180 }}>
+          <div data-cua="claim-doc-type" style={{ flex: 1, minWidth: 180 }}>
             <Selector label="Document type" value={docType} onChange={value => setDocType((value ?? "identity") as typeof docType)} options={[{ value: "identity", label: "Mock identity card" }, { value: "income", label: "Mock income slip" }]} />
           </div>
-          <div style={{ flex: 1, minWidth: 180 }}>
+          <div data-cua="claim-fixture" style={{ flex: 1, minWidth: 180 }}>
             <Selector label="Sample document" value={fixture} onChange={value => { setImage(null); setFile(null); setFixture(value ?? "clear"); }} options={[{ value: "clear", label: "Readable sample" }, { value: "blurred", label: "Blurry sample" }, { value: "altered", label: "Altered sample" }, { value: "incomplete", label: "Incomplete sample" }]} />
           </div>
         </HStack>
         <FileInput label="Upload or take a picture of a synthetic document" value={file} onChange={next => { const picked = Array.isArray(next) ? next[0] ?? null : next; setFile(picked); void readImage(picked ?? undefined); }} accept="image/png,image/jpeg,image/webp" mode="dropzone" isOptional />
         {attached && <p className="muted">Latest evidence: {attached}</p>}
         <HStack gap={2} wrap="wrap">
-          {claimId || pendingDraft
-            ? <Button variant="secondary" label={busy ? "Processing…" : "Attach evidence"} isDisabled={busy} onClick={() => void run("evidence")} />
-            : <Button variant="secondary" label="Save draft to attach evidence" isDisabled={busy} onClick={() => void run("draft")} />}
-          <Button variant="primary" label="Review claim" isDisabled={busy} onClick={() => setStep(2)} />
+          <span data-cua="claim-attach-btn" style={{ display: "inline-flex" }}>
+            {claimId || pendingDraft
+              ? <Button variant="secondary" label={busy ? "Processing…" : "Attach evidence"} isDisabled={busy} onClick={() => void run("evidence")} />
+              : <Button variant="secondary" label="Save draft to attach evidence" isDisabled={busy} onClick={() => void run("draft")} />}
+          </span>
+          <span data-cua="claim-review-btn" style={{ display: "inline-flex" }}>
+            <Button variant="primary" label="Review claim" isDisabled={busy} onClick={() => setStep(2)} />
+          </span>
           <Button variant="ghost" label="Back" onClick={() => setStep(0)} />
         </HStack>
       </VStack>}
@@ -330,7 +408,9 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
         </HStack>
         <p className="muted">An officer reviews every claim before any simulated payment can be issued.</p>
         <HStack gap={2}>
-          <Button variant="primary" label={busy ? "Submitting…" : ctx.offline ? "Queue claim" : "Submit claim"} isDisabled={busy} onClick={() => void run("submit")} />
+          <span data-cua="claim-submit-btn" style={{ display: "inline-flex" }}>
+            <Button variant="primary" label={busy ? "Submitting…" : ctx.offline ? "Queue claim" : "Submit claim"} isDisabled={busy} onClick={() => void run("submit")} />
+          </span>
           <Button variant="ghost" label="Back" onClick={() => setStep(1)} />
         </HStack>
       </VStack>}
@@ -340,7 +420,9 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
           <h2>Your claims</h2>
           <p>Follow applications, officer requests, and payment receipts.</p>
         </VStack>
-        <Button variant="primary" label="New claim" icon={<Plus size={16} />} onClick={() => start()} />
+        <span data-cua="claim-new-btn" style={{ display: "inline-flex" }}>
+          <Button variant="primary" label="New claim" icon={<Plus size={16} />} onClick={() => start()} />
+        </span>
       </HStack>
       {loading && !claims ? <Spinner /> : !claims?.length ? <p className="empty">{ctx.offline ? "Saved drafts are available offline. Reconnect to see submitted claims." : "This family has no claims yet."}</p> :
         <VStack gap={2} paddingBlockStart={3}>
@@ -374,13 +456,19 @@ function FamilyView({ ctx }: { ctx: ViewContext }) {
   const [search, setSearch] = useState("");
   const [problem, setProblem] = useState("");
   const [switching, setSwitching] = useState<string>();
+  useEffect(() => {
+    cuaEngine.search.family = setSearch;
+    return () => { delete cuaEngine.search.family; };
+  }, []);
   return <Card padding={6}>
     <HStack justify="between" hAlign="start" gap={4} wrap="wrap">
       <VStack gap={0.5}><h2>Synthetic family directory</h2><p>Switching clears the previous family’s form and voice session.</p></VStack>
       <Badge label={(data?.length ?? 0) + " families"} />
     </HStack>
     <VStack gap={2} paddingBlockStart={3}>
-      <TextInput label="Find a family" value={search} onChange={setSearch} placeholder="Name or demo area" />
+      <div data-cua="family-search" style={{ width: "100%" }}>
+        <TextInput label="Find a family" value={search} onChange={setSearch} placeholder="Name or demo area" />
+      </div>
       {(error || problem) && <Banner status="error" title={error || problem} />}
       {loading && !data ? <Spinner /> : <VStack gap={1}>
         {data?.filter(family => (family.full_name + " " + family.village_area).toLowerCase().includes(search.toLowerCase())).map(family =>
@@ -409,6 +497,22 @@ function PrivacyView({ ctx }: { ctx: ViewContext }) {
   const [message, setMessage] = useState("");
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
+  const changeRef = useRef<(action: "consent" | "correction", body: object) => Promise<void>>(async () => {});
+  const privacySnapshotRef = useRef({ field, value });
+  privacySnapshotRef.current = { field, value };
+  useEffect(() => {
+    cuaEngine.privacy = {
+      getSnapshot: () => ({ ...privacySnapshotRef.current }),
+      setField: next => setField(next),
+      setValue: next => setValue(next),
+      submit: async (nextField, nextValue) => {
+        await changeRef.current("correction", { field: nextField, value: nextValue });
+      },
+    };
+    return () => {
+      if (cuaEngine.privacy) cuaEngine.privacy = null;
+    };
+  }, []);
   if (!ctx.citizen) return <FamilyRequired ctx={ctx} />;
 
   async function change(action: "consent" | "correction", body: object) {
@@ -426,6 +530,7 @@ function PrivacyView({ ctx }: { ctx: ViewContext }) {
     } catch (error) { setProblem(getMessage(error)); }
     finally { setBusy(false); }
   }
+  changeRef.current = change;
   return <div className="view-stack">
     {(problem || error) && <Banner status="error" title={problem || error} />}
     {message && <Banner status="success" title={message} />}
@@ -452,17 +557,17 @@ function PrivacyView({ ctx }: { ctx: ViewContext }) {
       <form onSubmit={event => { event.preventDefault(); void change("correction", { field, value }); }}>
         <VStack gap={3} paddingBlockStart={3}>
           <HStack gap={3} wrap="wrap">
-            <div style={{ flex: 1, minWidth: 180 }}>
+            <div data-cua="privacy-field" style={{ flex: 1, minWidth: 180 }}>
               <Selector label="Field" value={field} onChange={selected => setField(selected ?? "full_name")} options={[
                 { value: "full_name", label: "Name" }, { value: "phone", label: "Mock phone" }, { value: "village_area", label: "Demo area" },
                 { value: "household_size", label: "Household size" }, { value: "monthly_income_mock", label: "Monthly income" },
               ]} />
             </div>
-            <div style={{ flex: 1, minWidth: 180 }}>
+            <div data-cua="privacy-value" style={{ flex: 1, minWidth: 180 }}>
               <TextInput label="Proposed synthetic value" value={value} onChange={setValue} isRequired />
             </div>
           </HStack>
-          <HStack><Button type="submit" variant="primary" label="Request correction" isDisabled={busy || !value.trim()} /></HStack>
+          <HStack><span data-cua="privacy-submit" style={{ display: "inline-flex" }}><Button type="submit" variant="primary" label="Request correction" isDisabled={busy || !value.trim()} /></span></HStack>
         </VStack>
       </form>
       {data?.corrections.map(request => <Card key={request.id} variant="muted" padding={3}>
@@ -510,6 +615,10 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "accepted" | "rejected">("all");
+  useEffect(() => {
+    cuaEngine.search.review = setQuery;
+    return () => { delete cuaEngine.search.review; };
+  }, []);
   const claim = data?.find(item => item.id === selected);
 
   async function update(action: "review" | "disburse", outcome: "paid" | "failed" = "paid") {
@@ -581,7 +690,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
     <Panel className="kanban-panel">
       <div className="panel-head"><div><h2>Review queue</h2><p>Board view · lower confidence cases appear first.</p></div><span className="pill neutral">{filtered.length} cases</span></div>
       <div className="kanban-toolbar">
-        <span className="kanban-search"><Search size={15} /><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search citizen or claim ID" aria-label="Search claims" /></span>
+        <span className="kanban-search" data-cua="review-search"><Search size={15} /><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search citizen or claim ID" aria-label="Search claims" /></span>
         <div className="kanban-filters" role="tablist" aria-label="Filter by status">
           {([
             ["all", "All"],
@@ -753,6 +862,10 @@ const REGISTERED_USERS = [
 function UsersView() {
   const [selected, setSelected] = useState<string[]>([]);
   const [query, setQuery] = useState("");
+  useEffect(() => {
+    cuaEngine.search.users = setQuery;
+    return () => { delete cuaEngine.search.users; };
+  }, []);
   const filtered = REGISTERED_USERS.filter(u =>
     [u.name, u.role, u.id, u.code, u.linkedTitle, u.linkedSub].join(" ").toLowerCase().includes(query.toLowerCase())
   );
@@ -762,6 +875,7 @@ function UsersView() {
     <div className="panel-head">
       <div><h2>Registered users</h2><p>{filtered.length} synthetic accounts across all roles.</p></div>
       <input
+        data-cua="users-search"
         value={query}
         onChange={e => setQuery(e.target.value)}
         placeholder="Search name, role, or ID…"
