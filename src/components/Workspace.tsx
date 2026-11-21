@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Award, Bell, CheckCircle2, ChevronDown, Clock, Cloud, CloudOff, Fingerprint, HandHeart, House,
@@ -56,6 +57,19 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   const activeAppRef = useRef<MiniApp | null>(null);
   activeAppRef.current = activeApp;
   const [chooser, setChooser] = useState(showLogin);
+  const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setPortalHost(document.body);
+  }, []);
+
+  useEffect(() => {
+    if (!chooser) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setChooser(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [chooser]);
   const [family, setFamily] = useState<Family | null>(null);
   const [fixtureOnline, setFixtureOnline] = useState(true);
   const [browserOnline, setBrowserOnline] = useState(true);
@@ -456,7 +470,8 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
       className={
         (lite ? "workspace lite" : "workspace") +
         (isLocked ? " locked-workspace" : "") +
-        (welcomeName ? " welcoming-workspace" : "")
+        (welcomeName ? " welcoming-workspace" : "") +
+        (chooser && profile ? " persona-dock-workspace-blurred" : "")
       }
     >
       {/* Apple macOS Full-Width Top Menu Bar */}
@@ -1093,7 +1108,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
       {profile && <AgentCursor />}
 
       {/* Centered macOS-style horizontal persona switcher dock */}
-      {chooser && profile && (
+      {chooser && profile && portalHost && createPortal(
         <div className="persona-macos-dock-scrim" onClick={() => setChooser(false)}>
           <div
             role="dialog"
@@ -1120,7 +1135,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                       <img src={`/avatars/${id}.jpg`} alt={details.name} className="persona-macos-dock-img" />
                       {isBusy && (
                         <div className="persona-macos-dock-spinner">
-                          <LoaderCircle size={20} className="spin" />
+                          <LoaderCircle size={18} className="spin" />
                         </div>
                       )}
                       {isCurrent && <span className="persona-macos-dock-indicator" aria-label="Current persona" />}
@@ -1142,9 +1157,9 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
               >
                 <div className="persona-macos-dock-avatar-frame logout-frame">
                   {busy === "signout" ? (
-                    <LoaderCircle size={22} className="spin" />
+                    <LoaderCircle size={18} className="spin" />
                   ) : (
-                    <LogOut size={22} />
+                    <LogOut size={18} />
                   )}
                 </div>
                 <span className="persona-macos-dock-name">Sign out</span>
@@ -1152,7 +1167,8 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        portalHost
       )}
 
       {/* Pip Login Screen (Companion Robot & LED Matrix Interactive Loop) */}
