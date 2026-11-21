@@ -1,5 +1,20 @@
 /* Welcome overlay: the app blurs out behind a handwritten greeting. */
 
+/* The whole workspace blurs, so the greeting sits over a soft, full-screen
+   backdrop rather than over sharp app chrome. The overlay is portalled to the
+   body, so it stays crisp on top of this. */
+:global(.welcoming-workspace) {
+  filter: blur(22px) brightness(0.72) saturate(1.05);
+  transition: filter 0.45s ease;
+  pointer-events: none;
+}
+
+/* A blurred edge fades out to what is behind it, so the page takes the
+   workspace's colour while the greeting is up and the fade is invisible. */
+:global(body:has(.welcoming-workspace)) {
+  background: var(--brand-900);
+}
+
 .overlay {
   position: fixed;
   inset: 0;
@@ -10,12 +25,12 @@
   padding: 1.5rem;
   background: radial-gradient(
     ellipse at center,
-    rgba(8, 26, 23, 0.58),
-    rgba(4, 14, 12, 0.82)
+    rgba(8, 26, 23, 0.5),
+    rgba(4, 14, 12, 0.78)
   );
-  backdrop-filter: blur(28px) saturate(1.2);
-  -webkit-backdrop-filter: blur(28px) saturate(1.2);
-  animation: overlayIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  backdrop-filter: blur(10px) saturate(1.15);
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  animation: overlayIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
   cursor: pointer;
 }
 
@@ -27,13 +42,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.75rem;
+  gap: 1.5rem;
   max-width: 100%;
 }
 
 .ink {
   color: #ffffff;
-  font-size: clamp(2.75rem, 8vw, 5.75rem);
+  font-size: clamp(2.75rem, 7.5vw, 5.5rem);
   line-height: 1.2;
   text-align: center;
   filter: drop-shadow(0 6px 26px rgba(0, 0, 0, 0.45));
@@ -45,7 +60,7 @@
   font-size: 0.78rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  animation: hintIn 0.6s 1.2s ease both;
+  animation: hintIn 0.6s 0.9s ease both;
 }
 
 @keyframes overlayIn {
@@ -64,6 +79,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  :global(.welcoming-workspace) {
+    transition: none;
+  }
+
   .overlay,
   .leaving,
   .hint {

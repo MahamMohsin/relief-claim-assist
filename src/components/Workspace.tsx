@@ -455,7 +455,8 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
     <div
       className={
         (lite ? "workspace lite" : "workspace") +
-        (isLocked ? " locked-workspace" : "")
+        (isLocked ? " locked-workspace" : "") +
+        (welcomeName ? " welcoming-workspace" : "")
       }
     >
       {/* Apple macOS Full-Width Top Menu Bar */}
@@ -1129,7 +1130,11 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
 
       {/* Handwritten greeting for a person who just signed in */}
       {welcomeName && (
-        <WelcomeOverlay name={welcomeName} onDismiss={() => setWelcomeName(null)} />
+        <WelcomeOverlay
+          name={welcomeName}
+          onDismiss={() => setWelcomeName(null)}
+          reducedMotion={motionDisabled ? "always" : "user"}
+        />
       )}
     </div>
   );
