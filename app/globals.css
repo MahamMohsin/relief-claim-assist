@@ -357,14 +357,29 @@ th { background: var(--faint); color: var(--forest); }
   pointer-events: none;
 }
 
-/* Glass Card with enhanced Apple Frost vibrancy */
-.glass-card {
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(35px) saturate(210%);
-  -webkit-backdrop-filter: blur(35px) saturate(210%);
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.05);
-  border-radius: 26px;
+/* Liquid Glass System Foundations */
+.glass-card,
+.ios-history-widget.compact,
+.ios-widget,
+.ios-app-card {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  border-radius: 24px;
+  color: #ffffff;
+  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card:hover,
+.ios-history-widget.compact:hover,
+.ios-widget:hover,
+.ios-app-card:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.26), 0 4px 12px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  transform: translateY(-3px);
 }
 
 /* Apple-style Mini-App Grid Card */
@@ -818,25 +833,28 @@ th { background: var(--faint); color: var(--forest); }
    RELIEF STATS PROGRESS WIDGET (Approved, Claimed, In Review)
    ======================================================== */
 .relief-stats-widget {
-  background: #C93B3B;
-  background: linear-gradient(135deg, #DE3E3E 0%, #BA2C2C 100%);
-  border-radius: 20px;
+  background: rgba(222, 62, 62, 0.42);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  border-radius: 24px;
   padding: 0.95rem 1.25rem;
   width: 100%;
   max-width: 330px;
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
-  box-shadow: 0 14px 34px rgba(186, 44, 44, 0.35), 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.4);
   cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
 }
 
 .relief-stats-widget:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 18px 42px rgba(186, 44, 44, 0.45), 0 4px 12px rgba(0, 0, 0, 0.18);
+  background: rgba(222, 62, 62, 0.52);
+  border-color: rgba(255, 255, 255, 0.48);
+  transform: translateY(-3px);
+  box-shadow: 0 20px 48px rgba(222, 62, 62, 0.35), 0 4px 12px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 .relief-stat-row {
@@ -912,21 +930,14 @@ th { background: var(--faint); color: var(--forest); }
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
-  border-radius: 20px;
   cursor: pointer;
-  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s;
-}
-
-.ios-history-widget.compact:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.12);
 }
 
 .ios-history-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
   padding-bottom: 0.5rem;
 }
 
@@ -934,13 +945,14 @@ th { background: var(--faint); color: var(--forest); }
   font-size: 1rem;
   font-weight: 750;
   letter-spacing: -0.02em;
-  color: var(--ink);
+  color: #ffffff;
   margin: 0;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
 .ios-history-header small {
   font-size: 0.72rem;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.75);
   font-weight: 500;
 }
 
@@ -960,23 +972,25 @@ th { background: var(--faint); color: var(--forest); }
 .ios-compact-top strong {
   font-size: 0.95rem;
   font-weight: 750;
-  color: var(--ink);
+  color: #ffffff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
 .ios-compact-id {
   font-size: 0.72rem;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.7);
   font-family: monospace;
   margin: 0;
 }
 
 .ios-compact-reason {
   font-size: 0.78rem;
-  color: var(--soft-ink);
+  color: rgba(255, 255, 255, 0.9);
   line-height: 1.35;
-  background: rgba(240, 244, 241, 0.75);
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   padding: 0.4rem 0.6rem;
-  border-radius: 10px;
+  border-radius: 12px;
   margin: 0;
 }
 
@@ -986,15 +1000,15 @@ th { background: var(--faint); color: var(--forest); }
   justify-content: space-between;
   font-size: 0.72rem;
   font-weight: 650;
-  color: var(--forest);
+  color: #8ff0c2;
   margin-top: 0.2rem;
   padding-top: 0.35rem;
-  border-top: 1px dashed rgba(0, 0, 0, 0.07);
+  border-top: 1px dashed rgba(255, 255, 255, 0.18);
 }
 
 .ios-history-empty {
   font-size: 0.8rem;
-  color: var(--soft-ink);
+  color: rgba(255, 255, 255, 0.8);
   padding: 0.4rem 0;
 }
 /* Apple iPad / Desktop Icon Grid */
@@ -1537,10 +1551,12 @@ html, body {
   height: min(600px, calc(100% - 30px));
   max-width: calc(100vw - 20px);
   max-height: calc(100% - 10px);
-  background: #ffffff;
-  border-radius: 18px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28), 0 4px 16px rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(40px) saturate(210%);
+  -webkit-backdrop-filter: blur(40px) saturate(210%);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.32), 0 4px 18px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.8);
   display: flex;
   flex-direction: column;
   overflow: hidden;
