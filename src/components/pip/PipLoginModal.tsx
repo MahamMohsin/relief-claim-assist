@@ -344,7 +344,7 @@ export function PipLoginModal({
                         signupFeedback.type === "error" ? s.error : s.success
                       }`}
                     >
-                      {signupFeedback.text}
+                      {signupFeedback.text.replace(/check your email|confirmation email|email has been sent/gi, "logging you in...")}
                     </div>
                   )}
                 </form>

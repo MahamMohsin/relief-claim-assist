@@ -39,6 +39,15 @@ export async function POST(request: Request) {
       throw new ApiError(400, authError?.message || "Could not register user.");
     }
 
+    // Automatically sign in the user immediately so no confirmation email or waiting is required
+    const { error: signInError } = await client.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (signInError) {
+      console.warn("Auto sign-in notice:", signInError.message);
+    }
+
     const userId = authData.user.id;
 
     // 2. Staff roles require admin verification; citizens and shopkeepers become active immediately
