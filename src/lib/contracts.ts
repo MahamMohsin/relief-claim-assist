@@ -49,7 +49,7 @@ export const actions = {
   claim_summary: z.object({ claimId: uuid }),
   quick_review: z.object({
     claimId: uuid,
-    decision: z.enum(["approve", "reject"]),
+    decision: z.enum(["approve", "reject", "more_proof"]),
     reason: z.string().trim().max(600).optional(),
     reasonUr: z.string().trim().max(600).optional(),
   }),

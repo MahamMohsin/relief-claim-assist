@@ -396,7 +396,7 @@ IMPORTANT GUIDELINES:
 
 export async function executeQuickReview(
   claimId: string,
-  decision: "approve" | "reject",
+  decision: "approve" | "reject" | "more_proof",
   customReason?: string,
   customReasonUr?: string,
 ): Promise<{ ok: boolean; claim: Claim; summary: ClaimSummaryResult }> {
