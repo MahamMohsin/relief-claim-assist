@@ -201,22 +201,40 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
 
   function submit(event: FormEvent) { event.preventDefault(); void command(input); }
 
-  return <section className={"voice-dock" + (clarify ? " clarifying" : "")} aria-label="Relief voice assistant">
-    {expanded && (answer || error || clarify) && <div className="voice-reply">
-      {clarify && <div><p>{clarify.question}</p><div className="voice-options">{clarify.options.map(app => <button type="button" key={app} onClick={() => choose(app)}>{apps[app].title}</button>)}</div></div>}
-      {answer && <div className="voice-answer"><p>{answer}</p><button className="dock-icon" onClick={() => void speakText(answer.slice(0, 1400), lang, lite || offline).then(setStage)} aria-label="Play assistant response"><Volume2 size={19} /></button></div>}
+  return <section className={"voice-dock-glass" + (clarify ? " clarifying" : "")} aria-label="Relief voice assistant">
+    {expanded && (answer || error || clarify) && <div className="voice-reply-glass">
+      {clarify && <div><p className="clarify-title">{clarify.question}</p><div className="voice-options">{clarify.options.map(app => <button type="button" key={app} onClick={() => choose(app)}>{apps[app].title}</button>)}</div></div>}
+      {answer && <div className="voice-answer"><p>{answer}</p><button className="glass-icon-btn" onClick={() => void speakText(answer.slice(0, 1400), lang, lite || offline).then(setStage)} aria-label="Play assistant response"><Volume2 size={18} /></button></div>}
       {error && <p className="voice-error" role="alert">{error}</p>}
     </div>}
-    <div className="voice-status"><span>{recording ? <span className="wave" aria-hidden="true"><i /><i /><i /><i /></span> : <AudioLines size={15} />} <span aria-live="polite">{stage}</span></span>
-      {decision && <span className="decision-chip" title={decision.model}>{decision.model.startsWith("jev-simulated") ? "Simulated Jev" : "Jev"} · {Math.round(decision.confidence * 100)}%</span>}
-      {(answer || error || clarify) && <button className="dock-icon" onClick={() => setExpanded(value => !value)} aria-expanded={expanded} aria-label="Toggle assistant response"><ChevronDown size={16} /></button>}
+    <div className="voice-glass-main">
+      <div className="voice-status-pill">
+        <span className="voice-pulse-indicator">{recording ? <span className="wave" aria-hidden="true"><i /><i /><i /><i /></span> : <AudioLines size={15} />}</span>
+        <span className="voice-stage-label" aria-live="polite">{stage}</span>
+        {decision && <span className="decision-chip-glass" title={decision.model}>{decision.model.startsWith("jev-simulated") ? "Simulated Jev" : "Jev"} · {Math.round(decision.confidence * 100)}%</span>}
+        {(answer || error || clarify) && <button className="glass-icon-btn" onClick={() => setExpanded(value => !value)} aria-expanded={expanded} aria-label="Toggle assistant response"><ChevronDown size={14} /></button>}
+      </div>
+
+      <form className="voice-glass-form" onSubmit={submit}>
+        <button type="button" className={"glass-mic-btn" + (recording ? " recording" : "")} onClick={() => void toggleRecord()} aria-label={recording ? "Stop microphone recording" : "Start microphone recording"}>
+          {recording ? <Square size={15} /> : <Mic size={18} />}
+        </button>
+        <input
+          className="glass-voice-input"
+          aria-label="Type a relief assistant command"
+          placeholder={lang === "ur" ? "اپنا سوال لکھیں یا مائیک دبائیں…" : "Ask anything or tap mic to speak…"}
+          value={input}
+          maxLength={1000}
+          onChange={event => setInput(event.target.value)}
+        />
+        <button type="button" className="glass-lang-pill" aria-label="Switch voice language" onClick={() => setLang(value => value === "en" ? "ur" : "en")}>
+          {lang === "ur" ? "اردو" : "EN"}
+        </button>
+        {working && <button type="button" className="glass-icon-btn stop" aria-label="Stop assistant" onClick={stop}><StopCircle size={18} /></button>}
+        <button type="submit" className="glass-send-btn" disabled={!input.trim()} aria-label="Send command">
+          <Send size={15} />
+        </button>
+      </form>
     </div>
-    <form className="voice-form" onSubmit={submit}>
-      <button type="button" className={"mic-button" + (recording ? " recording" : "")} onClick={() => void toggleRecord()} aria-label={recording ? "Stop microphone recording" : "Start microphone recording"}>{recording ? <Square size={17} /> : <Mic size={20} />}</button>
-      <input aria-label="Type a relief assistant command" placeholder={lang === "ur" ? "اپنا سوال لکھیں · Type a command" : "Type a command…"} value={input} maxLength={1000} onChange={event => setInput(event.target.value)} />
-      <button type="button" className="lang-button" aria-label="Switch voice language" onClick={() => setLang(value => value === "en" ? "ur" : "en")}>{lang === "ur" ? "اردو" : "EN"}</button>
-      {working && <button type="button" className="dock-icon" aria-label="Stop assistant" onClick={stop}><StopCircle size={20} /></button>}
-      <button type="submit" className="send-button" disabled={!input.trim()} aria-label="Send command"><Send size={18} /></button>
-    </form>
   </section>;
 }

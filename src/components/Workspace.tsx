@@ -226,26 +226,100 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                 </section>
               </motion.div>
             ) : !selection || !current ? (
-              <motion.div key="home" initial={{ opacity: motionDisabled ? 1 : 0 }} animate={{ opacity: 1 }}>
-                <section className="hero signed-hero">
-                  <div className="hero-art" aria-hidden="true"><i /><i /><i /><span /><span /></div>
-                  <div className="hero-content">
-                    <div className="hero-label"><span /> {profile.role} workspace</div>
-                    <h1>Welcome, {profile.full_name.split(" ")[0]}.</h1>
-                    <p>Open a mini-app to get started, or say what you need in English or Urdu.</p>
-                    <button className="hero-button" onClick={() => changeApp(available[0])}>Open {apps[available[0]].title} <ArrowRight size={18} /></button>
+              <motion.div key="home" initial={{ opacity: motionDisabled ? 1 : 0 }} animate={{ opacity: 1 }} className="dashboard-canvas">
+                {/* Apple-style Widget Canvas */}
+                <div className="ios-widget-row">
+                  {/* Persona Profile Widget */}
+                  <div className="ios-widget glass-card widget-profile">
+                    <div className="widget-header">
+                      <span className="widget-badge"><span className="status-dot-pulse" /> Live Persona</span>
+                      <span className="widget-sub">{profile.locale === "ur" ? "اردو" : "English"}</span>
+                    </div>
+                    <div className="profile-identity">
+                      <div className="avatar-squircle">
+                        {profile.full_name.split(" ").map(w => w[0]).slice(0, 2).join("")}
+                      </div>
+                      <div>
+                        <h3>{profile.full_name}</h3>
+                        <p className="role-tag">{profile.role.toUpperCase()} WORKSPACE</p>
+                      </div>
+                    </div>
+                    <div className="widget-stats">
+                      <div className="stat-pill">
+                        <small>Family Record</small>
+                        <strong>{family ? family.full_name : citizen ? "Linked" : "Direct Access"}</strong>
+                      </div>
+                      <div className="stat-pill">
+                        <small>Security Tier</small>
+                        <strong>DPI Verified</strong>
+                      </div>
+                    </div>
                   </div>
-                </section>
-                <div className="section-heading"><div><h2>Your mini-apps</h2><p>Available to the {profile.role} persona.</p></div><Link className="text-link" href="/docs">API docs <ArrowUpRight size={16} /></Link></div>
-                <div className="app-grid">
+
+                  {/* Scheme Overview Widget */}
+                  <div className="ios-widget glass-card widget-scheme">
+                    <div className="widget-header">
+                      <span className="widget-badge gold">Emergency Cash Aid</span>
+                      <small>PKR 25,000 / household</small>
+                    </div>
+                    <div className="scheme-details">
+                      <div className="scheme-ring">
+                        <HandHeart size={28} />
+                      </div>
+                      <div>
+                        <h4>Relief within reach</h4>
+                        <p>Ask in voice or tap a service below to file, verify, or review decisions.</p>
+                      </div>
+                    </div>
+                    <div className="scheme-quick-actions">
+                      <button className="ios-glass-btn" onClick={() => changeApp(available[0])}>
+                        Launch {apps[available[0]].title} <ArrowRight size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section title */}
+                <div className="ios-section-header">
+                  <div>
+                    <h2>Services & Mini-Apps</h2>
+                    <p>Designed for {profile.full_name} ({profile.role})</p>
+                  </div>
+                  <Link className="ios-docs-link" href="/docs">
+                    API Console <ArrowUpRight size={14} />
+                  </Link>
+                </div>
+
+                {/* Apple iPad-Style App Grid */}
+                <div className="ios-app-grid">
                   {available.map(id => {
                     const item = apps[id];
                     const Icon = item.icon;
-                    return <motion.button layoutId={motionDisabled ? undefined : "app-" + id} className="app-card" key={id} onClick={() => changeApp(id)}>
-                      <span className={"app-icon " + item.color}><Icon size={24} /></span>
-                      <span><strong>{item.title}</strong><small>{item.note}</small></span>
-                      <ArrowUpRight className="tile-arrow" size={17} />
-                    </motion.button>;
+                    return (
+                      <motion.button
+                        layoutId={motionDisabled ? undefined : "app-" + id}
+                        className="ios-app-card"
+                        key={id}
+                        onClick={() => changeApp(id)}
+                        whileHover={motionDisabled ? undefined : { y: -3, scale: 1.015 }}
+                        whileTap={motionDisabled ? undefined : { scale: 0.98 }}
+                        transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                      >
+                        <div className={"ios-icon-squircle " + item.color}>
+                          <Icon size={26} strokeWidth={2.1} />
+                        </div>
+                        <div className="ios-card-body">
+                          <div className="ios-card-top">
+                            <strong>{item.title}</strong>
+                            {item.badge && <span className="ios-badge">{item.badge}</span>}
+                          </div>
+                          <small>{item.note}</small>
+                        </div>
+                        <div className="ios-card-arrow">
+                          <ArrowRight size={16} />
+                        </div>
+                      </motion.button>
+                    );
                   })}
                 </div>
               </motion.div>
@@ -266,10 +340,6 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
 
       {!profile && <footer className="site-footer"><span><HandHeart size={17} /> Relief Claim Assist</span><Link href="/docs">API documentation <ArrowUpRight size={15} /></Link></footer>}
       {profile && <div className="bottom-shell">
-        <nav className="app-nav" aria-label="Mini-apps">
-          <button onClick={() => changeApp(null)} aria-current={!selection ? "page" : undefined}><House size={18} />Home</button>
-          {available.map(id => { const Icon = apps[id].icon; return <button key={id} onClick={() => changeApp(id)} aria-current={id === selection ? "page" : undefined}><Icon size={18} />{apps[id].title}</button>; })}
-        </nav>
         <VoiceDock key={profile.id + reset} profile={profile} citizenId={citizen} offline={offline} lite={lite} transcript={transcript} onAction={dispatch}
           onQueueAudio={(audio, locale) => enqueue("transcribe", { locale }, { audio })} />
       </div>}

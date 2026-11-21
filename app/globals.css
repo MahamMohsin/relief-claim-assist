@@ -1,27 +1,28 @@
 @import "tailwindcss";
 
 :root {
-  --paper: #f7f8f3;
-  --white: #fff;
-  --ink: #152a25;
-  --soft-ink: #4e645d;
-  --muted: #667973;
-  --line: #dce6df;
-  --faint: #eef4ee;
-  --forest: #134b3f;
-  --deep: #0e372f;
-  --accent: #d4ed9e;
-  --sun: #fff0db;
-  --sun-ink: #854411;
-  --sky: #e4edf8;
-  --sky-ink: #2d5181;
-  --plum: #f0e7f3;
-  --plum-ink: #6b3978;
-  --danger: #8b361e;
-  --dock: #102b24;
-  --shadow: 0 18px 45px #173d2e12;
-  --font: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --display: "Georgia", "Times New Roman", serif;
+  --paper: #f2f5f4;
+  --white: #ffffff;
+  --ink: #111e1b;
+  --soft-ink: #4f635e;
+  --muted: #6e847e;
+  --line: #dfe7e3;
+  --faint: #f0f4f1;
+  --forest: #00715D;
+  --deep: #0b2e26;
+  --accent: #34C759;
+  --sun: #fff4e5;
+  --sun-ink: #b25e00;
+  --sky: #e8f3ff;
+  --sky-ink: #0066cc;
+  --plum: #f5edfa;
+  --plum-ink: #8a3eb3;
+  --danger: #d93829;
+  --dock: rgba(255, 255, 255, 0.78);
+  --shadow: 0 12px 36px rgba(15, 38, 30, 0.08);
+  --glass-shadow: 0 16px 40px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  --display: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -175,37 +176,628 @@ textarea { resize: vertical; min-height: 86px; }
 table { width: 100%; border-collapse: collapse; text-align: left; font-size: .88rem; }
 th, td { padding: .6rem .52rem; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { background: var(--faint); color: var(--forest); }
-.bottom-shell { position: fixed; z-index: 8; bottom: max(.65rem, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: min(760px, calc(100% - 1.25rem)); }
-.app-nav { padding: .35rem; max-width: 100%; overflow: auto; margin: 0 auto .35rem; display: flex; gap: .15rem; width: max-content; background: #ffffffed; backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 13px; box-shadow: var(--shadow); }
-.app-nav button { display: inline-flex; flex-shrink: 0; align-items: center; gap: .32rem; min-height: 35px; padding: .35rem .55rem; font-size: .8rem; border-radius: 8px; font-weight: 670; }
-.app-nav button[aria-current] { background: var(--faint); color: var(--forest); }
-.voice-dock { color: var(--white); background: var(--dock); box-shadow: 0 15px 35px #102b2455; border: 1px solid #32594d; border-radius: 16px; padding: .5rem; }
-.voice-dock.clarifying { border-color: #e4af60; }
-.voice-status { display: flex; align-items: center; gap: .45rem; min-height: 26px; padding: 0 .4rem .25rem; color: #e0eee4; font-size: .78rem; font-weight: 690; }
-.voice-status > span:first-child { display: flex; align-items: center; gap: .4rem; flex: 1; }
-.decision-chip { color: var(--accent); white-space: nowrap; }
-.voice-form { display: flex; gap: .35rem; align-items: center; }
-.voice-form input { background: #23463b; border: 1px solid #345b50; color: var(--white); min-height: 41px; flex: 1; }
-.voice-form input::placeholder { color: #d4e5dc; }
-.voice-form input:focus-visible, .voice-dock button:focus-visible { outline-color: var(--accent); }
-.mic-button, .send-button, .dock-icon, .lang-button { border-radius: 8px; min-width: 37px; min-height: 37px; display: inline-grid; place-items: center; }
-.mic-button, .lang-button { background: #31564a; }
-.mic-button.recording { background: #9b472d; }
-.wave { height: 15px; display: inline-flex; align-items: center; gap: 2px; }
-.wave i { display: block; background: var(--accent); width: 2px; height: 10px; border-radius: 2px; animation: voice-level .7s ease-in-out infinite alternate; }
-.wave i:nth-child(2), .wave i:nth-child(4) { animation-delay: -.3s; }
-.wave i:nth-child(3) { animation-delay: -.56s; }
-@keyframes voice-level { from { transform: scaleY(.35); } to { transform: scaleY(1.4); } }
-.send-button { background: var(--accent); color: var(--deep); }
-.lang-button { font-size: .79rem; font-weight: 690; }
-.voice-form .dock-icon { color: #ffe7bc; }
-.voice-reply { padding: .65rem .7rem; margin-bottom: .3rem; border-bottom: 1px solid #32594d; max-height: min(30dvh, 220px); overflow-y: auto; }
-.voice-reply p { color: var(--white); }
-.voice-answer { display: flex; gap: .45rem; align-items: flex-start; }
-.voice-answer p { flex: 1; white-space: pre-wrap; }
-.voice-reply .voice-error { color: #ffd0b9; margin-top: .3rem; }
-.voice-options { display: flex; gap: .35rem; margin: .45rem 0; flex-wrap: wrap; }
-.voice-options button { color: var(--deep); background: var(--sun); border-radius: 8px; padding: .38rem .55rem; font-weight: 650; }
+/* ========================================================
+   APPLE-STYLE WIDGETS, SQUIRCLES & GLASS DOCK
+   ======================================================== */
+
+.dashboard-canvas {
+  display: flex;
+  flex-direction: column;
+  gap: 1.6rem;
+}
+
+/* Background canvas mesh gradient */
+.workspace {
+  background: 
+    radial-gradient(ellipse 60% 40% at 85% 15%, rgba(0, 122, 255, 0.08), transparent 60%),
+    radial-gradient(ellipse 55% 45% at 15% 35%, rgba(52, 199, 89, 0.09), transparent 60%),
+    radial-gradient(ellipse 50% 50% at 65% 85%, rgba(175, 82, 222, 0.07), transparent 60%),
+    var(--paper);
+  background-attachment: fixed;
+}
+
+/* Glass Card */
+.glass-card {
+  background: rgba(255, 255, 255, 0.76);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+  border-radius: 24px;
+}
+
+/* Top Widget Row */
+.ios-widget-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.1rem;
+}
+
+.ios-widget {
+  padding: 1.35rem 1.45rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 175px;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s;
+}
+
+.ios-widget:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.07);
+}
+
+.widget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.widget-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.25rem 0.55rem;
+  border-radius: 12px;
+  background: rgba(0, 113, 93, 0.12);
+  color: var(--forest);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.widget-badge.gold {
+  background: rgba(255, 149, 0, 0.14);
+  color: #c77700;
+}
+
+.status-dot-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34C759;
+  box-shadow: 0 0 0 2px rgba(52, 199, 89, 0.25);
+}
+
+.widget-sub {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0.8rem 0;
+}
+
+.avatar-squircle {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #00715D 0%, #004D3F 100%);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 750;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+  box-shadow: 0 6px 16px rgba(0, 113, 93, 0.25);
+  flex-shrink: 0;
+}
+
+.profile-identity h3 {
+  font-size: 1.25rem;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.role-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  margin-top: 0.2rem;
+}
+
+.widget-stats {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: auto;
+}
+
+.stat-pill {
+  flex: 1;
+  background: rgba(240, 244, 241, 0.7);
+  padding: 0.45rem 0.65rem;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-pill small {
+  font-size: 0.68rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.stat-pill strong {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scheme-details {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0.8rem 0;
+}
+
+.scheme-ring {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #FF9500 0%, #FF5E3A 100%);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 6px 16px rgba(255, 149, 0, 0.28);
+  flex-shrink: 0;
+}
+
+.scheme-details h4 {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.scheme-details p {
+  font-size: 0.8rem;
+  color: var(--soft-ink);
+  margin-top: 0.2rem;
+  line-height: 1.35;
+}
+
+.scheme-quick-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ios-glass-btn {
+  background: rgba(0, 113, 93, 0.1);
+  color: var(--forest);
+  border: none;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border-radius: 14px;
+  padding: 0.45rem 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: background 0.15s;
+}
+
+.ios-glass-btn:hover {
+  background: rgba(0, 113, 93, 0.18);
+}
+
+/* Section Header */
+.ios-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: 0.5rem;
+}
+
+.ios-section-header h2 {
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+.ios-section-header p {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+
+.ios-docs-link {
+  font-size: 0.82rem;
+  font-weight: 680;
+  color: var(--forest);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--line);
+}
+
+.ios-docs-link:hover {
+  background: #fff;
+}
+
+/* Apple-style Mini-App Grid */
+.ios-app-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.ios-app-card {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(20px) saturate(170%);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.035);
+  border-radius: 20px;
+  padding: 1.05rem 1.15rem;
+  display: flex;
+  align-items: center;
+  gap: 1.05rem;
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.ios-app-card:hover {
+  border-color: rgba(0, 113, 93, 0.3);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.06);
+}
+
+/* Apple Squircles */
+.ios-icon-squircle {
+  width: 54px;
+  height: 54px;
+  border-radius: 17px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.ios-app-card:hover .ios-icon-squircle {
+  transform: scale(1.05);
+}
+
+/* Apple Colors & Gradients */
+.ios-icon-squircle.ios-green {
+  background: linear-gradient(135deg, #34C759 0%, #248A3D 100%);
+  box-shadow: 0 6px 16px rgba(52, 199, 89, 0.35);
+}
+
+.ios-icon-squircle.ios-orange {
+  background: linear-gradient(135deg, #FF9500 0%, #C97500 100%);
+  box-shadow: 0 6px 16px rgba(255, 149, 0, 0.35);
+}
+
+.ios-icon-squircle.ios-blue {
+  background: linear-gradient(135deg, #007AFF 0%, #0051A8 100%);
+  box-shadow: 0 6px 16px rgba(0, 122, 255, 0.35);
+}
+
+.ios-icon-squircle.ios-purple {
+  background: linear-gradient(135deg, #AF52DE 0%, #7B32A0 100%);
+  box-shadow: 0 6px 16px rgba(175, 82, 222, 0.35);
+}
+
+.ios-icon-squircle.ios-teal {
+  background: linear-gradient(135deg, #5AC8FA 0%, #0B88C4 100%);
+  box-shadow: 0 6px 16px rgba(90, 200, 250, 0.35);
+}
+
+.ios-icon-squircle.ios-indigo {
+  background: linear-gradient(135deg, #5856D6 0%, #3634A3 100%);
+  box-shadow: 0 6px 16px rgba(88, 86, 214, 0.35);
+}
+
+.ios-icon-squircle.ios-amber {
+  background: linear-gradient(135deg, #FFCC00 0%, #C49800 100%);
+  box-shadow: 0 6px 16px rgba(255, 204, 0, 0.35);
+}
+
+.ios-icon-squircle.ios-rose {
+  background: linear-gradient(135deg, #FF2D55 0%, #B81434 100%);
+  box-shadow: 0 6px 16px rgba(255, 45, 85, 0.35);
+}
+
+.ios-card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.ios-card-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ios-card-top strong {
+  font-size: 1.05rem;
+  font-weight: 750;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+}
+
+.ios-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 8px;
+  background: rgba(0, 113, 93, 0.08);
+  color: var(--forest);
+  letter-spacing: 0.02em;
+}
+
+.ios-card-body small {
+  font-size: 0.8rem;
+  color: var(--soft-ink);
+  line-height: 1.35;
+}
+
+.ios-card-arrow {
+  color: var(--muted);
+  opacity: 0.45;
+  transition: transform 0.2s, opacity 0.2s;
+}
+
+.ios-app-card:hover .ios-card-arrow {
+  opacity: 1;
+  transform: translateX(3px);
+  color: var(--forest);
+}
+
+/* ========================================================
+   FROSTED GLASS VOICE DOCK (iPad Style)
+   ======================================================== */
+
+.bottom-shell {
+  position: fixed;
+  z-index: 20;
+  bottom: max(1.1rem, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(680px, calc(100% - 1.8rem));
+  pointer-events: none;
+}
+
+.voice-dock-glass {
+  pointer-events: auto;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(28px) saturate(200%);
+  -webkit-backdrop-filter: blur(28px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.12), 0 2px 10px rgba(0, 0, 0, 0.04);
+  border-radius: 26px;
+  padding: 0.48rem 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.voice-dock-glass.clarifying {
+  border-color: rgba(255, 149, 0, 0.5);
+  box-shadow: 0 20px 48px rgba(255, 149, 0, 0.16);
+}
+
+/* Voice reply bubble (Dynamic Island / Siri expansion style) */
+.voice-reply-glass {
+  padding: 0.75rem 0.85rem;
+  background: rgba(246, 248, 247, 0.9);
+  border-radius: 18px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  max-height: min(28dvh, 220px);
+  overflow-y: auto;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.clarify-title {
+  font-weight: 650;
+  color: var(--ink);
+  margin-bottom: 0.45rem;
+}
+
+.voice-answer {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.voice-answer p {
+  color: var(--ink);
+  flex: 1;
+}
+
+.voice-glass-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.voice-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.74rem;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.voice-pulse-indicator {
+  display: flex;
+  align-items: center;
+  color: var(--forest);
+}
+
+.voice-stage-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.decision-chip-glass {
+  background: rgba(0, 113, 93, 0.1);
+  color: var(--forest);
+  padding: 0.15rem 0.45rem;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+/* Glass Form Controls */
+.voice-glass-form {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(240, 244, 241, 0.65);
+  border-radius: 20px;
+  padding: 0.25rem 0.35rem;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.glass-voice-input {
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 500;
+  padding: 0.4rem 0.6rem;
+  min-height: 38px;
+  flex: 1;
+}
+
+.glass-voice-input:focus {
+  outline: none;
+}
+
+.glass-voice-input::placeholder {
+  color: #8c9e99;
+}
+
+.glass-mic-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, #00715D 0%, #004D3F 100%);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 0 3px 10px rgba(0, 113, 93, 0.28);
+  transition: transform 0.15s, background 0.15s;
+}
+
+.glass-mic-btn:hover {
+  transform: scale(1.06);
+}
+
+.glass-mic-btn.recording {
+  background: linear-gradient(135deg, #FF3B30 0%, #D70015 100%);
+  box-shadow: 0 3px 12px rgba(255, 59, 48, 0.4);
+  animation: pulse-red 1.2s infinite alternate;
+}
+
+@keyframes pulse-red {
+  from { transform: scale(1); }
+  to { transform: scale(1.08); }
+}
+
+.glass-lang-pill {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--forest);
+  font-size: 0.75rem;
+  font-weight: 750;
+  padding: 0.35rem 0.65rem;
+  border-radius: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.glass-lang-pill:hover {
+  background: #fff;
+}
+
+.glass-send-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: var(--forest);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.glass-send-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.glass-send-btn:not(:disabled):hover {
+  transform: scale(1.05);
+}
+
+.glass-icon-btn {
+  border: none;
+  background: transparent;
+  color: var(--soft-ink);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+}
+
+.glass-icon-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--ink);
+}
+
+.glass-icon-btn.stop {
+  color: #FF3B30;
+}
+
+@media (max-width: 768px) {
+  .ios-widget-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ios-app-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bottom-shell {
+    width: calc(100% - 1.2rem);
+    bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+}
+
 .modal-scrim { position: fixed; inset: 0; z-index: 12; display: grid; place-items: center; background: #12292287; padding: .6rem; }
 .modal { max-width: 760px; max-height: 90dvh; overflow-y: auto; width: 100%; padding: 1.15rem; background: var(--white); border-radius: 18px; }
 .modal .persona-grid { margin-top: .85rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
