@@ -15,6 +15,7 @@ export type ViewContext = {
   enqueue: (action: Mutation["action"], body: Record<string, unknown>, options?: { key?: string; dependsOn?: string; audio?: Blob }) => Promise<string>;
   selectFamily: (family: Family) => Promise<void>;
   prefill: Extract<UIAction, { type: "prefill_fields" }> | null;
+  stepNav: "evidence" | "review" | "submit" | null;
   voiceLang: "en" | "ur";
   go: (app: MiniApp | null) => void;
   refresh: () => void;
@@ -125,6 +126,17 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
     setDetails(current => ({ ...current, ...ctx.prefill?.fields }));
     setMessage("Assistant filled the fields. Review them before saving.");
   }, [ctx.prefill]);
+
+  useEffect(() => {
+    if (!ctx.stepNav) return;
+    if (ctx.stepNav === "evidence") {
+      setEditing(true);
+      setStep(1);
+    } else if (ctx.stepNav === "review") {
+      setEditing(true);
+      setStep(2);
+    }
+  }, [ctx.stepNav]);
 
   useEffect(() => {
     if (pendingDraft && !ctx.offline) {

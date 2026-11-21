@@ -33,6 +33,7 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
   const [syncing, setSyncing] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [prefill, setPrefill] = useState<Extract<UIAction, { type: "prefill_fields" }> | null>(null);
+  const [stepNav, setStepNav] = useState<"evidence" | "review" | "submit" | null>(null);
   const [alert, setAlert] = useState("");
   const [pastClaims, setPastClaims] = useState<Claim[]>([]);
   const [claimsLoading, setClaimsLoading] = useState(false);
@@ -181,6 +182,9 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
         setPrefill(action);
         setVersion(value => value + 1);
         break;
+      case "advance_claim_step":
+        setStepNav(action.step);
+        break;
       case "highlight_alert":
         setAlert(action.message);
         break;
@@ -190,7 +194,7 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
   const status = offline ? "Offline" : "Online";
   const failed = pending.find(item => item.failure);
   const context: ViewContext | null = profile ? {
-    profile, citizen, offline, version, enqueue, selectFamily, prefill, voiceLang: profile.locale,
+    profile, citizen, offline, version, enqueue, selectFamily, prefill, stepNav, voiceLang: profile.locale,
     go: changeApp, refresh: () => setVersion(current => current + 1), lite,
   } : null;
 

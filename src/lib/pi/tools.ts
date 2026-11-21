@@ -6,7 +6,7 @@ import { ApiError, gateway } from "@/src/lib/server";
 import { classifyScam } from "@/src/lib/ai/jev";
 import { answerPolicy } from "@/src/lib/ai/rag";
 
-export const names = ["ui_control", "jev_classify_and_route", "claim_draft_upsert", "mock_dpi_verify", "policy_rag_search", "escalate_to_officer"];
+export const names = ["ui_control", "jev_classify_and_route", "claim_draft_upsert", "claim_step_navigate", "mock_dpi_verify", "policy_rag_search", "escalate_to_officer"];
 export const miniApp = z.enum(["claim", "scam", "policy", "privacy", "family", "review", "rules", "audit"]);
 export type PiContext = {
   profile: Profile;
@@ -55,7 +55,16 @@ export function registerTools(pi: ExtensionAPI, context: PiContext) {
       const result = await gateway<Claim>("draft", args);
       emit({ type: "open_mini_app", app: "claim" });
       emit({ type: "prefill_fields", fields: payload, claimId: result.id });
-      return textResult({ draftId: result.id, status: result.status });
+      return textResult({ draftSaved: true, status: result.status });
+    },
+  });
+  pi.registerTool({
+    name: "claim_step_navigate", label: "Advance claim step", description: "Advance the claim creation screen when user says they have done evidence or want to review.",
+    parameters: Type.Object({ step: Type.Union([Type.Literal("evidence"), Type.Literal("review")]) }),
+    async execute(_id, input) {
+      emit({ type: "open_mini_app", app: "claim" });
+      emit({ type: "advance_claim_step", step: input.step });
+      return textResult({ navigatedToStep: input.step });
     },
   });
   pi.registerTool({

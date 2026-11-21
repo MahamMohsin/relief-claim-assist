@@ -103,6 +103,7 @@ export function canOpen(role: Role, app: MiniApp) {
 
 export type UIAction = { type: "open_mini_app"; app: MiniApp }
   | { type: "prefill_fields"; fields: Partial<Payload>; claimId?: string }
+  | { type: "advance_claim_step"; step: "evidence" | "review" | "submit" }
   | { type: "show_jev_badge"; label: string; confidence: number; route: string; model: string }
   | { type: "ask_clarification"; question: string; options: MiniApp[] }
   | { type: "highlight_alert"; severity: "warning" | "info"; message: string };
