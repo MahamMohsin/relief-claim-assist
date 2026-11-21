@@ -279,45 +279,25 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                   )}
                 </div>
 
-                {/* Section title */}
-                <div className="ios-section-header">
-                  <div>
-                    <h2>Services & Mini-Apps</h2>
-                    <p>Designed for {profile.full_name} ({profile.role})</p>
-                  </div>
-                  <Link className="ios-docs-link" href="/docs">
-                    API Console <ArrowUpRight size={14} />
-                  </Link>
-                </div>
-
-                {/* Apple iPad-Style App Grid */}
-                <div className="ios-app-grid">
+                {/* Apple iPad / Desktop App Grid (Icons with names below) */}
+                <div className="ios-desktop-grid">
                   {available.map(id => {
                     const item = apps[id];
                     const Icon = item.icon;
                     return (
                       <motion.button
                         layoutId={motionDisabled ? undefined : "app-" + id}
-                        className="ios-app-card"
+                        className="ios-desktop-app"
                         key={id}
                         onClick={() => changeApp(id)}
-                        whileHover={motionDisabled ? undefined : { y: -3, scale: 1.015 }}
-                        whileTap={motionDisabled ? undefined : { scale: 0.98 }}
-                        transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                        whileHover={motionDisabled ? undefined : { y: -4, scale: 1.05 }}
+                        whileTap={motionDisabled ? undefined : { scale: 0.95 }}
+                        transition={{ type: "spring", stiffness: 450, damping: 25 }}
                       >
-                        <div className={"ios-icon-squircle " + item.color}>
-                          <Icon size={26} strokeWidth={2.1} />
+                        <div className={"ios-desktop-icon " + item.color}>
+                          <Icon size={34} strokeWidth={2.1} />
                         </div>
-                        <div className="ios-card-body">
-                          <div className="ios-card-top">
-                            <strong>{item.title}</strong>
-                            {item.badge && <span className="ios-badge">{item.badge}</span>}
-                          </div>
-                          <small>{item.note}</small>
-                        </div>
-                        <div className="ios-card-arrow">
-                          <ArrowRight size={16} />
-                        </div>
+                        <span className="ios-desktop-label">{item.title}</span>
                       </motion.button>
                     );
                   })}
