@@ -2,5 +2,5 @@ import { Workspace } from "@/src/components/Workspace";
 import { getProfile } from "@/src/lib/profile";
 
 export default async function Page() {
-  return <Workspace initialProfile={await getProfile()} />;
+  return <Workspace initialProfile={await getProfile()} demoRegistrationEnabled={process.env.RELIEF_DEMO_REGISTRATION === "true"} />;
 }

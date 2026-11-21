@@ -4,7 +4,7 @@ Use this guide to test a new claim from submission to officer approval, simulate
 
 ## Before you start
 
-- Open the [verified local preview](http://localhost:3001/). If it has stopped, run `npm.cmd run build` and then `npm.cmd run start -- --hostname 127.0.0.1 --port 3001` from the project folder.
+- Open the [local preview](http://127.0.0.1:3000/). If it has stopped, run `npm.cmd run dev` from the project folder and use the Local URL printed by Next.js.
 - Confirm the banner says **PROTOTYPE · SIMULATED DPI DATA** and the status says **Online**. If someone is already signed in, click the persona name in the top bar to switch.
 - The main test uses the built-in **Readable sample**. For the file upload path, use the [synthetic income certificate](../tests/fixtures/synthetic-income.png). The [synthetic English audio clip](../tests/fixtures/synthetic-english.wav) is available for transcription testing.
 
@@ -28,7 +28,8 @@ The workflow passes when the same claim reaches **Paid** and both the citizen an
 | Blurry evidence | Start a separate claim as Fatima. Save the draft, attach **Blurry sample**, and submit. | The claim shows **Needs proof**. Review Desk requires the citizen to resubmit proof before approval. |
 | Network loss | In a new claim, turn on **Simulate network drop** before saving. Queue the draft, attach the readable sample, and click **Queue claim**. Turn the toggle off and let sync finish. Use **Sync now** if items remain queued. | The queued count clears. The new claim appears once and includes the attached evidence. |
 | Consent revocation | As Fatima, open **My Privacy** and note Zainab’s existing access. Revoke it. Switch to **Zainab Health Worker → Family Switch** and try to open Fatima’s record. Restore the previous access after the check. | The server denies access to Fatima’s family. **Auditor Kamran → Audit Vault** shows the revocation and denied access. |
-| Policy lookup by voice | As Fatima, set the voice dock to **EN**. Tap the mic and say “What is the relief policy for widows?” Tap again to stop, check the transcript, then click **Send command**. | The assistant opens **Policy Ask** and cites **A3 · Widow and urgent cases** in its reply. |
+| Policy lookup by voice | As Fatima, set the voice dock to **EN**. Tap the mic and say “What is the relief policy for widows?” Tap again to stop, check the transcript, then click **Send message**. On a keyboard you can also hold **T** to speak and release it to stop. | The assistant opens **Policy Ask** and cites **A3 · Widow and urgent cases** in its reply. |
+| Urdu and 2G speech | Set the voice dock to **اردو** and turn on **2G Lite mode**. Record `بیواؤں کے لیے امداد کی پالیسی کیا ہے؟` as a short clip, then stop. Check the transcript before sending. | The clip is transcribed after upload. The typed input remains available. Playback requires an Urdu voice installed on the device or a configured Cartesia voice. |
 | Private image upload | As Fatima, save a new draft. Choose **Mock income slip** and upload the [synthetic income certificate](../tests/fixtures/synthetic-income.png). Attach it and submit. As Bilal, select the same claim in **Review Desk** and click **Open synthetic image**. | Review Desk displays the evidence metadata and opens the private image. With MiMo available, the evidence includes document analysis. |
 
 The voice dock also accepts typed commands. Jev uses simulated routing with the current configuration, and playback depends on the browser’s available voices.
@@ -51,6 +52,7 @@ Run the commands below from the project folder. The browser tests use Chrome by 
 
 ```powershell
 npm.cmd run typecheck
+npm.cmd run test:unit
 npm.cmd run build
 npm.cmd run test:e2e
 ```

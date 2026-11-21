@@ -22,7 +22,10 @@ export async function POST(request: Request) {
     });
 
     if (error || !data.user) {
-      console.error("Login auth error:", error?.message);
+      if (error?.code === "email_not_confirmed") {
+        throw new ApiError(401, "Open the newest confirmation email for this account, then try signing in again.");
+      }
+      console.error("Login auth error:", error?.code ?? error?.name);
       throw new ApiError(401, error?.message || "Invalid email or password.");
     }
 

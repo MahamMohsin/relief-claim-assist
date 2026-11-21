@@ -13,9 +13,13 @@ The connected Supabase project has the schema and seeded personas. For a fresh d
 
 ## Providers and fallbacks
 
+For email signup with confirmation enabled, add the app's exact callback URL to Supabase Auth redirect URLs. Local previews can use `http://127.0.0.1:3000/auth/callback` or `http://localhost:3000/auth/callback`. Open the confirmation link in the same browser and on the same hostname used to register for automatic sign-in. If you open it in another browser, use your registration email and password on the sign-in page. Demo personas use the separate one-click sign-in flow.
+
+For a synthetic registration test on localhost, set `RELIEF_DEMO_REGISTRATION=true`. The signup form can then create a synthetic citizen account and display its generated sign-in address. Leave this setting off for hosted deployments.
+
 - Supabase Auth, Postgres, claims, and audit use the configured live project. The Data API publishable key is safe for the web app. Demo credentials and gateway proof stay on the server.
 - The assistant runs in a restricted, in-memory Pi session using Xiaomi MiMo. The app stores scoped transcript entries in Supabase. Built-in coding and shell tools are disabled. Stop cancels a run, and an eligible request can steer an active run.
-- Deepgram Nova-3 supports recorded English and Urdu. Typed commands work without a microphone.
+- Deepgram Nova-3 supports live and recorded English and Urdu. Live audio uses a Node.js relay that keeps the provider key on the server. Typed commands work without a microphone.
 - Set OPENROUTER_API_KEY for live Jev 1.14. With no key and JEV_MOCK_MODE=true, the interface labels deterministic simulated routing and scam classification.
 - Set CARTESIA_API_KEY and CARTESIA_VOICE_EN or CARTESIA_VOICE_UR for Cartesia. Browser speech is the fallback, with voice availability determined by the device.
 - Uploaded synthetic images are analyzed by MiMo when available. Labeled sample outcomes are deterministic. The officer sees structured metadata and can open the private original image. The server rechecks access whenever an image is opened.
@@ -23,6 +27,8 @@ The connected Supabase project has the schema and seeded personas. For a fresh d
 - The browser stores scoped drafts, audio clips, and pending mutations in IndexedDB. Server-side consent is rechecked on sync. Network-drop simulation keeps the app open while work queues locally.
 
 ## Five-minute judge demo
+
+Use the [rubric checklist](docs/rubric-checklist.md) to map each demonstration and automated check to the evaluation criteria.
 
 For exact steps, expected results, and synthetic upload fixtures, see the [manual workflow test guide](docs/manual-workflow-test.md).
 

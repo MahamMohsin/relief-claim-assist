@@ -12,7 +12,7 @@ export function createEngine(
   stage: HTMLElement,
   scene: HTMLElement,
   parts: Parts,
-  opts: { rec: boolean; reduced: boolean; onLogin?: (email: string) => void }
+  opts: { rec: boolean; reduced: boolean; onLogin?: (email: string, password: string) => void }
 ): Engine {
   const render = createRender(parts);
   const live = createLive(parts, scene, opts.onLogin);

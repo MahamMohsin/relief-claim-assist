@@ -9,13 +9,15 @@ export async function POST(request: Request) {
     if (!body.success) throw new ApiError(400, "Choose a demo persona.");
     const password = process.env.RELIEF_DEMO_PASSWORD;
     if (!password) throw new ApiError(503, "Demo sign-in has not been configured.");
-    const client = await authClient();
+    const timeout = AbortSignal.timeout(10000);
+    const client = await authClient(AbortSignal.any([request.signal, timeout]));
     const { error } = await client.auth.signInWithPassword({
       email: body.data.persona + "@relief-demo.example",
       password,
     });
     if (error) {
       console.error("Demo sign-in", error.code, error.status);
+      if (timeout.aborted) throw new ApiError(504, "Demo sign-in took too long. Please try again.");
       throw new ApiError(503, "Demo sign-in is temporarily unavailable.");
     }
     return Response.json({ ok: true });

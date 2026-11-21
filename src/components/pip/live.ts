@@ -7,10 +7,11 @@ type FieldId = "fe" | "fp" | null;
 const EMAIL_OK = /@.+\..+/;
 const HAND_SPRING = "transform .35s cubic-bezier(.3,1.2,.4,1)";
 
-export function createLive(p: Parts, scene: HTMLElement, onLogin?: (email: string) => void) {
+export function createLive(p: Parts, scene: HTMLElement, onLogin?: (email: string, password: string) => void) {
   const LV = { err: -9, x: 0, y: 0, last: 0, tap: -9, expr: "idle" as Expr, prev: "idle" as Expr, at: 0, typing: -9 };
   let live = false;
   let focusF: FieldId = null;
+  let password = "";
 
   const toScene = (e: PointerEvent): [number, number] => {
     const r = scene.getBoundingClientRect(),
@@ -52,26 +53,45 @@ export function createLive(p: Parts, scene: HTMLElement, onLogin?: (email: strin
       LV.tap = n;
       focusF = null;
       if (onLogin) {
-        setTimeout(() => {
-          onLogin(p.emailValue.textContent || "fatima@relief-demo.example");
-        }, 1200);
+        onLogin(p.emailValue.textContent?.trim() ?? "", password);
       }
     } else focusF = null;
     if (was == "fe" && focusF != "fe") checkEmail();
   };
   const onKey = (e: KeyboardEvent) => {
     if (!live || !focusF) return;
+    if (e.target instanceof HTMLElement && e.target.closest("input, select, textarea, button, [contenteditable]")) return;
     const n = now();
     LV.typing = n;
     LV.last = n;
     const el = focusF == "fe" ? p.emailValue : p.passwordValue;
     const v = el.textContent ?? "";
-    if (e.key == "Backspace") el.textContent = v.slice(0, -1);
+    if (e.key == "Backspace") {
+      if (focusF === "fp") password = password.slice(0, -1);
+      el.textContent = v.slice(0, -1);
+    }
     else if (e.key == "Tab") {
       e.preventDefault();
       if (focusF == "fe") checkEmail();
       focusF = focusF == "fe" ? "fp" : "fe";
-    } else if (e.key.length == 1) el.textContent = v + (focusF == "fe" ? e.key : "•");
+    } else if (e.key.length == 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (focusF === "fp") password += e.key;
+      el.textContent = v + (focusF == "fe" ? e.key : "•");
+    }
+  };
+
+  const onPaste = (event: ClipboardEvent) => {
+    if (!live || !focusF) return;
+    if (event.target instanceof HTMLElement && event.target.closest("input, select, textarea, [contenteditable]")) return;
+    const text = event.clipboardData?.getData("text").replace(/[\r\n]/g, "") ?? "";
+    if (!text) return;
+    event.preventDefault();
+    if (focusF === "fe") {
+      p.emailValue.textContent = ((p.emailValue.textContent ?? "") + text).slice(0, 320);
+    } else {
+      password = (password + text).slice(0, 256);
+      p.passwordValue.textContent = "•".repeat(password.length);
+    }
   };
 
   function renderLive(n: number) {
@@ -178,11 +198,14 @@ export function createLive(p: Parts, scene: HTMLElement, onLogin?: (email: strin
       addEventListener("pointermove", onMove);
       addEventListener("pointerdown", onDown);
       addEventListener("keydown", onKey);
+      addEventListener("paste", onPaste);
     },
     detach() {
+      password = "";
       removeEventListener("pointermove", onMove);
       removeEventListener("pointerdown", onDown);
       removeEventListener("keydown", onKey);
+      removeEventListener("paste", onPaste);
     },
   };
 }

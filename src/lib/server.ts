@@ -7,8 +7,8 @@ export class ApiError extends Error {
   }
 }
 
-export async function authClient() {
-  return createClient(await cookies());
+export async function authClient(signal?: AbortSignal) {
+  return createClient(await cookies(), signal);
 }
 
 export async function gateway<T>(action: string, args: object = {}): Promise<T> {

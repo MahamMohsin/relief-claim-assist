@@ -1,198 +1,134 @@
+
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type VoiceStatus = "idle" | "connecting" | "listening" | "error";
-
-export interface VoiceStreamState {
-  status: VoiceStatus;
+type VoiceState = {
+  status: "idle" | "connecting" | "listening" | "error";
   error: string | null;
   partial: string;
   utterance: string;
   lastUtterance: string;
   utteranceId: number;
-  finalText: string;
   listening: boolean;
-}
-
-interface DeepgramResultsMsg {
-  type: string;
-  start: number;
-  end: number;
-  is_final: boolean;
-  speech_final: boolean;
-  channel?: { alternatives?: Array<{ transcript?: string; confidence?: number }> };
-}
-
-const IDLE: VoiceStreamState = {
-  status: "idle",
-  error: null,
-  partial: "",
-  utterance: "",
-  lastUtterance: "",
-  utteranceId: 0,
-  finalText: "",
-  listening: false,
+};
+const idle: VoiceState = { status: "idle", error: null, partial: "", utterance: "", lastUtterance: "", utteranceId: 0, listening: false };
+type Transcript = { is_final?: boolean; speech_final?: boolean; channel?: { alternatives?: { transcript?: string }[] } };
+type Recording = {
+  controller: AbortController;
+  id?: string;
+  media?: MediaStream;
+  context?: AudioContext;
+  worklet?: AudioWorkletNode;
+  poll?: number;
+  timeout?: number;
 };
 
-export function useVoiceStream(locale: "en" | "ur" = "en") {
-  const [state, setState] = useState<VoiceStreamState>(IDLE);
+export function useVoiceStream(locale: "en" | "ur") {
+  const [state, setState] = useState<VoiceState>(idle);
+  const current = useRef<Recording | null>(null);
 
-  const wsRef = useRef<WebSocket | null>(null);
-  const ctxRef = useRef<AudioContext | null>(null);
-  const nodeRef = useRef<AudioWorkletNode | null>(null);
-  const micRef = useRef<MediaStream | null>(null);
-  const stopRef = useRef<(() => void) | null>(null);
-
-  const teardown = useCallback(() => {
-    const ws = wsRef.current;
-    if (ws) {
-      try {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: "CloseStream" }));
-        }
-        ws.close();
-      } catch {}
-    }
-    wsRef.current = null;
-    nodeRef.current?.disconnect();
-    nodeRef.current = null;
-    ctxRef.current?.close().catch(() => {});
-    ctxRef.current = null;
-    micRef.current?.getTracks().forEach(t => t.stop());
-    micRef.current = null;
+  const release = useCallback((recording: Recording) => {
+    if (current.current === recording) current.current = null;
+    recording.controller.abort();
+    window.clearInterval(recording.poll);
+    window.clearTimeout(recording.timeout);
+    recording.worklet?.disconnect();
+    recording.media?.getTracks().forEach(track => track.stop());
+    void recording.context?.close().catch(() => {});
+    if (recording.id) void fetch("/api/voice/relay", {
+      method: "DELETE", headers: { "x-relief-recording": recording.id },
+    }).catch(() => {});
   }, []);
-
-  stopRef.current = teardown;
 
   const stop = useCallback(() => {
-    teardown();
-    setState(IDLE);
-  }, [teardown]);
+    if (current.current) release(current.current);
+    setState(previous => ({ ...previous, status: "idle", listening: false }));
+  }, [release]);
+
+  useEffect(() => () => {
+    if (current.current) release(current.current);
+  }, [release]);
 
   const start = useCallback(async () => {
-    if (wsRef.current) return;
-    const key = process.env.NEXT_PUBLIC_DEEPGRAM_KEY?.trim();
-    if (!key) {
-      setState({ ...IDLE, status: "error", error: "Missing NEXT_PUBLIC_DEEPGRAM_KEY" });
-      return;
-    }
-    setState({ ...IDLE, status: "connecting", listening: true });
-
-    let media: MediaStream | null = null;
-    let ctx: AudioContext | null = null;
+    if (current.current) return true;
+    const recording: Recording = { controller: new AbortController() };
+    const signal = recording.controller.signal;
+    current.current = recording;
+    setState({ ...idle, status: "connecting", listening: true });
     try {
-      media = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      const response = await fetch("/api/voice/relay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locale }),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
       });
-      ctx = new AudioContext({ sampleRate: 16000 });
-      await ctx.audioWorklet.addModule("/pcm-worklet.js");
+      if (!response.ok) throw new Error("Live transcription is unavailable.");
+      const { recordingId } = await response.json();
+      if (typeof recordingId !== "string") throw new Error("Live transcription is unavailable.");
+      recording.id = recordingId;
+      if (signal.aborted) { release(recording); return false; }
+      recording.media = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (signal.aborted) { release(recording); return false; }
+      const context = new AudioContext({ sampleRate: 16000 });
+      recording.context = context;
+      await context.audioWorklet.addModule("/pcm-worklet.js");
+      if (signal.aborted) return false;
+      const node = new AudioWorkletNode(context, "pcm-capture");
+      recording.worklet = node;
+      context.createMediaStreamSource(recording.media).connect(node);
 
-      const langCode = locale === "ur" ? "ur" : "en-US";
-      const dgUrl = `wss://api.deepgram.com/v1/listen?model=nova-3&language=${langCode}&encoding=linear16&channels=1&interim_results=true&endpointing=300&smart_format=true&sample_rate=${ctx.sampleRate}`;
-      const ws = new WebSocket(dgUrl, ["token", key]);
-      wsRef.current = ws;
-
-      await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("Deepgram connection timeout")), 10000);
-        ws.onopen = () => {
-          clearTimeout(timer);
-          resolve();
-        };
-        ws.onerror = () => {
-          clearTimeout(timer);
-          reject(new Error("Deepgram WebSocket error"));
-        };
-      });
-
-      ws.onmessage = ev => {
-        let msg: DeepgramResultsMsg;
+      let chunks: ArrayBuffer[] = [];
+      let bytes = 0;
+      let sending = false;
+      node.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
+        if (bytes + event.data.byteLength > 32000) return;
+        chunks.push(event.data);
+        bytes += event.data.byteLength;
+      };
+      recording.poll = window.setInterval(async () => {
+        if (sending || signal.aborted || !bytes) return;
+        sending = true;
+        const batch = new Blob(chunks, { type: "application/octet-stream" });
+        chunks = [];
+        bytes = 0;
         try {
-          msg = JSON.parse(ev.data as string) as DeepgramResultsMsg;
-        } catch {
-          return;
-        }
-        if (msg.type !== "Results") return;
-
-        const text = msg.channel?.alternatives?.[0]?.transcript?.trim() ?? "";
-        if (!text) return;
-
-        if (msg.is_final) {
-          if (msg.speech_final) {
-            setState(s => {
-              const full = s.utterance ? `${s.utterance} ${text}` : text;
-              return {
-                ...s,
-                status: "listening",
-                partial: "",
-                utterance: "",
-                lastUtterance: full,
-                utteranceId: s.utteranceId + 1,
-                finalText: s.finalText ? `${s.finalText} ${full}` : full,
-              };
+          const output = await fetch("/api/voice/relay", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/octet-stream", "x-relief-recording": recordingId },
+            body: batch,
+            signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
+          });
+          if (!output.ok) throw new Error("Live transcription disconnected.");
+          const { messages } = await output.json() as { messages: Transcript[] };
+          if (signal.aborted) return;
+          for (const message of messages) {
+            const text = message.channel?.alternatives?.[0]?.transcript?.trim();
+            if (!text) continue;
+            setState(previous => {
+              if (!message.is_final) return { ...previous, partial: text };
+              const utterance = [previous.utterance, text].filter(Boolean).join(" ");
+              return message.speech_final
+                ? { ...previous, partial: "", utterance: "", lastUtterance: utterance, utteranceId: previous.utteranceId + 1 }
+                : { ...previous, partial: "", utterance };
             });
-          } else {
-            setState(s => ({
-              ...s,
-              status: "listening",
-              partial: "",
-              utterance: s.utterance ? `${s.utterance} ${text}` : text,
-            }));
           }
-        } else {
-          setState(s => ({
-            ...s,
-            status: "listening",
-            partial: text,
-          }));
-        }
-      };
-
-      ws.onclose = () => {
-        if (wsRef.current === ws) {
-          wsRef.current = null;
-          setState(s => s.status === "listening" || s.status === "connecting"
-            ? { ...s, status: "error", error: "Connection closed", listening: false }
-            : s
-          );
-        }
-      };
-
-      const source = ctx.createMediaStreamSource(media);
-      const node = new AudioWorkletNode(ctx, "pcm-capture");
-      nodeRef.current = node;
-      micRef.current = media;
-      ctxRef.current = ctx;
-
-      node.port.onmessage = (e: MessageEvent<ArrayBuffer>) => {
-        const wsNow = wsRef.current;
-        if (!wsNow || wsNow.readyState !== WebSocket.OPEN) return;
-        wsNow.send(e.data);
-      };
-      source.connect(node);
-
-      setState(s => ({ ...s, status: "listening", error: null }));
-    } catch (err) {
-      media?.getTracks().forEach(t => t.stop());
-      ctx?.close().catch(() => {});
-      wsRef.current?.close();
-      wsRef.current = null;
-      const message = err instanceof Error ? err.message : "Failed to start microphone";
-      setState({ ...IDLE, status: "error", error: message });
+        } catch {
+          if (signal.aborted) return;
+          release(recording);
+          setState(previous => ({ ...previous, listening: false, status: "error", error: "Live transcription disconnected. Use 2G Lite mode for a short recording." }));
+        } finally { sending = false; }
+      }, 280);
+      recording.timeout = window.setTimeout(stop, 20000);
+      setState({ ...idle, status: "listening", listening: true });
+      return true;
+    } catch (error) {
+      const aborted = signal.aborted;
+      release(recording);
+      if (!aborted) setState({ ...idle, status: "error", error: error instanceof Error ? error.message : "Live transcription is unavailable." });
+      return false;
     }
-  }, [locale]);
+  }, [locale, release, stop]);
 
-  const toggle = useCallback(() => {
-    if (state.status === "listening" || state.status === "connecting") {
-      stop();
-    } else {
-      void start();
-    }
-  }, [state.status, start, stop]);
-
-  useEffect(() => {
-    return () => stopRef.current?.();
-  }, []);
-
-  return { ...state, toggle, start, stop };
+  return { ...state, start, stop };
 }
