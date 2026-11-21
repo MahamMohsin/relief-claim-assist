@@ -4468,6 +4468,26 @@ html, body {
   display: grid;
   gap: 0.85rem;
 }
+.record-decision-top-card select,
+.record-decision-top-card textarea,
+.record-decision-top-card input {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+  border-radius: 10px;
+  padding: 0.65rem 0.8rem;
+  font: inherit;
+  font-size: 0.86rem;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.record-decision-top-card select:focus,
+.record-decision-top-card textarea:focus,
+.record-decision-top-card input:focus {
+  background: #e2e8f0;
+  border-color: #0f172a;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.12);
+}
 .record-decision-top-card-head {
   display: flex;
   align-items: center;
@@ -4494,7 +4514,7 @@ html, body {
   background: #16a34a;
   color: #ffffff;
   border: 1px solid #15803d;
-  padding: 0.46rem 0.95rem;
+  padding: 0.48rem 1rem;
   border-radius: 9999px;
   font-size: 0.8rem;
   font-weight: 700;
@@ -4504,7 +4524,7 @@ html, body {
 .btn-quick-accept:hover {
   background: #15803d;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.35);
 }
 .btn-quick-reject {
   display: inline-flex;
@@ -4513,7 +4533,7 @@ html, body {
   background: #dc2626;
   color: #ffffff;
   border: 1px solid #b91c1c;
-  padding: 0.46rem 0.95rem;
+  padding: 0.48rem 1rem;
   border-radius: 9999px;
   font-size: 0.8rem;
   font-weight: 700;
@@ -4523,7 +4543,26 @@ html, body {
 .btn-quick-reject:hover {
   background: #b91c1c;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.35);
+}
+.btn-quick-proof {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #d97706;
+  color: #ffffff;
+  border: 1px solid #b45309;
+  padding: 0.48rem 1rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+.btn-quick-proof:hover {
+  background: #b45309;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.35);
 }
 .decision-info-caption {
   font-size: 0.74rem;
@@ -4547,37 +4586,34 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 0.32rem;
-  padding: 0.38rem 0.55rem;
-  font-size: 0.73rem;
-  font-weight: 700;
-  border-radius: 8px;
+  padding: 0.42rem 0.65rem;
+  font-size: 0.74rem;
+  font-weight: 750;
+  border-radius: 9999px;
   cursor: pointer;
   transition: all 0.16s ease;
-  border: 1px solid transparent;
 }
 .kanban-quick-accept {
-  background: #f0fdf4;
-  color: #15803d;
-  border-color: #bbf7d0;
-}
-.kanban-quick-accept:hover {
   background: #16a34a;
   color: #ffffff;
-  border-color: #15803d;
+  border: 1px solid #15803d;
+}
+.kanban-quick-accept:hover {
+  background: #15803d;
+  color: #ffffff;
   transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(22, 163, 74, 0.25);
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
 }
 .kanban-quick-reject {
-  background: #fef2f2;
-  color: #b91c1c;
-  border-color: #fecaca;
-}
-.kanban-quick-reject:hover {
   background: #dc2626;
   color: #ffffff;
-  border-color: #b91c1c;
+  border: 1px solid #b91c1c;
+}
+.kanban-quick-reject:hover {
+  background: #b91c1c;
+  color: #ffffff;
   transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(220, 38, 38, 0.25);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
 }
 .kanban-quick-btn:disabled {
   opacity: 0.6;
@@ -4596,6 +4632,100 @@ html, body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Better UI for attached claim evidence */
+.claim-evidence-section {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.65rem;
+}
+.claim-evidence-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.1rem;
+}
+.claim-evidence-head h4 {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 750;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.claim-evidence-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  padding: 0.9rem 1.1rem;
+  display: grid;
+  gap: 0.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+.claim-evidence-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.claim-evidence-card-title {
+  font-size: 0.92rem;
+  font-weight: 750;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.claim-evidence-meta-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.claim-evidence-chip {
+  font-size: 0.72rem;
+  font-weight: 650;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+.claim-evidence-chip.blur {
+  background: #f8fafc;
+  color: #334155;
+}
+.claim-evidence-chip.suspect {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+.claim-evidence-desc {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #334155;
+  line-height: 1.45;
+}
+.claim-evidence-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.claim-evidence-field-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+}
+.claim-evidence-field-tag strong {
+  color: #0f172a;
 }
 
 /* ========================================================
