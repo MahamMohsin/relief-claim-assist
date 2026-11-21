@@ -1092,14 +1092,68 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
       </div>}
       {profile && <AgentCursor />}
 
-      {chooser && profile && <div className="modal-scrim" onClick={() => setChooser(false)}>
-        <section role="dialog" aria-modal="true" aria-label="Switch demo persona" className="modal" onClick={event => event.stopPropagation()}>
-          <div className="modal-head"><div><h2>Switch persona</h2><p>All accounts use synthetic records.</p></div><button className="icon-button" onClick={() => setChooser(false)} aria-label="Close persona chooser"><X size={22} /></button></div>
-          {headMessage && <p role="status" className="notice">{headMessage}</p>}
-          <PersonaList onSelect={signIn} busy={busy} offline={offline} />
-          <div className="modal-foot"><button className="secondary" disabled={Boolean(busy) || offline} onClick={signOut}>Sign out</button></div>
-        </section>
-      </div>}
+      {/* Centered macOS-style horizontal persona switcher dock */}
+      {chooser && profile && (
+        <div className="persona-macos-dock-scrim" onClick={() => setChooser(false)}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Switch persona"
+            className="persona-macos-dock-center"
+            onClick={event => event.stopPropagation()}
+          >
+            {headMessage && <div className="persona-dock-feedback">{headMessage}</div>}
+            <div className="persona-macos-dock-bar">
+              {roleEntries.map(([id, details]) => {
+                const isCurrent = profile.id === id || profile.role === details.role.toLowerCase();
+                const isBusy = busy === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    className={`persona-macos-dock-item ${isCurrent ? "is-current" : ""}`}
+                    onClick={() => signIn(id)}
+                    disabled={Boolean(busy) || offline}
+                    title={`${details.name} · ${details.role}`}
+                  >
+                    <div className="persona-macos-dock-avatar-frame">
+                      <img src={`/avatars/${id}.jpg`} alt={details.name} className="persona-macos-dock-img" />
+                      {isBusy && (
+                        <div className="persona-macos-dock-spinner">
+                          <LoaderCircle size={20} className="spin" />
+                        </div>
+                      )}
+                      {isCurrent && <span className="persona-macos-dock-indicator" aria-label="Current persona" />}
+                    </div>
+                    <span className="persona-macos-dock-name">{details.name}</span>
+                    <span className="persona-macos-dock-role">{details.role}</span>
+                  </button>
+                );
+              })}
+
+              <div className="persona-macos-dock-separator" aria-hidden="true" />
+
+              <button
+                type="button"
+                className="persona-macos-dock-item logout"
+                onClick={signOut}
+                disabled={Boolean(busy) || offline}
+                title="Sign out"
+              >
+                <div className="persona-macos-dock-avatar-frame logout-frame">
+                  {busy === "signout" ? (
+                    <LoaderCircle size={22} className="spin" />
+                  ) : (
+                    <LogOut size={22} />
+                  )}
+                </div>
+                <span className="persona-macos-dock-name">Sign out</span>
+                <span className="persona-macos-dock-role">Exit</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Pip Login Screen (Companion Robot & LED Matrix Interactive Loop) */}
       <PipLoginModal

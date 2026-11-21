@@ -5438,3 +5438,228 @@ button.persona-card, button.kanban-card { background: var(--surface); }
    exact positions (measured pill widths: 233.45px, or 207.85px at <=510px). */
 .status-spacer { flex: 0 0 auto; width: 233.45px; height: 1px; }
 @media (max-width: 510px) { .status-spacer { width: 207.85px; } }
+
+/* ========================================================
+   MACOS-STYLE HORIZONTAL PERSONA SWITCHER DOCK
+   ======================================================== */
+.persona-macos-dock-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(32px) saturate(190%);
+  -webkit-backdrop-filter: blur(32px) saturate(190%);
+  animation: personaScrimFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes personaScrimFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.persona-macos-dock-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  max-width: 96vw;
+  animation: personaDockPopIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes personaDockPopIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.persona-dock-feedback {
+  background: rgba(17, 24, 39, 0.88);
+  color: #ffffff;
+  padding: 0.45rem 1rem;
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.persona-macos-dock-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.9rem 1.25rem;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(36px) saturate(210%);
+  -webkit-backdrop-filter: blur(36px) saturate(210%);
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  box-shadow:
+    0 26px 70px rgba(0, 0, 0, 0.42),
+    0 8px 24px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.persona-macos-dock-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.38rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: 18px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  outline: none;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), background 0.18s ease, box-shadow 0.2s ease;
+  user-select: none;
+  flex-shrink: 0;
+  width: 88px;
+}
+
+.persona-macos-dock-item:hover:not(:disabled) {
+  transform: translateY(-8px) scale(1.08);
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+}
+
+.persona-macos-dock-item:active:not(:disabled) {
+  transform: translateY(-2px) scale(1.02);
+}
+
+.persona-macos-dock-item:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.persona-macos-dock-avatar-frame {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.15);
+  overflow: visible;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.18s ease;
+}
+
+.persona-macos-dock-item:hover .persona-macos-dock-avatar-frame {
+  border-color: #ffffff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), 0 0 12px rgba(255, 255, 255, 0.4);
+}
+
+.persona-macos-dock-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.persona-macos-dock-indicator {
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.9), 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.persona-macos-dock-spinner {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+}
+
+.persona-macos-dock-name {
+  font-size: 0.78rem;
+  font-weight: 750;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  text-align: center;
+  white-space: nowrap;
+  max-width: 84px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+
+.persona-macos-dock-role {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.82);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: center;
+  white-space: nowrap;
+  max-width: 84px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.persona-macos-dock-separator {
+  width: 1px;
+  height: 52px;
+  background: rgba(255, 255, 255, 0.32);
+  margin: 0 0.35rem;
+  flex-shrink: 0;
+}
+
+.persona-macos-dock-avatar-frame.logout-frame {
+  background: rgba(239, 68, 68, 0.28);
+  border-color: rgba(248, 113, 113, 0.85);
+  color: #ffffff;
+}
+
+.persona-macos-dock-item.logout:hover .persona-macos-dock-avatar-frame.logout-frame {
+  background: rgba(239, 68, 68, 0.6);
+  border-color: #f87171;
+  box-shadow: 0 6px 18px rgba(239, 68, 68, 0.45), 0 0 14px rgba(239, 68, 68, 0.5);
+}
+
+@media (max-width: 720px) {
+  .persona-macos-dock-bar {
+    gap: 0.35rem;
+    padding: 0.75rem 0.9rem;
+  }
+  .persona-macos-dock-item {
+    width: 72px;
+    padding: 0.45rem 0.4rem;
+  }
+  .persona-macos-dock-avatar-frame {
+    width: 44px;
+    height: 44px;
+  }
+  .persona-macos-dock-name {
+    font-size: 0.72rem;
+    max-width: 70px;
+  }
+  .persona-macos-dock-role {
+    font-size: 0.6rem;
+    max-width: 70px;
+  }
+}
