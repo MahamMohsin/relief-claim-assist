@@ -81,6 +81,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     setDecision(null);
     setWorking(true);
     setStage("Routing your request");
+    let accumulatedAnswer = "";
     const run = { id: crypto.randomUUID(), controller: new AbortController() };
     active.current = run;
     try {
@@ -97,9 +98,19 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
           case "phase": setStage(event.message); break;
           case "tool_execution_start": setStage("Pi · " + event.tool.replaceAll("_", " ")); break;
           case "tool_execution_end": setStage("Pi · preparing reply"); break;
-          case "message_update": setAnswer(previous => previous + event.text); break;
+          case "message_update": {
+            accumulatedAnswer += event.text;
+            setAnswer(accumulatedAnswer);
+            break;
+          }
           case "error": setError(event.message); break;
-          case "agent_settled": setStage(event.model === "local-guidance" ? "Local guidance fallback" : "Ready · " + event.model); break;
+          case "agent_settled": {
+            setStage(event.model === "local-guidance" ? "Local guidance fallback" : "Ready · " + event.model);
+            if (accumulatedAnswer.trim()) {
+              void speakText(accumulatedAnswer.slice(0, 1400), lang, lite || offline).then(setStage);
+            }
+            break;
+          }
           case "ui_action": {
             if (event.action.type === "show_jev_badge") setDecision(event.action);
             if (event.action.type === "ask_clarification") {
