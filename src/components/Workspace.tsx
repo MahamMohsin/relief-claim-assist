@@ -183,27 +183,6 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
 
   return (
     <div className={lite ? "workspace lite" : "workspace"}>
-      <header className="topbar">
-        <div className="topbar-inner">
-          <button className="brand" onClick={() => changeApp(null)} aria-label="Relief Claim Assist home">
-            <span className="brand-mark"><HandHeart size={22} /></span>
-            <span className="brand-text"><strong>Relief Claim Assist</strong><small>The Last Mile</small></span>
-          </button>
-          <div className="top-status">
-            <span className="disclosure"><ShieldCheck size={14} />PROTOTYPE · SIMULATED DPI DATA</span>
-            <span className={offline ? "net offline" : "net"}>{offline ? <CloudOff size={15} /> : <Wifi size={15} />}{status}{pending.length ? " · " + pending.length + " queued" : ""}</span>
-            {profile && <button className="role-btn" onClick={() => setChooser(true)}><UserRound size={17} /><span>{profile.full_name}</span></button>}
-          </div>
-        </div>
-      </header>
-
-      {profile && <div className="controls"><div>
-        <button className="control" aria-pressed={!fixtureOnline} onClick={() => setFixtureOnline(value => !value)}><Radio size={15} />Simulate network drop <span className="toggle" /></button>
-        <button className="control" aria-pressed={lite} onClick={() => setLite(value => !value)}><span className="tiny-2g">2G</span>Lite mode <span className="toggle" /></button>
-        <button className="control sync" disabled={offline || syncing || !pending.length} onClick={() => void synchronize(true)}><Cloud size={16} />{syncing ? "Syncing…" : "Sync now"}</button>
-        {family && <span className="family-tag"><Fingerprint size={14} />{family.full_name}</span>}
-      </div></div>}
-
       {(headMessage || failed) && <div className="top-notice"><p role="status">{headMessage || failed?.failure}</p><button onClick={() => setHeadMessage("")} aria-label="Dismiss update"><X size={17} /></button></div>}
 
       <main className="content">
@@ -236,11 +215,14 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                       <span className="widget-sub">{profile.locale === "ur" ? "اردو" : "English"}</span>
                     </div>
                     <div className="profile-identity">
-                      <div className="avatar-squircle">
+                      <div className="avatar-squircle" onClick={() => setChooser(true)} role="button" title="Switch persona" style={{ cursor: "pointer" }}>
                         {profile.full_name.split(" ").map(w => w[0]).slice(0, 2).join("")}
                       </div>
                       <div>
-                        <h3>{profile.full_name}</h3>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <h3>{profile.full_name}</h3>
+                          <button className="ios-badge" onClick={() => setChooser(true)} style={{ cursor: "pointer", border: "none" }}>Switch</button>
+                        </div>
                         <p className="role-tag">{profile.role.toUpperCase()} WORKSPACE</p>
                       </div>
                     </div>
