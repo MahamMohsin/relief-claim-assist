@@ -197,21 +197,6 @@ export function PipLoginModal({
                 {TEXT.welcome}
               </span>
             </div>
-
-            {/* Quick Demo Persona switchers at base of card */}
-            <div className={s.personaBar}>
-              {(Object.keys(personas) as Persona[]).map((p) => (
-                <button
-                  type="button"
-                  key={p}
-                  className={s.personaBtn}
-                  onClick={() => onSelectPersona(p)}
-                  disabled={Boolean(busy) || offline}
-                >
-                  {p.charAt(0).toUpperCase() + p.slice(1)}
-                </button>
-              ))}
-            </div>
           </div>
 
           {hand}

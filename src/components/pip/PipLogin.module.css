@@ -390,35 +390,6 @@
   border-top-color: var(--pip-white);
 }
 
-/* Quick persona switcher bottom bar */
-.personaBar {
-  position: absolute;
-  bottom: 18px;
-  left: var(--card-pad);
-  right: var(--card-pad);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  z-index: 10;
-}
-.personaBtn {
-  background: rgba(0, 0, 0, 0.05);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 9999px;
-  padding: 4px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--pip-muted);
-  cursor: pointer;
-  transition: all 0.12s;
-}
-.personaBtn:hover {
-  background: #ffffff;
-  color: #151515;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-}
-
 /* ---------- the cursor ---------- */
 .cursor {
   position: absolute;
