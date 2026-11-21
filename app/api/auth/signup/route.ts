@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     const { email, password, fullName, role, phone, locale } = parsed.data;
     const client = await authClient();
 
-    // 1. Sign up user in Supabase Auth
+    // 1. Sign up user in Supabase Auth (trigger automatically inserts into public.profiles & public.citizens)
     const { data: authData, error: authError } = await client.auth.signUp({
       email,
       password,
@@ -30,6 +30,8 @@ export async function POST(request: Request) {
         data: {
           full_name: fullName,
           role,
+          phone: phone || null,
+          locale,
         },
       },
     });
@@ -39,7 +41,7 @@ export async function POST(request: Request) {
       throw new ApiError(400, authError?.message || "Could not register user.");
     }
 
-    // Automatically sign in the user immediately so no confirmation email or waiting is required
+    // 2. Automatically sign in the user immediately so session cookie is created
     const { error: signInError } = await client.auth.signInWithPassword({
       email,
       password,
@@ -49,43 +51,8 @@ export async function POST(request: Request) {
     }
 
     const userId = authData.user.id;
-
-    // 2. Staff roles require admin verification; citizens and shopkeepers become active immediately
     const isStaffRole = ["helper", "officer", "auditor"].includes(role);
     const initialStatus = isStaffRole ? "pending_approval" : "active";
-
-    // 3. Upsert profile in public.profiles
-    const { error: profileError } = await client
-      .from("profiles")
-      .upsert({
-        id: userId,
-        email,
-        full_name: fullName,
-        role: role as Role,
-        phone: phone || null,
-        locale,
-        status: initialStatus,
-      });
-
-    if (profileError) {
-      console.error("Profile insert error:", profileError.message);
-      throw new ApiError(500, "Could not initialize user profile.");
-    }
-
-    // 4. If citizen, create default synthetic citizen record if none exists
-    if (role === "citizen") {
-      const cnicTail = Math.floor(100 + Math.random() * 900);
-      await client.from("citizens").insert({
-        owner_id: userId,
-        cnic_mock: `35201-MOCK-${cnicTail}`,
-        full_name: fullName,
-        name_phonetic: fullName.toLowerCase().replace(/[^a-z0-9]/g, "-"),
-        household_size: 4,
-        monthly_income_mock: 22000,
-        phone: phone || `0300-${cnicTail}000`,
-        village_area: "Darya Colony",
-      });
-    }
 
     return Response.json({
       ok: true,
