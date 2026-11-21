@@ -1135,7 +1135,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                       <img src={`/avatars/${id}.jpg`} alt={details.name} className="persona-macos-dock-img" />
                       {isBusy && (
                         <div className="persona-macos-dock-spinner">
-                          <LoaderCircle size={18} className="spin" />
+                          <LoaderCircle size={22} className="spin" />
                         </div>
                       )}
                       {isCurrent && <span className="persona-macos-dock-indicator" aria-label="Current persona" />}
@@ -1157,9 +1157,9 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
               >
                 <div className="persona-macos-dock-avatar-frame logout-frame">
                   {busy === "signout" ? (
-                    <LoaderCircle size={18} className="spin" />
+                    <LoaderCircle size={24} className="spin" />
                   ) : (
-                    <LogOut size={18} />
+                    <LogOut size={24} />
                   )}
                 </div>
                 <span className="persona-macos-dock-name">Sign out</span>
