@@ -754,7 +754,13 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
     setAiSummary(null);
   }
 
-  if (claim) return <div className="view-stack claim-detail-view">
+  if (claim) {
+    const docs = claim.documents ?? [];
+    const verified = docs.filter(doc => ["genuine", "readable"].includes(doc.verified_status)).length;
+    const confColor = claim.ai_confidence === null ? "#737373" : claim.ai_confidence < 0.5 ? "#b91c1c" : claim.ai_confidence < 0.75 ? "#b45309" : "#15803d";
+    const hasSuspect = docs.some(d => d.verified_status === "suspect" || Boolean(d.tamper_reason));
+
+    return <div className="view-stack claim-detail-view">
     <div className="claim-detail-sticky-bar">
       <button
         type="button"
@@ -773,96 +779,46 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
         </div>
       </div>
 
-      {Boolean(claim.reports) && <Notice text={String(claim.reports) + " missing payment report(s) on this case."} warning />}
-
-      {/* AI Summary Assessment Card */}
-      <div className="ai-summary-card">
-        <div className="ai-summary-card-head">
-          <div className="ai-summary-card-title">
-            <Sparkles size={16} color="#3b82f6" />
-            <span>AI Case Assessment</span>
+      {/* Top Visual Metrics Bar */}
+      <div className="claim-detail-metrics-bar">
+        <div className="claim-metric-card">
+          <ConfidenceRing value={claim.ai_confidence} />
+          <div className="claim-metric-content">
+            <span className="claim-metric-label">Reliability score</span>
+            <strong className="claim-metric-val" style={{ color: confColor }}>
+              {claim.ai_confidence !== null ? pc(claim.ai_confidence) : "—"}
+            </strong>
           </div>
-          {aiSummary ? (
-            <div className="ai-summary-meta-row">
-              <span className={`ai-summary-rec-badge ${aiSummary.recommendation}`}>
-                {aiSummary.recommendation === "approve" ? <CheckCircle2 size={13} /> : aiSummary.recommendation === "reject" ? <XCircle size={13} /> : <AlertCircle size={13} />}
-                Recommended: {aiSummary.recommendation === "approve" ? "Accept" : aiSummary.recommendation === "reject" ? "Reject" : "Request proof"}
-              </span>
-              <span className="ai-summary-confidence-tag">
-                Reliability: {Math.round(aiSummary.confidence * 100)}%
-              </span>
-            </div>
-          ) : claim.ai_summary ? (
-            <div className="ai-summary-meta-row">
-              <span className="ai-summary-confidence-tag">Saved on file</span>
-              <button
-                type="button"
-                className="ai-summary-produce-btn"
-                disabled={aiSummaryLoading || busy || ctx.offline}
-                onClick={() => void produceSummary()}
-              >
-                {aiSummaryLoading ? <LoaderCircle size={14} className="spin" /> : <Sparkles size={14} />}
-                <span>Re-generate Analysis</span>
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="ai-summary-produce-btn"
-              disabled={aiSummaryLoading || busy || ctx.offline}
-              onClick={() => void produceSummary()}
-            >
-              {aiSummaryLoading ? <LoaderCircle size={14} className="spin" /> : <Sparkles size={14} />}
-              <span>Produce AI Summary</span>
-            </button>
-          )}
         </div>
-
-        {aiSummaryLoading ? (
-          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.8rem", color: "#475569" }}>
-            <LoaderCircle size={18} className="spin" />
-            <span>Analyzing applicant profile, VLM documents, tamper risks, and rule eligibility...</span>
+        <div className="claim-metric-card">
+          <div className="claim-metric-icon-box">
+            <FileCheck size={19} color={docs.length > 0 && verified === docs.length ? "#16a34a" : "#d97706"} />
           </div>
-        ) : aiSummary ? (
-          <>
-            <div className="ai-summary-text">{aiSummary.summary}</div>
-            {aiSummary.checks.length > 0 && (
-              <div className="ai-summary-checks-grid">
-                {aiSummary.checks.map(chk => (
-                  <div key={chk.label} className={`ai-summary-check-item ${chk.status}`}>
-                    {chk.status === "pass" ? (
-                      <CheckCircle2 size={15} color="#16a34a" style={{ flexShrink: 0, marginTop: 2 }} />
-                    ) : chk.status === "warn" ? (
-                      <AlertCircle size={15} color="#d97706" style={{ flexShrink: 0, marginTop: 2 }} />
-                    ) : (
-                      <XCircle size={15} color="#dc2626" style={{ flexShrink: 0, marginTop: 2 }} />
-                    )}
-                    <div>
-                      <strong>{chk.label}</strong>
-                      <p>{chk.detail}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+          <div className="claim-metric-content">
+            <span className="claim-metric-label">Verified evidence</span>
+            <strong className="claim-metric-val">
+              {docs.length ? `${verified}/${docs.length} docs verified` : "No evidence attached"}
+            </strong>
+          </div>
+        </div>
+        <div className="claim-metric-card">
+          <div className="claim-metric-icon-box">
+            {hasSuspect ? (
+              <ShieldAlert size={19} color="#dc2626" />
+            ) : (
+              <CheckCircle2 size={19} color="#16a34a" />
             )}
-            <div className="ai-summary-risk-flags">
-              <small style={{ color: "#64748b", fontWeight: 650, marginRight: 4 }}>Risk evaluation:</small>
-              {aiSummary.riskFlags.map(f => (
-                <span key={f} className={`ai-summary-flag-tag ${f.startsWith("None") ? "ai-summary-flag-clean" : ""}`}>
-                  {f.startsWith("None") ? <Check size={11} /> : <ShieldAlert size={11} />}
-                  {f}
-                </span>
-              ))}
-            </div>
-          </>
-        ) : claim.ai_summary ? (
-          <div className="ai-summary-text">{claim.ai_summary}</div>
-        ) : (
-          <p style={{ margin: 0, fontSize: "0.82rem", color: "#64748b" }}>
-            Click <strong>Produce AI Summary</strong> to run an automated evaluation across the applicant's profile data, VLM-extracted documents, tamper signals, blur scores, and eligibility rules.
-          </p>
-        )}
+          </div>
+          <div className="claim-metric-content">
+            <span className="claim-metric-label">Tamper evaluation</span>
+            <strong className="claim-metric-val" style={{ color: hasSuspect ? "#dc2626" : "#16a34a" }}>
+              {hasSuspect ? "Suspect document" : "Clean verification"}
+            </strong>
+          </div>
+        </div>
       </div>
+
+      {Boolean(claim.reports) && <Notice text={String(claim.reports) + " missing payment report(s) on this case."} warning />}
 
       <Notice text={problem} warning /><Notice text={notice} />
 
@@ -879,12 +835,24 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
       {claim.status !== "closed" && (
         <div className="record-decision-top-card">
           <div className="record-decision-top-card-head">
-            <h3>Officer Decision</h3>
-            {aiSummary && (
-              <span className={`ai-summary-rec-badge ${aiSummary.recommendation}`}>
-                Rec: {aiSummary.recommendation === "approve" ? "Accept" : aiSummary.recommendation === "reject" ? "Reject" : "Request proof"}
-              </span>
-            )}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", flexWrap: "wrap" }}>
+              <h3>Officer Decision</h3>
+              {aiSummary && (
+                <span className={`ai-summary-rec-badge ${aiSummary.recommendation}`}>
+                  Rec: {aiSummary.recommendation === "approve" ? "Accept" : aiSummary.recommendation === "reject" ? "Reject" : "Request proof"}
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              className="ai-summary-produce-btn"
+              disabled={aiSummaryLoading || busy || ctx.offline}
+              onClick={() => void produceSummary()}
+              title="Produce AI Summary to analyze profile, docs, and eligibility, then fill reasons automatically"
+            >
+              {aiSummaryLoading && <LoaderCircle size={14} className="spin" />}
+              <span>{aiSummaryLoading ? "Analyzing..." : aiSummary ? "Re-produce AI Summary" : "Produce AI Summary"}</span>
+            </button>
           </div>
           <label>
             Plain-language reason
@@ -1017,6 +985,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
       )}
     </Panel>
   </div>;
+  }
 
   const needle = query.trim().toLowerCase();
   const statusMatches = (status: Claim["status"]) => {
@@ -1125,9 +1094,9 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                             title="Directly accept claim with AI summary & reasoning sent to applicant"
                           >
                             {quickBusy[item.id] === "approve" ? (
-                              <LoaderCircle size={11} className="spin" />
+                              <LoaderCircle size={12} className="spin" />
                             ) : (
-                              <CheckCircle2 size={11} />
+                              <CheckCircle2 size={12} />
                             )}
                             <span>Accept</span>
                           </button>
@@ -1143,9 +1112,9 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                             title="Directly reject claim with AI summary & reasoning sent to applicant"
                           >
                             {quickBusy[item.id] === "reject" ? (
-                              <LoaderCircle size={11} className="spin" />
+                              <LoaderCircle size={12} className="spin" />
                             ) : (
-                              <XCircle size={11} />
+                              <XCircle size={12} />
                             )}
                             <span>Reject</span>
                           </button>
@@ -1161,9 +1130,9 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                             title="Directly request more proof with AI explanation sent to applicant"
                           >
                             {quickBusy[item.id] === "more_proof" ? (
-                              <LoaderCircle size={11} className="spin" />
+                              <LoaderCircle size={12} className="spin" />
                             ) : (
-                              <AlertCircle size={11} />
+                              <AlertCircle size={12} />
                             )}
                             <span>Proof</span>
                           </button>
