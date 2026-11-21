@@ -152,8 +152,8 @@ export function createLive(p: Parts, scene: HTMLElement, onLogin?: (email: strin
     if (eu < 1.2) rot += 9 * Math.sin(eu * TAU * 2.2) * Math.exp(-2.2 * eu);
 
     const ee = eu < 1.8;
-    p.emailField.style.borderColor = ee ? "#e5484d" : "";
-    p.emailField.style.background = ee ? "#fff0ef" : "";
+    p.emailField.style.borderColor = ee ? "var(--error-text)" : "";
+    p.emailField.style.background = ee ? "var(--error-bg)" : "";
     p.emailField.style.transform = "translateX(0px)";
     p.error.style.opacity = ee ? "1" : "0";
     p.error.style.transform = "none";
@@ -185,7 +185,7 @@ export function createLive(p: Parts, scene: HTMLElement, onLogin?: (email: strin
     b1.style.transform = "none";
     b1.style.filter = b2.style.filter = b3.style.filter = "none";
     p.spinner.style.transform = `rotate(${n * 720}deg)`;
-    p.button.style.background = over ? "#2b2b2b" : "#151515";
+    p.button.style.background = over ? "var(--accent-700)" : "var(--accent-600)";
     p.button.style.transform = "scale(1)";
   }
 
