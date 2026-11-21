@@ -226,53 +226,53 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                   </h1>
                 </div>
 
-                {/* Apple-Style Past Requests / Claims Preview Card */}
+                {/* Apple-Style Compact Past Requests Widget (1/3 width preview) */}
                 {canOpen(profile.role, "claim") && (
-                  <div className="ios-history-widget glass-card">
+                  <div className="ios-history-widget compact glass-card" onClick={() => changeApp("claim")} role="button" tabIndex={0}>
                     <div className="ios-history-header">
                       <div>
-                        <h3>Recent Relief Claims</h3>
-                        <small>{pastClaims.length} total applications found</small>
+                        <h3>Recent Claim</h3>
+                        <small>{pastClaims.length} on file</small>
                       </div>
-                      <button className="ios-view-all-btn" onClick={() => changeApp("claim")}>
-                        Open Claims <ArrowRight size={14} />
-                      </button>
+                      <span className="ios-badge">History</span>
                     </div>
 
                     <div className="ios-history-list">
                       {claimsLoading ? (
                         <div className="ios-history-empty">
-                          <LoaderCircle size={18} className="spin" /> Checking past requests…
+                          <LoaderCircle size={16} className="spin" /> Loading…
                         </div>
                       ) : pastClaims.length === 0 ? (
                         <div className="ios-history-empty">
-                          No applications submitted yet. Say "Apply for relief" to start.
+                          No applications yet.
                         </div>
                       ) : (
-                        pastClaims.slice(0, 3).map(item => {
+                        (() => {
+                          const item = pastClaims[0];
                           const stateColor = ["approved", "paid"].includes(item.status) ? "green"
                             : ["needs_proof", "rejected"].includes(item.status) ? "amber" : "neutral";
                           const title = item.status.replaceAll("_", " ").toUpperCase();
                           return (
-                            <div key={item.id} className="ios-history-item" onClick={() => changeApp("claim")}>
-                              <div className="ios-history-item-left">
-                                <div className={"ios-status-badge " + stateColor}>
-                                  {title}
-                                </div>
-                                <div className="ios-history-copy">
-                                  <strong>{item.amount_pkr ? "PKR " + new Intl.NumberFormat("en-PK").format(item.amount_pkr) : "Draft Pending"}</strong>
-                                  <small>ID: {item.id.slice(0, 8)}…{item.id.slice(-4)} · {new Date(item.updated_at).toLocaleDateString()}</small>
-                                </div>
+                            <div className="ios-compact-preview">
+                              <div className="ios-compact-top">
+                                <span className={"ios-status-badge " + stateColor}>{title}</span>
+                                <strong>{item.amount_pkr ? "PKR " + new Intl.NumberFormat("en-PK").format(item.amount_pkr) : "Pending"}</strong>
                               </div>
+                              <p className="ios-compact-id">
+                                ID: {item.id.slice(0, 8)}…{item.id.slice(-4)}
+                              </p>
                               {item.citizen_reason_en && (
-                                <p className="ios-history-reason">
-                                  "{item.citizen_reason_en}"
+                                <p className="ios-compact-reason">
+                                  {item.citizen_reason_en}
                                 </p>
                               )}
-                              <ArrowRight size={15} className="ios-history-arrow" />
+                              <div className="ios-compact-footer">
+                                <span>Tap to view all claims</span>
+                                <ArrowRight size={13} />
+                              </div>
                             </div>
                           );
-                        })
+                        })()
                       )}
                     </div>
                   </div>
