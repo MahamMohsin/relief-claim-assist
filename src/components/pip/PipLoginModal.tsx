@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { LoaderCircle, X } from "lucide-react";
 import { TEXT } from "./content";
 import { createEngine } from "./engine";
 import { SCREEN } from "./led";
-import { personas, type Persona } from "@/src/lib/contracts";
+import { personas, type Persona, type Role } from "@/src/lib/contracts";
 import s from "./PipLogin.module.css";
 
 const ARROW =
@@ -29,6 +29,13 @@ export function PipLoginModal({
   canDismiss = false,
 }: PipLoginModalProps) {
   const stage = useRef<HTMLDivElement>(null);
+  const [isSigningUp, setIsSigningUp] = useState(false);
+  const [signupFullName, setSignupFullName] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
+  const [signupRole, setSignupRole] = useState<Role>("citizen");
+  const [signupSubmitting, setSignupSubmitting] = useState(false);
+  const [signupFeedback, setSignupFeedback] = useState<{ type: "error" | "success"; text: string } | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -90,6 +97,46 @@ export function PipLoginModal({
 
     return () => e.dispose();
   }, [isOpen, onSelectPersona]);
+
+  const handleSignupSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (signupSubmitting) return;
+    setSignupFeedback(null);
+    setSignupSubmitting(true);
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: signupFullName,
+          email: signupEmail,
+          password: signupPassword,
+          role: signupRole,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create account.");
+
+      setSignupFeedback({
+        type: "success",
+        text: data.message || "Account created successfully!",
+      });
+
+      // If approved citizen, sign in or map directly
+      if (data.user?.status === "active") {
+        setTimeout(() => {
+          onSelectPersona("fatima");
+        }, 1200);
+      }
+    } catch (err) {
+      setSignupFeedback({
+        type: "error",
+        text: err instanceof Error ? err.message : "Error creating account",
+      });
+    } finally {
+      setSignupSubmitting(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -197,6 +244,102 @@ export function PipLoginModal({
                 {TEXT.welcome}
               </span>
             </div>
+
+            <div className={s.cardModeSwitch}>
+              <span>New to Relief Assist?</span>
+              <button
+                type="button"
+                className={s.switchAction}
+                onClick={() => {
+                  setSignupFeedback(null);
+                  setIsSigningUp(true);
+                }}
+              >
+                Sign up
+              </button>
+            </div>
+
+            {/* Signup Overlay Form */}
+            {isSigningUp && (
+              <div className={s.signupOverlay}>
+                <div className={s.signupHeader}>
+                  <h3 className={s.signupTitle}>Create Account</h3>
+                  <button
+                    type="button"
+                    className={s.signupBack}
+                    onClick={() => setIsSigningUp(false)}
+                  >
+                    Back to Sign In
+                  </button>
+                </div>
+
+                <form onSubmit={handleSignupSubmit} className={s.signupForm}>
+                  <input
+                    type="text"
+                    required
+                    className={s.signupInput}
+                    placeholder="Full Name"
+                    value={signupFullName}
+                    onChange={(e) => setSignupFullName(e.target.value)}
+                  />
+                  <div className={s.signupRow}>
+                    <input
+                      type="email"
+                      required
+                      className={s.signupInput}
+                      placeholder="Email address"
+                      value={signupEmail}
+                      onChange={(e) => setSignupEmail(e.target.value)}
+                    />
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      className={s.signupInput}
+                      placeholder="Password (min 6)"
+                      value={signupPassword}
+                      onChange={(e) => setSignupPassword(e.target.value)}
+                    />
+                  </div>
+                  <select
+                    className={s.signupSelect}
+                    value={signupRole}
+                    onChange={(e) => setSignupRole(e.target.value as Role)}
+                  >
+                    <option value="citizen">Applicant / Citizen</option>
+                    <option value="helper">Community Health Worker (Helper)</option>
+                    <option value="shopkeeper">Shopkeeper / Merchant</option>
+                    <option value="officer">Department Review Officer (Requires Admin Approval)</option>
+                    <option value="auditor">Independent Safety Auditor (Requires Admin Approval)</option>
+                  </select>
+
+                  <button
+                    type="submit"
+                    className={s.signupSubmit}
+                    disabled={signupSubmitting}
+                  >
+                    {signupSubmitting ? (
+                      <>
+                        <LoaderCircle className="spin" size={17} />
+                        Creating Account...
+                      </>
+                    ) : (
+                      "Register Account"
+                    )}
+                  </button>
+
+                  {signupFeedback && (
+                    <div
+                      className={`${s.signupNotice} ${
+                        signupFeedback.type === "error" ? s.error : s.success
+                      }`}
+                    >
+                      {signupFeedback.text}
+                    </div>
+                  )}
+                </form>
+              </div>
+            )}
           </div>
 
           {hand}
