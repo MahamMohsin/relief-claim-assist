@@ -277,6 +277,31 @@ async function testBrowser() {
     await tab.getByRole("heading", { name: "Enter the demo" }).waitFor();
     assert(await tab.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "Unexpected horizontal page overflow");
   }
+  await desktop.getByTitle("Log in instantly as Admin Sana (admin)", { exact: true }).click();
+  const adminDashboard = desktop.getByRole("region", { name: "Admin dashboard" });
+  await adminDashboard.getByRole("heading", { name: "Claims overview" }).waitFor();
+  await adminDashboard.getByText("Active rule", { exact: true }).waitFor();
+  await adminDashboard.getByRole("list", { name: "Claims by status" }).waitFor();
+  await desktop.setViewportSize({ width: 390, height: 844 });
+  assert(await desktop.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "Admin dashboard overflow");
+  await desktop.setViewportSize({ width: 1440, height: 980 });
+
+  const overviewUrl = "**/api/relief/overview";
+  const refreshDashboard = adminDashboard.getByRole("button", { name: "Refresh admin dashboard" });
+  await desktop.route(overviewUrl, route => route.fulfill({ status: 503, json: { error: "Temporary failure" } }));
+  await refreshDashboard.click();
+  const retryNotice = adminDashboard.getByText("Some figures could not be refreshed.", { exact: false });
+  await retryNotice.waitFor();
+  await adminDashboard.getByRole("list", { name: "Claims by status" }).waitFor();
+  await desktop.unroute(overviewUrl);
+  await refreshDashboard.click();
+  await retryNotice.waitFor({ state: "hidden" });
+  await adminDashboard.getByRole("button", { name: "Rule Studio" }).click();
+  await desktop.getByRole("heading", { name: "Staff access requests" }).waitFor();
+  await desktop.getByRole("button", { name: "Close app", exact: true }).click();
+  await adminDashboard.getByRole("button", { name: "Audit Vault" }).click();
+  await desktop.getByRole("button", { name: "Decision Safety Eval" }).waitFor();
+
   await desktop.goto(base + "/docs");
   await desktop.getByRole("button", { name: "Authorize" }).first().waitFor();
   await page.keyboard.press("Tab");

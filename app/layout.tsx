@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 import { Theme } from "@astryxdesign/core/theme";
-import { themes, defaultThemeSlug } from "@/src/astryx-themes";
+import { themes, defaultThemeSlug } from "../src/astryx-themes";
 
 export const metadata: Metadata = {
   title: "Relief Claim Assist",

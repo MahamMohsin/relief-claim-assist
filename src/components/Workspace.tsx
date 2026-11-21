@@ -12,6 +12,7 @@ import { syncQueue } from "@/src/lib/offline/syncEngine";
 import { apps, appTitle } from "./launcher";
 import { MiniApps, type ViewContext } from "./MiniApps";
 import { AuditorGlassSuite, type SafetyMetric } from "./AuditVaultView";
+import { AdminDashboard } from "./AdminDashboard";
 import { DesktopWindow, type LaunchOrigin } from "./DesktopWindow";
 import { VoiceDock } from "./os/VoiceDock";
 import { AgentCursor } from "./os/AgentCursor";
@@ -726,10 +727,12 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                   />
                 )}
 
-                {["officer", "admin"].includes(profile.role) && (
+                {profile.role === "admin" && <AdminDashboard key={profile.id} offline={offline} version={version} onOpen={openAppWindow} />}
+
+                {profile.role === "officer" && (
                   overview ? <div className="overview-stats-suite">
                     <button type="button" className="overview-card active-cases-card"
-                      onClick={() => openAppWindow(profile.role === "officer" ? "review" : "audit")}>
+                      onClick={() => openAppWindow("review")}>
                       <div className="overview-card-header">
                         <span className="overview-card-title">Active cases</span>
                         <span className="overview-live-badge"><span className="live-dot" />{overview.review} in review</span>
@@ -745,7 +748,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                       </div>
                     </button>
                     <button type="button" className="overview-card bubbles-breakdown-card"
-                      onClick={() => openAppWindow(profile.role === "officer" ? "review" : "audit")}>
+                      onClick={() => openAppWindow("review")}>
                       <span className="overview-card-title">Claims by status</span>
                       <div className="proportional-bubbles-stage">
                         {([["Approved", overview.approved, "big"], ["In review", overview.review, "medium"],
