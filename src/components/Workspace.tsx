@@ -19,6 +19,7 @@ import { cuaEngine } from "./os/cuaEngine";
 import type { UIAction } from "@/src/lib/contracts";
 
 import { PipLoginModal } from "./pip/PipLoginModal";
+import { WelcomeOverlay } from "./WelcomeOverlay";
 
 const roleEntries = Object.entries(personas) as [Persona, (typeof personas)[Persona]][];
 type WindowPreset = "compact" | "default" | "wide";
@@ -31,6 +32,8 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
 }) {
   const [profile, setProfile] = useState(initialProfile);
   const [showAuthModal, setShowAuthModal] = useState(showLogin || !initialProfile);
+  // The handwritten greeting that greets a person the moment they sign in.
+  const [welcomeName, setWelcomeName] = useState<string | null>(null);
   // When not logged in, the login screen is the only gateway: background is blurred and clicking out is impossible
   const isLocked = !profile;
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -360,6 +363,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
       setActiveApp(null);
       setChooser(false);
       setShowAuthModal(false);
+      setWelcomeName(next.full_name);
     } catch (error) {
       setHeadMessage(error instanceof Error && error.name === "TimeoutError"
         ? "Demo sign-in took too long. Please try again."
@@ -1111,6 +1115,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
             setOpenApps([]);
             setActiveApp(null);
             setShowAuthModal(false);
+            setWelcomeName(next.full_name);
           } catch {
             window.location.reload();
           }
@@ -1121,6 +1126,11 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
         demoRegistrationEnabled={demoRegistrationEnabled}
         canDismiss={!isLocked}
       />
+
+      {/* Handwritten greeting for a person who just signed in */}
+      {welcomeName && (
+        <WelcomeOverlay name={welcomeName} onDismiss={() => setWelcomeName(null)} />
+      )}
     </div>
   );
 }
