@@ -21,10 +21,11 @@ const MAX_MS = 12000;
 const FADE_MS = 420;
 
 /** Each letter starts before the previous one has finished, so the greeting
- *  flows like real handwriting instead of drawing one letter at a time. */
-const TIME = { mode: "uncontrolled", speed: 1.6 } as const;
+ *  flows like real handwriting instead of drawing one letter at a time. The
+ *  per-glyph duration keeps the pace even when the name is long. */
+const TIME = { mode: "uncontrolled", speed: 1.7 } as const;
 const TIMING = {
-  stagger: { advance: "45%" },
+  stagger: { advance: "45%", duration: 0.38 },
   wordGap: 0.03,
   lineGap: 0.1,
   strokeEasing: (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
