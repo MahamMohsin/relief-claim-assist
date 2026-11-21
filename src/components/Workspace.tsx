@@ -704,6 +704,18 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
           if (!isLocked) setShowAuthModal(false);
         }}
         onSelectPersona={signIn}
+        onUserAuthenticated={async () => {
+          try {
+            const next = await api<Profile>("profile");
+            await clearContext();
+            setProfile(next);
+            setOpenApps([]);
+            setActiveApp(null);
+            setShowAuthModal(false);
+          } catch {
+            window.location.reload();
+          }
+        }}
         busy={busy}
         offline={offline}
         canDismiss={!isLocked}

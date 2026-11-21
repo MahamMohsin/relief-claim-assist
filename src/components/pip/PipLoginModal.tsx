@@ -15,6 +15,7 @@ interface PipLoginModalProps {
   isOpen: boolean;
   onClose?: () => void;
   onSelectPersona: (persona: Persona) => void;
+  onUserAuthenticated?: () => Promise<void>;
   busy: Persona | "signout" | null;
   offline: boolean;
   canDismiss?: boolean;
@@ -24,6 +25,7 @@ export function PipLoginModal({
   isOpen,
   onClose,
   onSelectPersona,
+  onUserAuthenticated,
   busy,
   offline,
   canDismiss = false,
@@ -122,10 +124,14 @@ export function PipLoginModal({
         text: data.message || "Account created successfully!",
       });
 
-      // If approved citizen, sign in or map directly
+      // If approved citizen, sign in or refresh authenticated profile directly
       if (data.user?.status === "active") {
-        setTimeout(() => {
-          onSelectPersona("fatima");
+        setTimeout(async () => {
+          if (onUserAuthenticated) {
+            await onUserAuthenticated();
+          } else {
+            onSelectPersona("fatima");
+          }
         }, 1200);
       }
     } catch (err) {
