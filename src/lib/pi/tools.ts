@@ -300,6 +300,22 @@ export function registerTools(pi: ExtensionAPI, context: PiContext) {
   });
 
   pi.registerTool({
+    name: "profile_upload_sample_document",
+    label: "Add sample document to profile",
+    description: "Visually open My Profile, click Add/Sample for CNIC, utility bill, or job proof, and extract synthetic document data into the citizen profile.",
+    parameters: Type.Object({
+      docType: Type.Optional(Type.Union([Type.Literal("cnic"), Type.Literal("utility"), Type.Literal("job")])),
+    }),
+    async execute(_id, input) {
+      if (!canOpen(profile.role, "profile")) throw new ApiError(403, "Your role cannot open My Profile.");
+      const docType = input.docType || "cnic";
+      emit({ type: "open_mini_app", app: "profile" });
+      emit({ type: "profile_add_sample_visual", docType });
+      return textResult({ openedProfile: true, uploadingSampleDoc: docType, message: `Opened My Profile and added sample ${docType.toUpperCase()} document.` });
+    },
+  });
+
+  pi.registerTool({
     name: "escalate_to_officer",
     label: "Flag for review",
     description: "Record a human handoff on an existing submitted claim. Requires its exact claim ID and a short summary.",

@@ -723,6 +723,28 @@ class CuaEngine {
         }
         return;
       }
+
+      case "profile_add_sample_visual": {
+        if (!(await this.ensureAppOpen("profile", gen, true))) return;
+        const kind = action.docType ?? "cnic";
+        const directSampleBtn = await this.waitForElement(`[data-cua="profile-sample-${kind}"]`, gen, 600);
+        if (directSampleBtn) {
+          await this.clickElement(directSampleBtn, `Adding sample ${kind.toUpperCase()} proof`, gen);
+          await this.sleep(400, gen);
+          return;
+        }
+        const addBtn = await this.waitForElement(`[data-cua="profile-add-${kind}"]`, gen, 1000)
+          || await this.waitForElement('[data-cua^="profile-add-"]', gen, 600);
+        if (addBtn) {
+          await this.clickElement(addBtn, `Opening upload for ${kind.toUpperCase()}`, gen);
+        }
+        const modalSampleBtn = await this.waitForElement('[data-cua="profile-use-sample"]', gen, 1200);
+        if (modalSampleBtn) {
+          await this.clickElement(modalSampleBtn, `Extracting sample ${kind.toUpperCase()} proof`, gen);
+        }
+        await this.sleep(400, gen);
+        return;
+      }
     }
   }
 }

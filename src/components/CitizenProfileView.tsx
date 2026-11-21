@@ -395,14 +395,16 @@ export function CitizenProfileView({ ctx }: { ctx: ViewContext }) {
                           icon={<Icon icon={Expand} size="sm" />}
                           onClick={() => openLightboxFor(photoDoc.id)}
                         />
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          label="Replace"
-                          icon={<Icon icon={RefreshCw} size="sm" />}
-                          isDisabled={ctx.offline || migrationMissing}
-                          onClick={() => openUploadModal(kind)}
-                        />
+                        <span data-cua={`profile-add-${kind}`} style={{ display: "inline-flex" }}>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            label="Replace"
+                            icon={<Icon icon={RefreshCw} size="sm" />}
+                            isDisabled={ctx.offline || migrationMissing}
+                            onClick={() => openUploadModal(kind)}
+                          />
+                        </span>
                       </HStack>
                     }
                   >
@@ -417,22 +419,26 @@ export function CitizenProfileView({ ctx }: { ctx: ViewContext }) {
                         <VStack gap={2} hAlign="center">
                           <Icon icon={info.icon} size="lg" color="secondary" />
                           <HStack gap={1.5} wrap="wrap" hAlign="center">
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              label={`Add ${info.short}`}
-                              icon={<Icon icon={Upload} size="sm" />}
-                              isDisabled={ctx.offline || migrationMissing || busy}
-                              onClick={() => openUploadModal(kind)}
-                            />
-                            {!stored && (
+                            <span data-cua={`profile-add-${kind}`} style={{ display: "inline-flex" }}>
                               <Button
-                                variant="ghost"
+                                variant="primary"
                                 size="sm"
-                                label="Sample"
+                                label={`Add ${info.short}`}
+                                icon={<Icon icon={Upload} size="sm" />}
                                 isDisabled={ctx.offline || migrationMissing || busy}
-                                onClick={() => void runExtraction(true, kind)}
+                                onClick={() => openUploadModal(kind)}
                               />
+                            </span>
+                            {!stored && (
+                              <span data-cua={`profile-sample-${kind}`} style={{ display: "inline-flex" }}>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  label="Sample"
+                                  isDisabled={ctx.offline || migrationMissing || busy}
+                                  onClick={() => void runExtraction(true, kind)}
+                                />
+                              </span>
                             )}
                           </HStack>
                         </VStack>
@@ -575,12 +581,14 @@ export function CitizenProfileView({ ctx }: { ctx: ViewContext }) {
               size="sm"
             />
             <HStack gap={2}>
-              <Button
-                variant="secondary"
-                label="Use sample"
-                isDisabled={busy || ctx.offline || migrationMissing}
-                onClick={() => void runExtraction(true)}
-              />
+              <span data-cua="profile-use-sample" style={{ display: "inline-flex" }}>
+                <Button
+                  variant="secondary"
+                  label="Use sample"
+                  isDisabled={busy || ctx.offline || migrationMissing}
+                  onClick={() => void runExtraction(true)}
+                />
+              </span>
               <Button
                 variant="primary"
                 label={busy ? "Extracting…" : "Extract & save"}

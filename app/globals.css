@@ -409,7 +409,7 @@ th { background: var(--faint); color: var(--forest); }
   gap: 1.8rem;
 }
 
-/* Background canvas: User Apple wallpaper random-bg-5.jpg, sharp and untinted */
+/* Background canvas: User wallpaper newbg.jpg, sharp and untinted */
 .workspace {
   position: relative;
   min-height: 100dvh;
@@ -421,7 +421,7 @@ th { background: var(--faint); color: var(--forest); }
   content: "";
   position: fixed;
   inset: -20px;
-  background-image: url("/random-bg-6.avif");
+  background-image: url("/newbg.jpg");
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
@@ -892,13 +892,50 @@ th { background: var(--faint); color: var(--forest); }
   gap: 0.45rem;
 }
 
+/* Two toggles side by side, and the three account actions on their own row.
+   The label sits under the icon so the rows read cleanly. */
+.liquid-action-buttons.toggles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.liquid-action-buttons.row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.liquid-action-buttons.toggles .liquid-action-btn,
+.liquid-action-buttons.row .liquid-action-btn {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.4rem;
+  padding: 0.7rem 0.4rem;
+  font-size: 0.73rem;
+  line-height: 1.25;
+  min-height: 64px;
+}
+
+/* Sync now takes the whole row when it appears. */
+.liquid-action-buttons.toggles .liquid-action-btn.wide {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  min-height: 40px;
+}
+
 .liquid-action-btn,
 .liquid-action-btn.primary,
 .liquid-action-btn.secondary,
 .liquid-action-btn.danger {
   width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: #173f38;
   color: #ffffff;
   font-size: 0.84rem;
   font-weight: 650;
@@ -923,7 +960,7 @@ th { background: var(--faint); color: var(--forest); }
 .liquid-action-btn:hover,
 .liquid-action-btn.secondary:hover:not(:disabled) {
   transform: scale(1.01) translateX(2px);
-  background: rgba(255, 255, 255, 0.2);
+  background: #215b52;
   border-color: rgba(255, 255, 255, 0.36);
   color: #ffffff;
 }
@@ -992,7 +1029,7 @@ th { background: var(--faint); color: var(--forest); }
    ======================================================== */
 .overview-stats-suite {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: stretch;
   gap: 1rem;
   max-width: none;
@@ -1323,6 +1360,7 @@ th { background: var(--faint); color: var(--forest); }
 /* Card 3: Stack Column (tabular pair filling the tall cards' height) */
 /* The two small metric cards sit two in a row under the big ones. */
 .overview-stack-col {
+  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: auto;
@@ -5326,10 +5364,10 @@ html, body {
   --focus-outline-color: var(--accent-500);
 }
 
-/* Canvas: deep green with a soft glow (replaces the tinted wallpaper). */
+/* Canvas: background wallpaper newbg.jpg */
 .workspace::before {
   background-color: var(--brand-900);
-  background-image: url("/random-bg-6.avif");
+  background-image: url("/newbg.jpg");
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -6062,6 +6100,8 @@ button.active-cases-card:hover {
   max-width: none;
   width: 100%;
 }
+
+.liquid-user-meta small { color: #ffffff; }
 
 /* Text inside the widgets follows the dark glass, not the light card. */
 .overview-card-title,

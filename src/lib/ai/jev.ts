@@ -78,7 +78,7 @@ export function isGreetingOrCasual(input: string): boolean {
 const cues: [MiniApp, RegExp][] = [
   ["scam", /scam|fraud|phish|\bsms\b|otp|tariq|fake link|suspicious|processing fee|sim-[a-z0-9]+|دھوکہ|پیغام/i],
   ["privacy", /privacy|myprivacy|consent|revoke|grant|helpers?|permissions?|correction|my data|change my (?:name|phone|village|area)|library|رضامندی/i],
-  ["profile", /profile|my profile|family profile|citizen profile|identity card|documents wallet|cnic upload|proof photos/i],
+  ["profile", /profile|my profile|family profile|citizen profile|identity card|documents wallet|cnic|utility bill|job proof|proof photos/i],
   ["family", /switch family|families|households list|family switch|خاندان/i],
   ["review", /review desk|officer queue|pending cases|review queue|review claims/i],
   ["rules", /rule studio|simulate|publish rule|eligibility rule/i],

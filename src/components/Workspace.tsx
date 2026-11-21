@@ -654,12 +654,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                             </div>
 
                             <div className="liquid-status-section">
-                              <div className="liquid-status-head">
-                                <span className={"liquid-net-pill" + (offline ? " is-offline" : "")} role="status">
-                                  {offline ? "Offline" : "Online"}{pending.length > 0 ? " · " + pending.length + " queued" : ""}
-                                </span>
-                              </div>
-                              <div className="liquid-action-buttons">
+                              <div className="liquid-action-buttons toggles">
                                 <button
                                   type="button"
                                   className={"liquid-action-btn" + (!fixtureOnline ? " is-active" : "")}
@@ -681,7 +676,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                                 {pending.length > 0 && (
                                   <button
                                     type="button"
-                                    className="liquid-action-btn"
+                                    className="liquid-action-btn wide"
                                     disabled={offline || syncing}
                                     onClick={() => void synchronize(true)}
                                   >
@@ -694,7 +689,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
 
                             <div className="liquid-menu-divider" />
 
-                            <div className="liquid-action-buttons">
+                            <div className="liquid-action-buttons row">
                               <button
                                 type="button"
                                 className="liquid-action-btn primary"
