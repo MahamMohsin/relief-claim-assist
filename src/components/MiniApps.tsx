@@ -625,7 +625,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
   // AI Summary & Quick Action States
   const [aiSummary, setAiSummary] = useState<ClaimSummaryResult | null>(null);
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
-  const [quickBusy, setQuickBusy] = useState<Record<string, "approve" | "reject" | null>>({});
+  const [quickBusy, setQuickBusy] = useState<Record<string, "approve" | "reject" | "more_proof" | null>>({});
 
   useEffect(() => {
     cuaEngine.search.review = setQuery;
@@ -678,7 +678,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
       }
       setReason(result.reason);
       setReasonUr(result.reasonUr);
-      setNotice("AI case assessment produced. Recommended decision and plain-language reasons populated.");
+      setNotice("AI case assessment produced. Recommended decision and plain-language reasons populated into input fields.");
     } catch (error) {
       setProblem(getMessage(error));
     } finally {
@@ -686,7 +686,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
     }
   }
 
-  async function quickDecide(chosenDecision: "approve" | "reject") {
+  async function quickDecide(chosenDecision: "approve" | "reject" | "more_proof") {
     if (!claim) return;
     setBusy(true);
     setProblem("");
@@ -715,7 +715,8 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
       });
 
       setDecision(updated.status === "needs_proof" ? "more_proof" : "approve");
-      setNotice(`Decision recorded as ${chosenDecision === "approve" ? "APPROVED" : "REJECTED"} with AI summary sent to applicant.`);
+      const label = chosenDecision === "approve" ? "APPROVED" : chosenDecision === "reject" ? "REJECTED" : "MORE PROOF REQUESTED";
+      setNotice(`Decision recorded as ${label} with AI summary sent to applicant.`);
       ctx.refresh();
     } catch (error) {
       setProblem(getMessage(error));
@@ -724,7 +725,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
     }
   }
 
-  async function handleQuickCardReview(item: Claim, chosenDecision: "approve" | "reject") {
+  async function handleQuickCardReview(item: Claim, chosenDecision: "approve" | "reject" | "more_proof") {
     setQuickBusy(prev => ({ ...prev, [item.id]: chosenDecision }));
     setProblem("");
     setNotice("");
@@ -733,7 +734,8 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
         claimId: item.id,
         decision: chosenDecision,
       });
-      setNotice(`${item.citizen_name || "Claim"}: ${chosenDecision === "approve" ? "Accepted" : "Rejected"} with AI summary sent to applicant.`);
+      const actionName = chosenDecision === "approve" ? "Accepted" : chosenDecision === "reject" ? "Rejected" : "Proof requested for";
+      setNotice(`${item.citizen_name || "Claim"}: ${actionName} with AI summary sent to applicant.`);
       ctx.refresh();
     } catch (err) {
       setProblem(getMessage(err));
@@ -747,8 +749,8 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
     setDecision(item.status === "needs_proof" ? "more_proof" : "approve");
     setNotice("");
     setProblem("");
-    setReason(item.citizen_reason_en || "");
-    setReasonUr(item.citizen_reason_ur || "");
+    setReason("");
+    setReasonUr("");
     setAiSummary(null);
   }
 
@@ -884,82 +886,70 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
               </span>
             )}
           </div>
-          <form onSubmit={event => { event.preventDefault(); void update("review"); }}>
-            <label>
-              Officer action
-              <select value={decision} onChange={event => setDecision(event.target.value as keyof typeof reviewOptions)}>
-                {(Object.entries(reviewOptions) as [keyof typeof reviewOptions, string][])
-                  .filter(([key]) => !(key === "approve" && claim.status === "needs_proof"))
-                  .map(([key, label]) => <option value={key} key={key}>{label}</option>)}
-              </select>
-            </label>
-            <label>
-              Plain-language reason
-              <textarea
-                required
-                minLength={5}
-                maxLength={600}
-                placeholder="Reason explaining the decision (sent directly to the applicant)..."
-                value={reason}
-                onChange={event => setReason(event.target.value)}
-              />
-            </label>
-            <label>
-              Urdu reason <small>(optional)</small>
-              <textarea
-                lang="ur"
-                dir="rtl"
-                maxLength={600}
-                placeholder="درخواست گزار کے لیے اردو میں تفصیلی وجہ..."
-                value={reasonUr}
-                onChange={event => setReasonUr(event.target.value)}
-              />
-            </label>
-            <div className="actions">
-              <button className="primary" disabled={busy || ctx.offline}>Record decision</button>
-              {!["approved", "rejected"].includes(claim.status) && (
-                <>
-                  <button
-                    type="button"
-                    className="btn-quick-accept"
-                    disabled={busy || ctx.offline || claim.status === "needs_proof"}
-                    onClick={() => void quickDecide("approve")}
-                    title="Accept case with AI summary generated & sent to applicant"
-                  >
-                    <CheckCircle2 size={14} /> Accept
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-quick-reject"
-                    disabled={busy || ctx.offline}
-                    onClick={() => void quickDecide("reject")}
-                    title="Reject case with AI summary generated & sent to applicant"
-                  >
-                    <XCircle size={14} /> Reject
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-quick-proof"
-                    disabled={busy || ctx.offline}
-                    onClick={() => setDecision("more_proof")}
-                    title="Request more proof from applicant"
-                  >
-                    <AlertCircle size={14} /> Request more proof
-                  </button>
-                </>
-              )}
-              {claim.status === "approved" && claim.payment_status !== "paid" && <>
-                <button className="secondary" type="button" disabled={busy || ctx.offline} onClick={() => void update("disburse")}>
-                  {claim.payment_status === "failed" ? "Retry simulated payment" : "Issue simulated payment"}
+          <label>
+            Plain-language reason
+            <textarea
+              minLength={5}
+              maxLength={600}
+              placeholder="Reason explaining the decision (sent directly to applicant, or click Produce AI Summary above)..."
+              value={reason}
+              onChange={event => setReason(event.target.value)}
+            />
+          </label>
+          <label>
+            Urdu reason <small>(optional)</small>
+            <textarea
+              lang="ur"
+              dir="rtl"
+              maxLength={600}
+              placeholder="درخواست گزار کے لیے اردو میں تفصیلی وجہ..."
+              value={reasonUr}
+              onChange={event => setReasonUr(event.target.value)}
+            />
+          </label>
+          <div className="actions">
+            {!["approved", "rejected"].includes(claim.status) && (
+              <>
+                <button
+                  type="button"
+                  className="btn-quick-accept"
+                  disabled={busy || ctx.offline || claim.status === "needs_proof"}
+                  onClick={() => void quickDecide("approve")}
+                  title="Accept claim: saves decision & sends AI summary/reason to applicant"
+                >
+                  <CheckCircle2 size={14} /> Accept
                 </button>
-                {claim.payment_status === "pending" && <button className="secondary" type="button" disabled={busy || ctx.offline}
-                  onClick={() => void update("disburse", "failed")}>Simulate payment failure</button>}
-              </>}
-            </div>
+                <button
+                  type="button"
+                  className="btn-quick-reject"
+                  disabled={busy || ctx.offline}
+                  onClick={() => void quickDecide("reject")}
+                  title="Reject claim: saves decision & sends AI summary/reason to applicant"
+                >
+                  <XCircle size={14} /> Reject
+                </button>
+                <button
+                  type="button"
+                  className="btn-quick-proof"
+                  disabled={busy || ctx.offline}
+                  onClick={() => void quickDecide("more_proof")}
+                  title="Request more proof: notifies applicant with explanation"
+                >
+                  <AlertCircle size={14} /> Request more proof
+                </button>
+              </>
+            )}
+            {claim.status === "approved" && claim.payment_status !== "paid" && <>
+              <button className="secondary" type="button" disabled={busy || ctx.offline} onClick={() => void update("disburse")}>
+                {claim.payment_status === "failed" ? "Retry simulated payment" : "Issue simulated payment"}
+              </button>
+              {claim.payment_status === "pending" && <button className="secondary" type="button" disabled={busy || ctx.offline}
+                onClick={() => void update("disburse", "failed")}>Simulate payment failure</button>}
+            </>}
+          </div>
             <div className="decision-info-caption">
-              Recording a decision saves the case outcome and sends the plain-language summary & reasons directly to the applicant.
+              Deciding saves the case outcome and sends the plain-language summary & reasons directly to the applicant.
             </div>
-          </form>
         </div>
       )}
 
@@ -1120,6 +1110,65 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                       >
                         {item.rule_version_used ? "Rule v" + item.rule_version_used : "No rule"}
                       </span>
+
+                      {["submitted", "in_review", "needs_proof"].includes(item.status) && (
+                        <div className="kanban-card-top-actions" onClick={e => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="kanban-quick-btn kanban-quick-accept"
+                            disabled={Boolean(quickBusy[item.id]) || item.status === "needs_proof"}
+                            onClick={e => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              void handleQuickCardReview(item, "approve");
+                            }}
+                            title="Directly accept claim with AI summary & reasoning sent to applicant"
+                          >
+                            {quickBusy[item.id] === "approve" ? (
+                              <LoaderCircle size={11} className="spin" />
+                            ) : (
+                              <CheckCircle2 size={11} />
+                            )}
+                            <span>Accept</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="kanban-quick-btn kanban-quick-reject"
+                            disabled={Boolean(quickBusy[item.id])}
+                            onClick={e => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              void handleQuickCardReview(item, "reject");
+                            }}
+                            title="Directly reject claim with AI summary & reasoning sent to applicant"
+                          >
+                            {quickBusy[item.id] === "reject" ? (
+                              <LoaderCircle size={11} className="spin" />
+                            ) : (
+                              <XCircle size={11} />
+                            )}
+                            <span>Reject</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="kanban-quick-btn kanban-quick-proof"
+                            disabled={Boolean(quickBusy[item.id])}
+                            onClick={e => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              void handleQuickCardReview(item, "more_proof");
+                            }}
+                            title="Directly request more proof with AI explanation sent to applicant"
+                          >
+                            {quickBusy[item.id] === "more_proof" ? (
+                              <LoaderCircle size={11} className="spin" />
+                            ) : (
+                              <AlertCircle size={11} />
+                            )}
+                            <span>Proof</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div className="kanban-card-body">
                       <div className="kanban-card-title">{item.citizen_name ?? "Unnamed citizen"}</div>
@@ -1144,47 +1193,6 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                       <div className="kanban-summary-snippet" title={item.ai_summary}>
                         <Sparkles size={11} color="#3b82f6" />
                         <span>{item.ai_summary.slice(0, 52)}...</span>
-                      </div>
-                    )}
-
-                    {["submitted", "in_review", "needs_proof"].includes(item.status) && (
-                      <div className="kanban-card-quick-actions" onClick={e => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="kanban-quick-btn kanban-quick-accept"
-                          disabled={Boolean(quickBusy[item.id]) || item.status === "needs_proof"}
-                          onClick={e => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            void handleQuickCardReview(item, "approve");
-                          }}
-                          title="Directly accept claim with AI summary & reasoning sent to applicant"
-                        >
-                          {quickBusy[item.id] === "approve" ? (
-                            <LoaderCircle size={12} className="spin" />
-                          ) : (
-                            <CheckCircle2 size={12} />
-                          )}
-                          <span>Accept</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="kanban-quick-btn kanban-quick-reject"
-                          disabled={Boolean(quickBusy[item.id])}
-                          onClick={e => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            void handleQuickCardReview(item, "reject");
-                          }}
-                          title="Directly reject claim with AI summary & reasoning sent to applicant"
-                        >
-                          {quickBusy[item.id] === "reject" ? (
-                            <LoaderCircle size={12} className="spin" />
-                          ) : (
-                            <XCircle size={12} />
-                          )}
-                          <span>Reject</span>
-                        </button>
                       </div>
                     )}
 
