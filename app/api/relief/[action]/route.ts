@@ -4,6 +4,7 @@ import { answerPolicy } from "@/src/lib/ai/rag";
 import { inspectEvidence } from "@/src/lib/ai/ocr";
 import { extractProfileDocument } from "@/src/lib/ai/profileVlm";
 import { analyzeScamCheck } from "@/src/lib/ai/scamCheck";
+import { generateClaimSummary, executeQuickReview } from "@/src/lib/ai/claimSummary";
 import { runSafetyEval } from "@/src/lib/fixtures/safety";
 
 const reviewUrdu = {
@@ -65,7 +66,21 @@ export async function POST(request: Request, context: RouteContext<"/api/relief/
       }
       case "review": {
         const args = actions.review.parse(body);
-        result = await gateway(operation, { ...args, reasonUr: args.reasonUr || reviewUrdu[args.decision] });
+        result = await gateway(operation, {
+          ...args,
+          reasonUr: args.reasonUr || reviewUrdu[args.decision],
+          aiSummary: args.aiSummary,
+        });
+        break;
+      }
+      case "claim_summary": {
+        const args = actions.claim_summary.parse(body);
+        result = await generateClaimSummary(args.claimId);
+        break;
+      }
+      case "quick_review": {
+        const args = actions.quick_review.parse(body);
+        result = await executeQuickReview(args.claimId, args.decision, args.reason, args.reasonUr);
         break;
       }
       case "safety":

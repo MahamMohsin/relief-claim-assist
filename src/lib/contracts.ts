@@ -44,7 +44,15 @@ export const actions = {
   staff_queue: z.object({}),
   decide_staff: z.object({ userId: uuid, decision: z.enum(["active", "rejected"]) }),
   review: z.object({ claimId: uuid, decision: z.enum(["assign", "more_proof", "escalate", "approve", "reject", "close"]),
-    reason: z.string().trim().min(5).max(600), reasonUr: z.string().trim().max(600).optional() }),
+    reason: z.string().trim().min(5).max(600), reasonUr: z.string().trim().max(600).optional(),
+    aiSummary: z.string().trim().max(3000).optional() }),
+  claim_summary: z.object({ claimId: uuid }),
+  quick_review: z.object({
+    claimId: uuid,
+    decision: z.enum(["approve", "reject"]),
+    reason: z.string().trim().max(600).optional(),
+    reasonUr: z.string().trim().max(600).optional(),
+  }),
   disburse: z.object({ claimId: uuid, outcome: z.enum(["paid", "failed"]).default("paid") }),
   families: z.object({}),
   switch_family: z.object({ citizenId: uuid }),
@@ -89,7 +97,21 @@ export type Evidence = { id: string; doc_type: string; file_url: string | null; 
 export type Claim = { id: string; citizen_id: string; citizen_name?: string; status: ClaimStatus; payment_status: Payment["status"];
   amount_pkr: number; payload_json: Partial<Payload>; citizen_reason_en: string | null; citizen_reason_ur: string | null;
   rule_version_used: number | null; ai_confidence: number | null; ai_route: string | null; handoff_notes: string | null;
-  assigned_officer_id: string | null; updated_at: string; created_at?: string; reports?: number; payment?: Payment | null; documents?: Evidence[] };
+  assigned_officer_id: string | null; updated_at: string; created_at?: string; reports?: number; payment?: Payment | null; documents?: Evidence[];
+  ai_summary?: string | null };
+export type VerificationCheck = { label: string; status: "pass" | "warn" | "fail"; detail: string };
+export type ClaimSummaryResult = {
+  claimId: string;
+  citizenName: string;
+  recommendation: "approve" | "reject" | "more_proof";
+  confidence: number;
+  summary: string;
+  reason: string;
+  reasonUr: string;
+  riskFlags: string[];
+  checks: VerificationCheck[];
+  model: string;
+};
 export type Policy = { id: string; policy_version: string; section_code: string; title: string; effective_date: string; content: string; keywords: string[] };
 export type PolicyAnswer = { answer: string; citations: Policy[]; policy_version: string; effective_date: string | null };
 export type Audit = { id: number; actor_role: string; event_type: string; entity_type: string; entity_id: string | null;
