@@ -44,7 +44,6 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  user-select: none;
 }
 
 .closeButton {
@@ -412,9 +411,11 @@
   border-radius: var(--card-radius);
   background: #fbfaf8;
   padding: 32px 38px;
-  z-index: 15;
+  z-index: 50;
   display: flex;
   flex-direction: column;
+  pointer-events: auto;
+  user-select: text;
 }
 .signupHeader {
   display: flex;

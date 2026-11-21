@@ -261,7 +261,11 @@ export function PipLoginModal({
 
             {/* Signup Overlay Form */}
             {isSigningUp && (
-              <div className={s.signupOverlay}>
+              <div
+                className={s.signupOverlay}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+              >
                 <div className={s.signupHeader}>
                   <h3 className={s.signupTitle}>Create Account</h3>
                   <button
