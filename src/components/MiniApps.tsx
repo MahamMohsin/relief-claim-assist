@@ -12,6 +12,7 @@ import { Badge } from "@astryxdesign/core/Badge";
 import { Banner } from "@astryxdesign/core/Banner";
 import { NumberInput } from "@astryxdesign/core/NumberInput";
 import { TextArea } from "@astryxdesign/core/TextArea";
+import { TextInput } from "@astryxdesign/core/TextInput";
 import { Selector } from "@astryxdesign/core/Selector";
 import { FileInput } from "@astryxdesign/core/FileInput";
 import { HStack } from "@astryxdesign/core/HStack";
@@ -370,22 +371,31 @@ function ScamView({ ctx }: { ctx: ViewContext }) {
     } catch (error) { setError(getMessage(error)); }
     finally { setBusy(false); }
   }
-  return <div className="view-stack"><Panel>
-    <h2>Verify a relief message</h2>
-    <p>Use a synthetic message or payment reference. Never share real credentials.</p>
-    <form onSubmit={check}>
-      <label>SMS or WhatsApp message<textarea value={message} onChange={event => setMessage(event.target.value)} maxLength={1500} placeholder="Paste the synthetic message here" /></label>
-      <label>Claim ID or mock payout reference<input value={reference} onChange={event => setReference(event.target.value)} maxLength={80} placeholder="Example: SIM-FATIMA1" /></label>
-      <div className="actions"><button className="primary" disabled={busy || ctx.offline || !(message.trim() || reference.trim())}><ShieldCheck size={18} /> Check message</button>
-        <button type="button" className="secondary" onClick={() => { setMessage("Raast credited your simulated relief payment."); setReference("SIM-FATIMA1"); }}>Use sample alert</button>
-        <button type="button" className="quiet" disabled={busy || !reference.trim()} onClick={() => void report()}>Report missing payment</button></div>
-    </form>
-    <Notice text={error} warning /><Notice text={notice} />
-  </Panel>
-  {result && <Panel><div className="panel-head"><h2>Verification result</h2><StateTag value={result.jev_label} /></div>
-    <div className="facts two"><div><small>Message assessment</small><strong>{title(result.jev_label)} · {pc(result.jev_confidence)}</strong><small>{result.model}</small></div>
-      <div><small>Simulated payment rail</small><strong>{result.payment ? title(result.payment.status) + " · " + currency(result.payment.amount_pkr) : "No matching receipt"}</strong><small>{result.payment?.raast_ref || "Check the reference independently"}</small></div></div>
-  </Panel>}</div>;
+  return <div className="view-stack">
+    <Card padding={6}>
+      <VStack gap={1}><h2>Verify a relief message</h2><p>Use a synthetic message or payment reference. Never share real credentials.</p></VStack>
+      <form onSubmit={check}>
+        <VStack gap={3} paddingBlockStart={3}>
+          <TextArea label="SMS or WhatsApp message" value={message} onChange={setMessage} placeholder="Paste the synthetic message here" isOptional />
+          <TextInput label="Claim ID or mock payout reference" value={reference} onChange={setReference} placeholder="Example: SIM-FATIMA1" isOptional />
+          <HStack gap={2} wrap="wrap">
+            <Button type="submit" variant="primary" label="Check message" icon={<ShieldCheck size={16} />} isDisabled={busy || ctx.offline || !(message.trim() || reference.trim())} />
+            <Button type="button" variant="secondary" label="Use sample alert" onClick={() => { setMessage("Raast credited your simulated relief payment."); setReference("SIM-FATIMA1"); }} />
+            <Button type="button" variant="ghost" label="Report missing payment" isDisabled={busy || !reference.trim()} onClick={() => void report()} />
+          </HStack>
+        </VStack>
+      </form>
+      {error && <Banner status="error" title={error} />}
+      {notice && <Banner status="success" title={notice} />}
+    </Card>
+    {result && <Card padding={6}>
+      <HStack justify="between" hAlign="start" gap={2} wrap="wrap"><h2>Verification result</h2><Badge label={title(result.jev_label)} variant={["genuine", "legitimate"].includes(result.jev_label) ? "success" : "warning"} /></HStack>
+      <HStack gap={2} wrap="wrap" paddingBlockStart={3}>
+        <Card variant="muted" padding={3}><VStack gap={0.5}><small>Message assessment</small><strong>{title(result.jev_label)} · {pc(result.jev_confidence)}</strong><small>{result.model}</small></VStack></Card>
+        <Card variant="muted" padding={3}><VStack gap={0.5}><small>Simulated payment rail</small><strong>{result.payment ? title(result.payment.status) + " · " + currency(result.payment.amount_pkr) : "No matching receipt"}</strong><small>{result.payment?.raast_ref || "Check the reference independently"}</small></VStack></Card>
+      </HStack>
+    </Card>}
+  </div>;
 }
 
 function PolicyView({ ctx }: { ctx: ViewContext }) {
@@ -400,15 +410,28 @@ function PolicyView({ ctx }: { ctx: ViewContext }) {
     finally { setBusy(false); }
   }
   return <div className="view-stack">
-    <Panel><h2>Ask the scheme registry</h2><p>Answers quote the current fictional policy and include the section used.</p>
-      <form onSubmit={ask}><label>Policy question<input required minLength={3} maxLength={500} value={question} onChange={event => setQuestion(event.target.value)} placeholder="How do I report a missing payment?" /></label>
-        <div className="actions"><button className="primary" disabled={busy || ctx.offline}><BookOpen size={17} />{busy ? "Searching…" : "Find answer"}</button></div>
-      </form><Notice text={error} warning />
-    </Panel>
-    {answer && <Panel><div className="panel-head"><h2>Registry answer</h2><span className="pill neutral">Policy v{answer.policy_version}{answer.effective_date ? " · " + answer.effective_date : ""}</span></div>
-      <p className="large-copy">{answer.answer}</p>
-      {answer.citations.map(section => <details className="citation" key={section.id}><summary>§ {section.section_code} · {section.title}</summary><p>{section.content}</p></details>)}
-    </Panel>}
+    <Card padding={6}>
+      <VStack gap={1}><h2>Ask the scheme registry</h2><p>Answers quote the current fictional policy and include the section used.</p></VStack>
+      <form onSubmit={ask}>
+        <VStack gap={2} paddingBlockStart={3}>
+          <TextInput label="Policy question" value={question} onChange={setQuestion} placeholder="How do I report a missing payment?" isRequired />
+          <HStack><Button type="submit" variant="primary" label={busy ? "Searching…" : "Find answer"} icon={<BookOpen size={16} />} isDisabled={busy || ctx.offline || question.trim().length < 3} /></HStack>
+        </VStack>
+      </form>
+      {error && <Banner status="error" title={error} />}
+    </Card>
+    {answer && <Card padding={6}>
+      <HStack justify="between" hAlign="start" gap={2} wrap="wrap">
+        <h2>Registry answer</h2>
+        <Badge label={"Policy v" + answer.policy_version + (answer.effective_date ? " · " + answer.effective_date : "")} />
+      </HStack>
+      <VStack gap={2} paddingBlockStart={3}>
+        <p className="large-copy">{answer.answer}</p>
+        {answer.citations.map(section => <Card key={section.id} variant="muted" padding={3}>
+          <details><summary>§ {section.section_code} · {section.title}</summary><p>{section.content}</p></details>
+        </Card>)}
+      </VStack>
+    </Card>}
   </div>;
 }
 
@@ -417,20 +440,32 @@ function FamilyView({ ctx }: { ctx: ViewContext }) {
   const [search, setSearch] = useState("");
   const [problem, setProblem] = useState("");
   const [switching, setSwitching] = useState<string>();
-  return <Panel>
-    <div className="panel-head"><div><h2>Synthetic family directory</h2><p>Switching clears the previous family’s form and voice session.</p></div><span className="pill neutral">{data?.length ?? 0} families</span></div>
-    <label>Find a family<input placeholder="Name or demo area" value={search} onChange={event => setSearch(event.target.value)} /></label>
-    <Notice text={error || problem} warning />
-    {loading && !data ? <Spinner /> : <div className="rows family-list">{data?.filter(family => (family.full_name + " " + family.village_area).toLowerCase().includes(search.toLowerCase())).map(family =>
-      <button className="list-row" key={family.id} disabled={ctx.offline || Boolean(switching)} onClick={async () => {
-        setSwitching(family.id); setProblem("");
-        try { await ctx.selectFamily(family); } catch (error) { setProblem(getMessage(error)); }
-        finally { setSwitching(undefined); }
-      }}>
-        <div><strong>{family.full_name}</strong><small>{family.village_area}</small></div>
-        <StateTag value={family.consent} />{switching === family.id ? <LoaderCircle className="spin" size={17} /> : <ChevronRight size={17} />}
-      </button>)}</div>}
-  </Panel>;
+  return <Card padding={6}>
+    <HStack justify="between" hAlign="start" gap={4} wrap="wrap">
+      <VStack gap={0.5}><h2>Synthetic family directory</h2><p>Switching clears the previous family’s form and voice session.</p></VStack>
+      <Badge label={(data?.length ?? 0) + " families"} />
+    </HStack>
+    <VStack gap={2} paddingBlockStart={3}>
+      <TextInput label="Find a family" value={search} onChange={setSearch} placeholder="Name or demo area" />
+      {(error || problem) && <Banner status="error" title={error || problem} />}
+      {loading && !data ? <Spinner /> : <VStack gap={1}>
+        {data?.filter(family => (family.full_name + " " + family.village_area).toLowerCase().includes(search.toLowerCase())).map(family =>
+          <Card key={family.id} variant="muted" padding={3}>
+            <HStack justify="between" gap={2} wrap="wrap">
+              <VStack gap={0.5}><strong>{family.full_name}</strong><small>{family.village_area}</small></VStack>
+              <HStack gap={2}>
+                <Badge label={title(family.consent)} variant={family.consent === "granted" ? "success" : "warning"} />
+                <Button variant="secondary" size="sm" label="Switch" isDisabled={ctx.offline || Boolean(switching)} isLoading={switching === family.id} onClick={async () => {
+                  setSwitching(family.id); setProblem("");
+                  try { await ctx.selectFamily(family); } catch (error) { setProblem(getMessage(error)); }
+                  finally { setSwitching(undefined); }
+                }} />
+              </HStack>
+            </HStack>
+          </Card>)}
+      </VStack>}
+    </VStack>
+  </Card>;
 }
 
 function PrivacyView({ ctx }: { ctx: ViewContext }) {
@@ -458,25 +493,48 @@ function PrivacyView({ ctx }: { ctx: ViewContext }) {
     finally { setBusy(false); }
   }
   return <div className="view-stack">
-    <Notice text={problem || error} warning /><Notice text={message} />
-    <Panel><h2>Who has access</h2><p>Helper changes apply to this family’s next server request.</p>
-      {loading && !data ? <Spinner /> : <div className="rows">
-        {data?.helpers.map(helper => <div className="list-row static" key={helper.id}><div><strong>{helper.name}</strong><small>Community helper</small></div><StateTag value={helper.status} />
-          {ctx.profile.role === "citizen" && <button className="secondary" disabled={busy} onClick={() => void change("consent", { helperId: helper.id, consent: helper.status === "granted" ? "revoked" : "granted" })}>{helper.status === "granted" ? "Revoke" : "Grant"}</button>}
-        </div>)}
-        {data?.officers.map(name => <div className="list-row static" key={name}><div><strong>{name}</strong><small>Assigned relief officer</small></div></div>)}
-        <div className="list-row static"><div><strong>Simulated public rails</strong><small>Identity, scheme registry, and mock payment services</small></div><LockKeyhole size={18} /></div>
-      </div>}
-    </Panel>
-    <Panel><h2>Request a correction</h2><form onSubmit={event => { event.preventDefault(); void change("correction", { field, value }); }}>
-      <div className="form-grid"><label>Field<select value={field} onChange={event => setField(event.target.value)}>
-        <option value="full_name">Name</option><option value="phone">Mock phone</option><option value="village_area">Demo area</option>
-        <option value="household_size">Household size</option><option value="monthly_income_mock">Monthly income</option>
-      </select></label><label>Proposed synthetic value<input required maxLength={160} value={value} onChange={event => setValue(event.target.value)} /></label></div>
-      <div className="actions"><button className="primary" disabled={busy}>Request correction</button></div>
-    </form>
-    {data?.corrections.map(request => <div className="list-row static" key={request.id}><div><strong>{title(request.field_name)}</strong><small>{request.proposed_value}</small></div><StateTag value={request.status} /></div>)}
-    </Panel>
+    {(problem || error) && <Banner status="error" title={problem || error} />}
+    {message && <Banner status="success" title={message} />}
+    <Card padding={6}>
+      <VStack gap={1}><h2>Who has access</h2><p>Helper changes apply to this family’s next server request.</p></VStack>
+      {loading && !data ? <Spinner /> : <VStack gap={1} paddingBlockStart={3}>
+        {data?.helpers.map(helper => <Card key={helper.id} variant="muted" padding={3}>
+          <HStack justify="between" gap={2} wrap="wrap">
+            <VStack gap={0.5}><strong>{helper.name}</strong><small>Community helper</small></VStack>
+            <HStack gap={2}>
+              <Badge label={title(helper.status)} variant={helper.status === "granted" ? "success" : "warning"} />
+              {ctx.profile.role === "citizen" && <Button variant="secondary" size="sm" label={helper.status === "granted" ? "Revoke" : "Grant"} isDisabled={busy} onClick={() => void change("consent", { helperId: helper.id, consent: helper.status === "granted" ? "revoked" : "granted" })} />}
+            </HStack>
+          </HStack>
+        </Card>)}
+        {data?.officers.map(name => <Card key={name} variant="muted" padding={3}><VStack gap={0.5}><strong>{name}</strong><small>Assigned relief officer</small></VStack></Card>)}
+        <Card variant="muted" padding={3}>
+          <HStack justify="between" gap={2}><VStack gap={0.5}><strong>Simulated public rails</strong><small>Identity, scheme registry, and mock payment services</small></VStack><LockKeyhole size={18} /></HStack>
+        </Card>
+      </VStack>}
+    </Card>
+    <Card padding={6}>
+      <h2>Request a correction</h2>
+      <form onSubmit={event => { event.preventDefault(); void change("correction", { field, value }); }}>
+        <VStack gap={3} paddingBlockStart={3}>
+          <HStack gap={3} wrap="wrap">
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <Selector label="Field" value={field} onChange={selected => setField(selected ?? "full_name")} options={[
+                { value: "full_name", label: "Name" }, { value: "phone", label: "Mock phone" }, { value: "village_area", label: "Demo area" },
+                { value: "household_size", label: "Household size" }, { value: "monthly_income_mock", label: "Monthly income" },
+              ]} />
+            </div>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <TextInput label="Proposed synthetic value" value={value} onChange={setValue} isRequired />
+            </div>
+          </HStack>
+          <HStack><Button type="submit" variant="primary" label="Request correction" isDisabled={busy || !value.trim()} /></HStack>
+        </VStack>
+      </form>
+      {data?.corrections.map(request => <Card key={request.id} variant="muted" padding={3}>
+        <HStack justify="between" gap={2}><VStack gap={0.5}><strong>{title(request.field_name)}</strong><small>{request.proposed_value}</small></VStack><Badge label={title(request.status)} /></HStack>
+      </Card>)}
+    </Card>
   </div>;
 }
 
