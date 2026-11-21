@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AudioLines, ChevronDown, Mic, Send, Square, StopCircle, Volume2 } from "lucide-react";
 import type { MiniApp, Profile, UIAction } from "@/src/lib/contracts";
 import { transcribe } from "@/src/lib/client";
+import { useVoiceStream } from "@/src/lib/useVoiceStream";
 import { apps } from "../launcher";
 import { receiveActions } from "./UIActionBus";
 import { speakText, stopSpeaking } from "./speech";
@@ -21,7 +22,6 @@ type VoiceProps = {
 export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAction, onQueueAudio }: VoiceProps) {
   const [lang, setLang] = useState(profile.locale);
   const [input, setInput] = useState("");
-  const [recording, setRecording] = useState(false);
   const [working, setWorking] = useState(false);
   const [stage, setStage] = useState("Relief assistant");
   const [answer, setAnswer] = useState("");
@@ -29,11 +29,29 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   const [expanded, setExpanded] = useState(false);
   const [clarify, setClarify] = useState<Extract<UIAction, { type: "ask_clarification" }> | null>(null);
   const [decision, setDecision] = useState<Extract<UIAction, { type: "show_jev_badge" }> | null>(null);
+
+  // Deepgram Live WebSocket Stream Hook from coffeebrew
+  const dgVoice = useVoiceStream(lang);
+  const recording = dgVoice.listening;
+
+  // Stream live words into input box in real time as user speaks
+  useEffect(() => {
+    if (dgVoice.listening) {
+      const live = dgVoice.partial || dgVoice.utterance;
+      if (live) {
+        setInput(live);
+      }
+    }
+  }, [dgVoice.partial, dgVoice.utterance, dgVoice.listening]);
+
+  // When Deepgram detects speech_final (end of speech), auto-populate final text
+  useEffect(() => {
+    if (dgVoice.lastUtterance) {
+      setInput(dgVoice.lastUtterance);
+    }
+  }, [dgVoice.utteranceId, dgVoice.lastUtterance]);
+
   const active = useRef<{ id: string; controller: AbortController } | null>(null);
-  const recorder = useRef<MediaRecorder | null>(null);
-  const stream = useRef<MediaStream | null>(null);
-  const speechRecognizer = useRef<any>(null);
-  const stopAt = useRef<number | undefined>(undefined);
   const mounted = useRef(false);
   const connectivity = useRef(offline);
   connectivity.current = offline;
@@ -134,102 +152,12 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     }
   }
 
-  async function toggleRecord() {
-    if (recording) {
-      try { speechRecognizer.current?.stop(); } catch {}
-      if (recorder.current?.state === "recording") recorder.current.stop();
-      return;
-    }
-    setError("");
-    setInput("");
-    try {
-      if (!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder === "undefined") {
-        throw new Error("Microphone recording is unavailable. Type your request instead.");
-      }
-
-      // Check for browser real-time speech recognition for streaming words live
-      const SpeechRecognition = typeof window !== "undefined" && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
-      if (SpeechRecognition) {
-        try {
-          const recognizer = new SpeechRecognition();
-          recognizer.continuous = true;
-          recognizer.interimResults = true;
-          recognizer.lang = lang === "ur" ? "ur-PK" : "en-US";
-
-          recognizer.onresult = (event: any) => {
-            let live = "";
-            for (let i = 0; i < event.results.length; i++) {
-              live += event.results[i][0].transcript;
-            }
-            if (live.trim()) setInput(live);
-          };
-
-          recognizer.onerror = (event: any) => {
-            console.warn("SpeechRecognition event:", event.error);
-          };
-
-          recognizer.onend = () => {
-            if (mounted.current && !recorder.current?.state) setRecording(false);
-          };
-
-          recognizer.start();
-          speechRecognizer.current = recognizer;
-        } catch (e) {
-          console.warn("Could not start live Web Speech:", e);
-        }
-      }
-
-      const source = await navigator.mediaDevices.getUserMedia({ audio: true });
-      if (!mounted.current) { source.getTracks().forEach(track => track.stop()); return; }
-      stream.current = source;
-      const mimeType = ["audio/webm;codecs=opus", "audio/mp4", "audio/ogg;codecs=opus"].find(type => MediaRecorder.isTypeSupported(type));
-      const mediaRecorder = new MediaRecorder(source, mimeType ? { mimeType, audioBitsPerSecond: 32000 } : undefined);
-      recorder.current = mediaRecorder;
-      const parts: Blob[] = [];
-      mediaRecorder.ondataavailable = event => { if (event.data.size) parts.push(event.data); };
-      mediaRecorder.onerror = () => {
-        setRecording(false);
-        source.getTracks().forEach(track => track.stop());
-        setError("Microphone recording failed. You can type your request.");
-      };
-      mediaRecorder.onstop = async () => {
-        window.clearTimeout(stopAt.current);
-        source.getTracks().forEach(track => track.stop());
-        try { speechRecognizer.current?.stop(); } catch {}
-        if (!mounted.current) return;
-        setRecording(false);
-        const audio = new Blob(parts, { type: mediaRecorder.mimeType || "audio/webm" });
-        try {
-          if (connectivity.current) {
-            await onQueueAudio(audio, lang);
-            setStage("Recording saved to offline queue");
-          } else {
-            // If live Web Speech already captured words, keep them, or enhance with Deepgram Nova-3
-            setStage("Transcribing · Deepgram Nova-3");
-            const text = await transcribe(audio, lang).catch(() => "");
-            if (text && text.trim()) {
-              setInput(text);
-            }
-            setStage("Ready · press Enter or tap Send");
-          }
-        } catch (error) {
-          if (connectivity.current) {
-            await onQueueAudio(audio, lang).catch(() => {});
-            setStage("Offline recording queued");
-          } else {
-            setStage("Transcript ready");
-          }
-        }
-      };
-      mediaRecorder.start();
-      setRecording(true);
-      setStage("Listening · words stream live as you speak");
-      stopAt.current = window.setTimeout(() => {
-        if (mediaRecorder.state === "recording") mediaRecorder.stop();
-      }, 20000);
-    } catch (problem) {
-      setError(problem instanceof Error ? problem.message : "Microphone unavailable. You can type instead.");
-      setExpanded(true);
+  function toggleRecord() {
+    if (dgVoice.listening) {
+      dgVoice.stop();
+    } else {
+      stopSpeaking();
+      dgVoice.toggle();
     }
   }
 
