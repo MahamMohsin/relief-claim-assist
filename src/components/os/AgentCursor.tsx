@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Sparkles } from "lucide-react";
 import { cuaEngine, type CursorState } from "./cuaEngine";
+import { BotAvatar } from "./BotAvatar";
 
 export function AgentCursor() {
   const [state, setState] = useState<CursorState>({
@@ -97,6 +98,31 @@ export function AgentCursor() {
           >
             {/* Luminous Aura behind pointer tip */}
             <span className={"cua-aura tone-" + state.tone} />
+
+            {/* Cute White Ghost Companion flying with the cursor */}
+            <motion.div
+              className="cua-ghost-companion"
+              animate={{
+                y: [0, -3.5, 0],
+                rotate: state.clicking ? [0, -4, 4, 0] : [0, 2, -2, 0],
+              }}
+              transition={{
+                y: { repeat: Infinity, duration: 2.2, ease: "easeInOut" },
+                rotate: { repeat: Infinity, duration: 3, ease: "easeInOut" },
+              }}
+            >
+              <BotAvatar
+                size={34}
+                state={state.tone === "done" ? "done" : "working"}
+                mood={state.tone === "done" ? "happy" : "neutral"}
+                depth={2}
+                followPointer={false}
+                lookAt={{ x: -0.28, y: 0.55 }}
+                color="#ffffff"
+                eyeColor="#111111"
+                className="cua-ghost-avatar"
+              />
+            </motion.div>
 
             {/* Crisp Apple-style Pointer SVG */}
             <svg

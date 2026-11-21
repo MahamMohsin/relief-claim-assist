@@ -3,14 +3,19 @@
 import { useEffect, useRef } from "react";
 import { mountAvatar } from "open-bot-avatar/dom";
 
-const BOT_DEFINITION = {
+/**
+ * Cute White Ghost definition matching the user reference image:
+ * Smooth dome head, straight body, 3 scalloped bottom lobes,
+ * and vertical dark pill/capsule eyes.
+ */
+export const GHOST_DEFINITION = {
   version: 1,
-  id: "cute-bot",
-  name: "Pi Bot",
+  id: "cute-white-ghost",
+  name: "Ghosty",
   body: {
-    path: "M26 28C26 18 34 12 46 12L54 12C66 12 74 18 74 28L74 62C74 72 66 78 54 78L46 78C34 78 26 72 26 62ZM47 8L53 8L53 14L47 14ZM16 38L26 38L26 54L16 54ZM74 38L84 38L84 54L74 54Z",
+    path: "M24 40C24 23 35 12 50 12C65 12 76 23 76 40V76C73 83 62 83 59 77C56 83 45 83 41 77C38 83 27 83 24 76Z",
   },
-  eyes: { x: 50, y: 44, spacing: 18, scale: 1.25 },
+  eyes: { x: 50, y: 40, spacing: 18, scale: 1.35 },
 } as const;
 
 export interface BotAvatarProps {
@@ -19,18 +24,26 @@ export interface BotAvatarProps {
   size?: number;
   color?: string;
   eyeColor?: string;
+  depth?: number;
+  followPointer?: boolean;
+  lookAt?: { x: number; y: number } | null;
   onClick?: () => void;
   className?: string;
+  title?: string;
 }
 
 export function BotAvatar({
   state = "idle",
   mood = "neutral",
   size = 38,
-  color = "#2dd4bf", // vibrant friendly mint-teal
-  eyeColor = "#0f172a",
+  color = "#ffffff", // Pure cute white ghost
+  eyeColor = "#111111", // Deep dark pill eyes
+  depth = 3,
+  followPointer = true,
+  lookAt = null,
   onClick,
   className = "",
+  title = "Cute Ghost Assistant",
 }: BotAvatarProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const avatarRef = useRef<ReturnType<typeof mountAvatar> | null>(null);
@@ -39,13 +52,15 @@ export function BotAvatar({
     if (!containerRef.current) return;
     try {
       avatarRef.current = mountAvatar(containerRef.current, {
-        definition: BOT_DEFINITION,
+        definition: GHOST_DEFINITION,
         color,
         eyeColor,
+        depth,
         state,
         mood,
-        followPointer: true,
-        label: "Pi Assistant Avatar",
+        followPointer: lookAt ? false : followPointer,
+        lookAt,
+        label: "Ghost Bot Avatar",
       });
     } catch (err) {
       console.error("BotAvatar mount error:", err);
@@ -55,13 +70,18 @@ export function BotAvatar({
       avatarRef.current?.destroy();
       avatarRef.current = null;
     };
-  }, [color, eyeColor]);
+  }, [color, eyeColor, depth]);
 
   useEffect(() => {
     if (avatarRef.current) {
-      avatarRef.current.update({ state, mood });
+      avatarRef.current.update({
+        state,
+        mood,
+        followPointer: lookAt ? false : followPointer,
+        lookAt,
+      });
     }
-  }, [state, mood]);
+  }, [state, mood, followPointer, lookAt]);
 
   return (
     <div
@@ -74,7 +94,7 @@ export function BotAvatar({
         flexShrink: 0,
         cursor: onClick ? "pointer" : "default",
       }}
-      title="Pi Bot · Looking at your pointer"
+      title={title}
     />
   );
 }
