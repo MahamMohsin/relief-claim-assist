@@ -393,16 +393,6 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
         </div>
       </header>
 
-      <div className="relief-status-controls">
-        <span className="disclosure"><ShieldCheck size={14} /> PROTOTYPE · SIMULATED DPI DATA</span>
-        {profile && <>
-          <button className="control" aria-pressed={!fixtureOnline} onClick={() => setFixtureOnline(value => !value)}><Radio size={15} /> Simulate network drop</button>
-          <button className="control" aria-pressed={lite} onClick={() => setLite(value => !value)}>2G Lite mode</button>
-          <span className="net" role="status">{offline ? "Offline" : "Online"}{pending.length > 0 ? " · " + pending.length + " queued" : ""}</span>
-          <button className="control" disabled={offline || syncing || !pending.length} onClick={() => void synchronize(true)}><Cloud size={15} /> {syncing ? "Syncing…" : "Sync now"}</button>
-        </>}
-      </div>
-
       {(headMessage || failed) && <div className="top-notice"><p role="status">{headMessage || failed?.failure}</p><button onClick={() => setHeadMessage("")} aria-label="Dismiss update"><X size={17} /></button></div>}
 
       <main className="content">
@@ -457,6 +447,47 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                             <div className="liquid-user-meta">
                               <small>{profile?.full_name ? profile.full_name.toLowerCase().replace(/\s+/g, ".") + "@relief-demo.example" : "fatima@relief-demo.example"}</small>
                             </div>
+
+                            <div className="liquid-status-section">
+                              <div className="liquid-status-head">
+                                <span className={"liquid-net-pill" + (offline ? " is-offline" : "")} role="status">
+                                  {offline ? "Offline" : "Online"}{pending.length > 0 ? " · " + pending.length + " queued" : ""}
+                                </span>
+                              </div>
+                              <div className="liquid-action-buttons">
+                                <button
+                                  type="button"
+                                  className={"liquid-action-btn" + (!fixtureOnline ? " is-active" : "")}
+                                  aria-pressed={!fixtureOnline}
+                                  onClick={() => setFixtureOnline(value => !value)}
+                                >
+                                  <Radio size={15} />
+                                  <span>Simulate network drop</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className={"liquid-action-btn" + (lite ? " is-active" : "")}
+                                  aria-pressed={lite}
+                                  onClick={() => setLite(value => !value)}
+                                >
+                                  <Wifi size={15} />
+                                  <span>2G Lite mode</span>
+                                </button>
+                                {pending.length > 0 && (
+                                  <button
+                                    type="button"
+                                    className="liquid-action-btn"
+                                    disabled={offline || syncing}
+                                    onClick={() => void synchronize(true)}
+                                  >
+                                    <Cloud size={15} />
+                                    <span>{syncing ? "Syncing…" : "Sync now"}</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="liquid-menu-divider" />
 
                             <div className="liquid-action-buttons">
                               <button

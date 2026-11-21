@@ -3472,6 +3472,50 @@ html, body {
   color: #ffffff;
 }
 
+.liquid-status-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.liquid-status-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.liquid-status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: rgba(248, 250, 252, 0.78);
+}
+.liquid-net-pill {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.14rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(52, 199, 89, 0.22);
+  color: #bbf7d0;
+  border: 1px solid rgba(52, 199, 89, 0.4);
+}
+.liquid-net-pill.is-offline {
+  background: rgba(255, 149, 0, 0.22);
+  color: #fed7aa;
+  border-color: rgba(255, 149, 0, 0.45);
+}
+.liquid-action-buttons button.is-active {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.liquid-action-buttons button.is-active:hover:not(:disabled) {
+  background: #1e293b;
+  color: #ffffff;
+}
 .liquid-action-buttons button {
   background: rgba(255, 255, 255, 0.92);
   color: #0f172a;
