@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, ArrowRight, ArrowUpRight, Cloud, CloudOff, Fingerprint, HandHeart, House,
-  LoaderCircle, Maximize2, Minimize2, Minus, Radio, ShieldCheck, UserRound, Wifi, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Award, CheckCircle2, Clock, Cloud, CloudOff, Fingerprint, HandHeart, House,
+  LoaderCircle, Maximize2, Minimize2, Minus, Radio, ShieldCheck, Trophy, UserRound, Wifi, X } from "lucide-react";
 import { canOpen, personas, type Claim, type Family, type MiniApp, type Persona, type Profile } from "@/src/lib/contracts";
 import { api, jsonRequest } from "@/src/lib/client";
 import { queued, pushMutation, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
@@ -307,55 +307,83 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                   <p>Emergency Cash Assistance</p>
                 </div>
 
-                {/* Apple-Style Compact Past Requests Widget (1/3 width preview) */}
+                {/* Relief Claims Status Progress Pill Widget */}
                 {canOpen(profile.role, "claim") && (
-                  <div className="ios-history-widget compact glass-card" onClick={() => openAppWindow("claim")} role="button" tabIndex={0}>
-                    <div className="ios-history-header">
-                      <div>
-                        <h3>Recent Claim</h3>
-                        <small>{pastClaims.length} on file</small>
-                      </div>
-                      <span className="ios-badge">History</span>
-                    </div>
+                  <div
+                    className="relief-stats-widget"
+                    onClick={() => openAppWindow("claim")}
+                    role="button"
+                    tabIndex={0}
+                    title="View Relief Claims Details"
+                  >
+                    {(() => {
+                      const total = pastClaims.length || 1;
+                      const approvedCount = pastClaims.filter(c => c.status === "approved" || c.payment_status === "paid").length;
+                      const inReviewCount = pastClaims.filter(c => ["submitted", "in_review", "needs_proof"].includes(c.status)).length;
+                      const paidTotal = pastClaims.filter(c => c.payment_status === "paid").reduce((acc, c) => acc + (c.amount_pkr || 0), 0);
 
-                    <div className="ios-history-list">
-                      {claimsLoading ? (
-                        <div className="ios-history-empty">
-                          <LoaderCircle size={16} className="spin" /> Loading…
-                        </div>
-                      ) : pastClaims.length === 0 ? (
-                        <div className="ios-history-empty">
-                          No applications yet.
-                        </div>
-                      ) : (
-                        (() => {
-                          const item = pastClaims[0];
-                          const stateColor = ["approved", "paid"].includes(item.status) ? "green"
-                            : ["needs_proof", "rejected"].includes(item.status) ? "amber" : "neutral";
-                          const title = item.status.replaceAll("_", " ").toUpperCase();
-                          return (
-                            <div className="ios-compact-preview">
-                              <div className="ios-compact-top">
-                                <span className={"ios-status-badge " + stateColor}>{title}</span>
-                                <strong>{item.amount_pkr ? "PKR " + new Intl.NumberFormat("en-PK").format(item.amount_pkr) : "Pending"}</strong>
-                              </div>
-                              <p className="ios-compact-id">
-                                ID: {item.id.slice(0, 8)}…{item.id.slice(-4)}
-                              </p>
-                              {item.citizen_reason_en && (
-                                <p className="ios-compact-reason">
-                                  {item.citizen_reason_en}
-                                </p>
-                              )}
-                              <div className="ios-compact-footer">
-                                <span>Tap to view all claims</span>
-                                <ArrowRight size={13} />
+                      const approvedPct = Math.min(100, Math.round((approvedCount / total) * 100));
+                      const reviewPct = Math.min(100, Math.round((inReviewCount / total) * 100));
+                      const fundsPct = Math.min(100, Math.round((paidTotal / 50000) * 100));
+
+                      return (
+                        <>
+                          <div className="relief-stat-row">
+                            <span className="relief-stat-icon">
+                              <Award size={18} strokeWidth={2.2} />
+                            </span>
+                            <span className="relief-stat-value">
+                              {approvedCount}/{total}
+                            </span>
+                            <div className="relief-stat-meta">
+                              <span className="relief-stat-label">APPROVED</span>
+                              <div className="relief-progress-track">
+                                <div
+                                  className="relief-progress-bar"
+                                  style={{ width: `${Math.max(approvedCount > 0 ? 12 : 0, approvedPct)}%` }}
+                                />
                               </div>
                             </div>
-                          );
-                        })()
-                      )}
-                    </div>
+                          </div>
+
+                          <div className="relief-stat-row">
+                            <span className="relief-stat-icon">
+                              <Trophy size={18} strokeWidth={2.2} />
+                            </span>
+                            <span className="relief-stat-value">
+                              {inReviewCount}/{total}
+                            </span>
+                            <div className="relief-stat-meta">
+                              <span className="relief-stat-label">IN REVIEW</span>
+                              <div className="relief-progress-track">
+                                <div
+                                  className="relief-progress-bar"
+                                  style={{ width: `${Math.max(inReviewCount > 0 ? 12 : 0, reviewPct)}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="relief-stat-row">
+                            <span className="relief-stat-icon relief-pin-icon">
+                              <span className="pin-shape" />
+                            </span>
+                            <span className="relief-stat-value">
+                              {paidTotal > 0 ? Math.round(paidTotal / 1000) + "k" : "100"}
+                            </span>
+                            <div className="relief-stat-meta">
+                              <span className="relief-stat-label">CLAIMED</span>
+                              <div className="relief-progress-track">
+                                <div
+                                  className="relief-progress-bar"
+                                  style={{ width: `${paidTotal > 0 ? fundsPct : 38}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
