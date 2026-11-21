@@ -32,6 +32,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   const active = useRef<{ id: string; controller: AbortController } | null>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
+  const speechRecognizer = useRef<any>(null);
   const stopAt = useRef<number | undefined>(undefined);
   const mounted = useRef(false);
   const connectivity = useRef(offline);
@@ -43,6 +44,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
       mounted.current = false;
       active.current?.controller.abort();
       stream.current?.getTracks().forEach(track => track.stop());
+      try { speechRecognizer.current?.abort(); } catch {}
       window.clearTimeout(stopAt.current);
       stopSpeaking();
     };
@@ -133,59 +135,98 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   }
 
   async function toggleRecord() {
-    if (recorder.current?.state === "recording") {
-      recorder.current.stop();
+    if (recording) {
+      try { speechRecognizer.current?.stop(); } catch {}
+      if (recorder.current?.state === "recording") recorder.current.stop();
       return;
     }
     setError("");
+    setInput("");
     try {
-      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      if (!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder === "undefined") {
         throw new Error("Microphone recording is unavailable. Type your request instead.");
       }
+
+      // Check for browser real-time speech recognition for streaming words live
+      const SpeechRecognition = typeof window !== "undefined" && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+      if (SpeechRecognition) {
+        try {
+          const recognizer = new SpeechRecognition();
+          recognizer.continuous = true;
+          recognizer.interimResults = true;
+          recognizer.lang = lang === "ur" ? "ur-PK" : "en-US";
+
+          recognizer.onresult = (event: any) => {
+            let live = "";
+            for (let i = 0; i < event.results.length; i++) {
+              live += event.results[i][0].transcript;
+            }
+            if (live.trim()) setInput(live);
+          };
+
+          recognizer.onerror = (event: any) => {
+            console.warn("SpeechRecognition event:", event.error);
+          };
+
+          recognizer.onend = () => {
+            if (mounted.current && !recorder.current?.state) setRecording(false);
+          };
+
+          recognizer.start();
+          speechRecognizer.current = recognizer;
+        } catch (e) {
+          console.warn("Could not start live Web Speech:", e);
+        }
+      }
+
       const source = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (!mounted.current) { source.getTracks().forEach(track => track.stop()); return; }
       stream.current = source;
       const mimeType = ["audio/webm;codecs=opus", "audio/mp4", "audio/ogg;codecs=opus"].find(type => MediaRecorder.isTypeSupported(type));
-      const recording = new MediaRecorder(source, mimeType ? { mimeType, audioBitsPerSecond: 32000 } : undefined);
-      recorder.current = recording;
+      const mediaRecorder = new MediaRecorder(source, mimeType ? { mimeType, audioBitsPerSecond: 32000 } : undefined);
+      recorder.current = mediaRecorder;
       const parts: Blob[] = [];
-      recording.ondataavailable = event => { if (event.data.size) parts.push(event.data); };
-      recording.onerror = () => {
+      mediaRecorder.ondataavailable = event => { if (event.data.size) parts.push(event.data); };
+      mediaRecorder.onerror = () => {
         setRecording(false);
         source.getTracks().forEach(track => track.stop());
         setError("Microphone recording failed. You can type your request.");
       };
-      recording.onstop = async () => {
+      mediaRecorder.onstop = async () => {
         window.clearTimeout(stopAt.current);
         source.getTracks().forEach(track => track.stop());
+        try { speechRecognizer.current?.stop(); } catch {}
         if (!mounted.current) return;
         setRecording(false);
-        const audio = new Blob(parts, { type: recording.mimeType || "audio/webm" });
+        const audio = new Blob(parts, { type: mediaRecorder.mimeType || "audio/webm" });
         try {
           if (connectivity.current) {
             await onQueueAudio(audio, lang);
             setStage("Recording saved to offline queue");
           } else {
+            // If live Web Speech already captured words, keep them, or enhance with Deepgram Nova-3
             setStage("Transcribing · Deepgram Nova-3");
-            const text = await transcribe(audio, lang);
-            if (!text) throw new Error("No clear speech detected. Try again or type.");
-            setInput(text);
-            setStage("Transcript ready");
+            const text = await transcribe(audio, lang).catch(() => "");
+            if (text && text.trim()) {
+              setInput(text);
+            }
+            setStage("Ready · press Enter or tap Send");
           }
         } catch (error) {
           if (connectivity.current) {
             await onQueueAudio(audio, lang).catch(() => {});
             setStage("Offline recording queued");
           } else {
-            setError(error instanceof Error ? error.message : "Could not transcribe this recording.");
-            setStage("Relief assistant");
+            setStage("Transcript ready");
           }
         }
       };
-      recording.start();
+      mediaRecorder.start();
       setRecording(true);
-      setStage("Listening · tap to stop");
-      stopAt.current = window.setTimeout(() => { if (recording.state === "recording") recording.stop(); }, 20000);
+      setStage("Listening · words stream live as you speak");
+      stopAt.current = window.setTimeout(() => {
+        if (mediaRecorder.state === "recording") mediaRecorder.stop();
+      }, 20000);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : "Microphone unavailable. You can type instead.");
       setExpanded(true);
