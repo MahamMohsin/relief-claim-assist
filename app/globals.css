@@ -1,5 +1,29 @@
 @import url("https://fonts.cdnfonts.com/css/sf-pro-display");
 
+@font-face {
+  font-family: "Geist";
+  font-weight: 400;
+  font-style: normal;
+  src: url("/fonts/Geist-400.woff2") format("woff2");
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist";
+  font-weight: 500;
+  font-style: normal;
+  src: url("/fonts/Geist-500.woff2") format("woff2");
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-weight: 500;
+  font-style: normal;
+  src: url("/fonts/GeistMono-500.woff2") format("woff2");
+  font-display: swap;
+}
+
 @import "tailwindcss";
 
 :root {

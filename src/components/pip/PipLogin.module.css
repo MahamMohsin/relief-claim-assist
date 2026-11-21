@@ -1,0 +1,437 @@
+/* Pip Login CSS Modules */
+:root {
+  --page: #e6e4df;
+  --stage: 1080px;
+  --stage-glow: radial-gradient(ellipse at 50% 40%, #efeee9 0%, #e3e1db 70%, #dad7d0 100%);
+  --scene-zoom: translateY(-20px) scale(1.18);
+  --pip-font: Geist, -apple-system, BlinkMacSystemFont, sans-serif;
+  --pip-mono: "Geist Mono", monospace;
+  --pip-ink: #151515;
+  --pip-muted: #8a877f;
+  --pip-placeholder: #9a978f;
+  --pip-white: #fff;
+  --pip-error: #d93f44;
+  --card: #fbfaf8;
+  --card-rim: rgba(0, 0, 0, 0.06);
+  --card-radius: 32px;
+  --card-pad: 44px;
+  --cap-size: 12px;
+  --cap-tracking: 1px;
+  --title-size: 40px;
+  --title-weight: 500;
+  --title-tracking: -1.2px;
+  --field-h: 56px;
+  --field-fill: #f1efeb;
+  --field-rim: rgba(0, 0, 0, 0.08);
+  --field-size: 17px;
+  --label-w: 96px;
+  --label-size: 14px;
+  --dots-size: 20px;
+  --dots-tracking: 4px;
+  --caret-w: 2px;
+  --caret-h: 22px;
+  --button: #151515;
+  --pip-green: #8ff0c2;
+  --led-dark: #0a0a0b;
+}
+
+.pipModalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.closeButton {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: #151515;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  z-index: 2000;
+  transition: transform 0.15s, background 0.15s;
+}
+
+.closeButton:hover {
+  transform: scale(1.08);
+  background: #ffffff;
+}
+
+.stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--stage);
+  height: var(--stage);
+  margin: calc(var(--stage) / -2) 0 0 calc(var(--stage) / -2);
+  overflow: hidden;
+  font-family: var(--pip-font);
+  color: var(--pip-ink);
+  background: var(--stage-glow);
+  user-select: none;
+  border-radius: 28px;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.45);
+}
+
+.scene {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--stage);
+  height: var(--stage);
+  transform-origin: 540px 560px;
+  transform: var(--scene-zoom);
+}
+
+/* ---------- Pip ---------- */
+.pip {
+  position: absolute;
+  left: 640px;
+  top: 292px;
+  width: 200px;
+  height: 190px;
+  transform-origin: 100px 190px;
+}
+.antenna {
+  position: absolute;
+  left: 96px;
+  top: -32px;
+  width: 8px;
+  height: 38px;
+  transform-origin: 4px 38px;
+}
+.stem {
+  position: absolute;
+  left: 2px;
+  top: 6px;
+  width: 4px;
+  height: 34px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #c9c5bc, #e4e1da 50%, #bdb8ae);
+}
+.ball {
+  position: absolute;
+  left: -7px;
+  top: -10px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #fff 0 18%, #eeebe5 46%, #c8c3b9 100%);
+}
+.glow {
+  position: absolute;
+  left: -7px;
+  top: -10px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 32%, #f2fff9 0 16%, #8ff0c2 52%, #3fbf86 100%);
+  opacity: 0;
+}
+.halo {
+  position: absolute;
+  left: -23px;
+  top: -26px;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(143, 240, 194, 0.55), rgba(143, 240, 194, 0) 70%);
+  opacity: 0;
+}
+.ear {
+  position: absolute;
+  top: 54px;
+  width: 22px;
+  height: 60px;
+  border-radius: 11px;
+  background: linear-gradient(90deg, #cfcbc2 0%, #ebe8e2 55%, #f6f4f0 100%);
+}
+.earLeft {
+  left: -12px;
+}
+.earRight {
+  right: -12px;
+  transform: scaleX(-1);
+}
+.earSlot {
+  position: absolute;
+  left: 6px;
+  top: 24px;
+  width: 6px;
+  height: 12px;
+  border-radius: 3px;
+  background: #bfbab0;
+}
+.earLight {
+  position: absolute;
+  left: 6px;
+  top: 24px;
+  width: 6px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--pip-green);
+  opacity: 0;
+}
+.head {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 200px;
+  height: 172px;
+  border-radius: 74px;
+  background: radial-gradient(140% 120% at 30% 16%, #ffffff 0%, #f4f2ee 36%, #e2dfd8 78%, #d3cfc6 100%);
+  box-shadow:
+    inset -12px -16px 28px rgba(70, 60, 40, 0.12),
+    inset 10px 12px 20px rgba(255, 255, 255, 0.95),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.04);
+}
+.spec {
+  position: absolute;
+  left: 30px;
+  top: 10px;
+  width: 84px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 70%);
+  filter: blur(2px);
+}
+.bezel {
+  position: absolute;
+  left: 14px;
+  top: 16px;
+  width: 172px;
+  height: 132px;
+  border-radius: 56px;
+  background: linear-gradient(160deg, #2a2b2e, #111214 60%, #1c1d20);
+}
+.screen {
+  position: absolute;
+  left: 18px;
+  top: 20px;
+  width: 164px;
+  height: 124px;
+  border-radius: 52px;
+  background: radial-gradient(120% 120% at 50% 40%, #121316 0%, var(--led-dark) 70%);
+  overflow: hidden;
+}
+.led,
+.ledGlow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 164px;
+  height: 124px;
+}
+.ledGlow {
+  filter: blur(4px);
+  opacity: 0.75;
+}
+.glass {
+  position: absolute;
+  inset: 0;
+  border-radius: 52px;
+  background:
+    radial-gradient(120% 80% at 30% -10%, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 45%),
+    linear-gradient(0deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 30%);
+}
+.arc {
+  position: absolute;
+  left: 22px;
+  top: 8px;
+  width: 96px;
+  height: 30px;
+  border-radius: 50%;
+  border-top: 2px solid rgba(255, 255, 255, 0.18);
+  transform: rotate(-8deg);
+}
+.hand {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 48px;
+  height: 32px;
+  z-index: 6;
+}
+.palm {
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  background: radial-gradient(130% 130% at 30% 18%, #ffffff 0%, #f0eee9 45%, #d8d4cb 100%);
+  box-shadow:
+    inset -3px -5px 9px rgba(70, 60, 40, 0.13),
+    inset 3px 3px 6px rgba(255, 255, 255, 0.9);
+}
+.finger {
+  position: absolute;
+  top: 4px;
+  width: 1.5px;
+  height: 10px;
+  border-radius: 1px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* ---------- the card ---------- */
+.card {
+  position: absolute;
+  left: 200px;
+  top: 430px;
+  width: 680px;
+  height: 388px;
+  border-radius: var(--card-radius);
+  background: var(--card);
+  border: 1px solid var(--card-rim);
+  padding: var(--card-pad);
+}
+.cap {
+  font-family: var(--pip-mono);
+  font-size: var(--cap-size);
+  letter-spacing: var(--cap-tracking);
+  text-transform: uppercase;
+  color: var(--pip-muted);
+}
+.title {
+  font-size: var(--title-size);
+  font-weight: var(--title-weight);
+  letter-spacing: var(--title-tracking);
+  margin-top: 12px;
+}
+.field {
+  position: absolute;
+  left: var(--card-pad);
+  right: var(--card-pad);
+  height: var(--field-h);
+  border-radius: calc(var(--field-h) / 2);
+  background: var(--field-fill);
+  border: 1px solid var(--field-rim);
+  display: flex;
+  align-items: center;
+  padding: 0 22px;
+  font-size: var(--field-size);
+  color: var(--pip-placeholder);
+}
+.fieldEmail {
+  top: 144px;
+}
+.fieldPassword {
+  top: 212px;
+}
+.field.focused {
+  border-color: var(--pip-ink);
+  background: var(--pip-white);
+}
+.label {
+  width: var(--label-w);
+  font-size: var(--label-size);
+  color: var(--pip-muted);
+}
+.value {
+  color: var(--pip-ink);
+}
+.dots {
+  letter-spacing: var(--dots-tracking);
+  font-size: var(--dots-size);
+  color: var(--pip-ink);
+}
+.caret {
+  display: inline-block;
+  width: var(--caret-w);
+  height: var(--caret-h);
+  background: var(--pip-ink);
+  margin-left: 1px;
+  vertical-align: middle;
+  opacity: 0;
+}
+.error {
+  position: absolute;
+  right: 22px;
+  font-size: 14px;
+  color: var(--pip-error);
+  opacity: 0;
+}
+.button {
+  position: absolute;
+  left: var(--card-pad);
+  right: var(--card-pad);
+  top: 288px;
+  height: var(--field-h);
+  border-radius: calc(var(--field-h) / 2);
+  background: var(--button);
+  color: var(--pip-white);
+  font-size: var(--field-size);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+}
+.buttonLabel {
+  position: absolute;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: var(--pip-white);
+}
+
+/* Quick persona switcher bottom bar */
+.personaBar {
+  position: absolute;
+  bottom: 18px;
+  left: var(--card-pad);
+  right: var(--card-pad);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  z-index: 10;
+}
+.personaBtn {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 9999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pip-muted);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.personaBtn:hover {
+  background: #ffffff;
+  color: #151515;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+/* ---------- the cursor ---------- */
+.cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 30px;
+  height: 30px;
+  z-index: 20;
+}
+.cursor svg {
+  overflow: visible;
+  transform-origin: 4px 4px;
+}

@@ -14,7 +14,7 @@ import { MiniApps, type ViewContext } from "./MiniApps";
 import { VoiceDock } from "./os/VoiceDock";
 import type { UIAction } from "@/src/lib/contracts";
 
-import { AuthModal } from "./auth/AuthModal";
+import { PipLoginModal } from "./pip/PipLoginModal";
 
 const roleEntries = Object.entries(personas) as [Persona, (typeof personas)[Persona]][];
 const tools = Object.keys(apps) as MiniApp[];
@@ -690,8 +690,8 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
         </section>
       </div>}
 
-      {/* Spotify-Style Signup/Login Screen */}
-      <AuthModal
+      {/* Pip Login Screen (Companion Robot & LED Matrix Interactive Loop) */}
+      <PipLoginModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         onSelectPersona={signIn}
