@@ -8,3 +8,4 @@ env.download
 .agents/
 skills-lock.json
 supabase/.temp/
+.tmp-tegaki/
