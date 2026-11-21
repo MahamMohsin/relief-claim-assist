@@ -26,6 +26,11 @@ const screenContextSchema = z.object({
   privacy: z.object({
     field: z.string().max(40),
     value: z.string().max(160),
+    helpers: z.array(z.object({
+      id: z.string().max(40),
+      name: z.string().max(80),
+      status: z.string().max(20),
+    })).optional(),
   }).optional(),
 }).optional();
 
@@ -83,8 +88,9 @@ export async function POST(request: Request) {
           if (cancelled) return;
           confidence = decision.confidence;
           const threshold = scheme.config.confidence_threshold;
+          const isGreeting = decision.label === "greeting";
           const explicitTarget = decision.app && canOpen(profile.role, decision.app) ? decision.app : null;
-          const explicitAccepted = Boolean(explicitTarget) && confidence >= threshold;
+          const explicitAccepted = (Boolean(explicitTarget) && confidence >= threshold) || isGreeting;
 
           // If the user is already inside an open mini-app and sends a follow-up (e.g., "15000 and 4 people",
           // "next step", "attach readable sample", "yes save it"), stay in the active app instead of asking
@@ -95,22 +101,22 @@ export async function POST(request: Request) {
             : null;
           const continuedInActive = !explicitAccepted && decision.label !== "ambiguous" && Boolean(validActiveApp);
 
-          target = explicitAccepted ? explicitTarget : continuedInActive ? validActiveApp : null;
-          if (continuedInActive) {
+          target = explicitTarget ?? (continuedInActive ? validActiveApp : null);
+          if (continuedInActive || isGreeting) {
             confidence = Math.max(confidence, threshold, 0.92);
           }
-          const accepted = Boolean(target) && confidence >= threshold;
+          const accepted = isGreeting || (Boolean(target) && confidence >= threshold);
           emitAction({
             type: "show_jev_badge",
             label: continuedInActive ? `${target} (active context)` : decision.label,
             confidence,
-            route: accepted && target ? target : "clarification",
+            route: accepted && target ? target : isGreeting ? "general" as MiniApp : "clarification",
             model: decision.model,
           });
           await gateway("agent_trace", { citizenId, event: "jev_route", model: decision.model, confidence,
-            outcome: accepted ? target : "clarification", detail: { route: decision.label, continuedInActive, threshold, runId } });
+            outcome: accepted ? (target ?? "greeting") : "clarification", detail: { route: decision.label, continuedInActive, threshold, runId } });
           if (!accepted) {
-            const options = (Object.keys(appRoles) as MiniApp[]).filter(app => canOpen(profile.role, app)).slice(0, 3);
+            const options = (Object.keys(appRoles) as MiniApp[]).filter(app => canOpen(profile.role, app));
             emitAction({ type: "ask_clarification", question: locale === "ur"
               ? "مجھے یقین نہیں کہ آپ کون سی خدمت چاہتے ہیں۔ براہ کرم ایک سروس منتخب کریں۔"
               : "I’m not sure which service you mean. Which mini-app would you like to open?", options });
@@ -180,6 +186,19 @@ export async function POST(request: Request) {
               guidance = locale === "ur"
                 ? "نئی ریلیف درخواست کا فارم کھول دیا گیا ہے۔ اپنی آمدنی اور افراد کی تعداد درج کریں۔"
                 : "Opened Relief Claim and started a new claim form for you. Enter your monthly income and household size to continue.";
+            }
+          } else if (target === "privacy") {
+            if (/revoke|remove|access|permission|consent|helper|grant/i.test(prompt)) {
+              const consent = /grant|allow|restore/i.test(prompt) ? "granted" as const : "revoked" as const;
+              emitAction({ type: "privacy_helper_consent_visual", consent });
+              guidance = locale === "ur"
+                ? (consent === "revoked" ? "مائی پرائیویسی کھول کر ہیلپر کی رسائی منسوخ کر دی گئی ہے۔" : "مائی پرائیویسی کھول کر ہیلپر کی رسائی بحال کر دی گئی ہے۔")
+                : (consent === "revoked" ? "Opened My Privacy and revoked your helper's access." : "Opened My Privacy and granted your helper access.");
+            } else {
+              emitAction({ type: "open_mini_app", app: "privacy" });
+              guidance = locale === "ur"
+                ? "مائی پرائیویسی کھول دی گئی ہے۔ آپ رضامندی کا انتظام کر سکتے ہیں یا ڈیٹا کی درستگی کی درخواست کر سکتے ہیں۔"
+                : "Opened My Privacy for you. You can manage consent or request a record correction.";
             }
           } else {
             guidance = locale === "ur"

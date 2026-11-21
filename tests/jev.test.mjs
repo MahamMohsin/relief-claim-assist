@@ -12,6 +12,8 @@ test("Jev mock preserves decisions and abstains on conflicting intents", async (
   assert.equal((await routeIntent("بیواؤں کے لیے امداد کی پالیسی کیا ہے؟")).app, "policy");
   assert.equal((await routeIntent("Check that SMS and revoke consent")).app, null);
   assert((await routeIntent("Hmm perhaps")).confidence < 0.7);
+  assert.equal((await routeIntent("Hello?")).label, "greeting");
+  assert.equal((await routeIntent("Can you revoke my helper's permissions from my account, please?")).app, "privacy");
   assert.equal((await classifyScam("Send your OTP now", "")).label, "scam");
 });
 
