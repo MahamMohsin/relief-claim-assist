@@ -4243,6 +4243,19 @@ html, body {
   font-weight: 750;
   font-size: 0.8rem;
 }
+.kanban-tamper-score {
+  font-size: 0.73rem;
+  color: #525252;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kanban-tamper-score strong {
+  font-weight: 750;
+}
 .kanban-progress-pct { font-size: 0.78rem; font-weight: 780; }
 
 .kanban-card-foot { display: flex; align-items: center; gap: 0.6rem; color: var(--soft-ink); font-size: 0.72rem; }

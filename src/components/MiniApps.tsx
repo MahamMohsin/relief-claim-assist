@@ -1064,6 +1064,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                   const verified = docs.filter(doc => ["genuine", "readable"].includes(doc.verified_status)).length;
                   const initials = (item.citizen_name ?? "?").split(" ").map(word => word[0]).slice(0, 2).join("");
                   const confColor = item.ai_confidence === null ? "#737373" : item.ai_confidence < 0.5 ? "#b91c1c" : item.ai_confidence < 0.75 ? "#b45309" : "#15803d";
+                  const hasSuspect = docs.some(d => d.verified_status === "suspect" || Boolean(d.tamper_reason));
                   return <div
                     role="button"
                     tabIndex={0}
@@ -1153,6 +1154,12 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                           Reliability score:{" "}
                           <strong style={{ color: confColor }}>
                             {item.ai_confidence !== null ? pc(item.ai_confidence) : "—"}
+                          </strong>
+                        </span>
+                        <span className="kanban-tamper-score" title="Tamper Evaluation">
+                          Tamper evaluation:{" "}
+                          <strong style={{ color: hasSuspect ? "#dc2626" : "#16a34a" }}>
+                            {hasSuspect ? "Suspect document" : "Clean verification"}
                           </strong>
                         </span>
                       </div>
