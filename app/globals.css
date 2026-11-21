@@ -1166,7 +1166,221 @@ th { background: var(--faint); color: var(--forest); }
   }
 }
 
-.modal-scrim { position: fixed; inset: 0; z-index: 12; display: grid; place-items: center; background: #12292287; padding: .6rem; }
+/* ========================================================
+   DESKTOP / IPAD MULTI-WINDOW MANAGER
+   ======================================================== */
+
+html, body {
+  overflow-x: hidden;
+  height: 100%;
+}
+
+.workspace {
+  min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  max-width: none;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+}
+
+.dashboard-canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 1.5rem 2rem 6rem;
+  box-sizing: border-box;
+}
+
+.ios-app-running-dot {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
+}
+
+.desktop-window-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 10;
+}
+
+.desktop-window {
+  position: absolute;
+  pointer-events: auto;
+  width: min(840px, calc(100vw - 32px));
+  height: min(620px, calc(100vh - 120px));
+  background: #ffffff;
+  border-radius: 18px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28), 0 4px 16px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  resize: both;
+  min-width: 380px;
+  min-height: 320px;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.desktop-window.focused {
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.38), 0 6px 20px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(0, 113, 93, 0.4);
+}
+
+.desktop-window.maximized {
+  width: calc(100vw - 24px) !important;
+  height: calc(100vh - 110px) !important;
+  top: 36px !important;
+  left: 12px !important;
+  resize: none;
+  border-radius: 14px;
+}
+
+/* Apple-style window title bar */
+.desktop-window-titlebar {
+  height: 38px;
+  background: #f7f9f8;
+  border-bottom: 1px solid #e5ebe8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.85rem;
+  cursor: grab;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.desktop-window-titlebar:active {
+  cursor: grabbing;
+}
+
+.window-traffic-lights {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 70px;
+}
+
+.traffic-light {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: transparent;
+  transition: transform 0.1s, color 0.1s;
+}
+
+.traffic-light:hover {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.traffic-light.close {
+  background: #ff5f56;
+  border-color: #e0443e;
+}
+
+.traffic-light.close:hover {
+  color: #550000;
+}
+
+.traffic-light.minimize {
+  background: #ffbd2e;
+  border-color: #dea123;
+}
+
+.traffic-light.minimize:hover {
+  color: #553300;
+}
+
+.traffic-light.maximize {
+  background: #27c93f;
+  border-color: #1aab29;
+}
+
+.traffic-light.maximize:hover {
+  color: #004400;
+}
+
+.window-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.84rem;
+  font-weight: 650;
+  color: #111e1b;
+}
+
+.window-mini-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+}
+
+.window-titlebar-right {
+  width: 70px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.window-badge {
+  font-size: 0.68rem;
+  font-weight: 650;
+  background: rgba(0, 113, 93, 0.1);
+  color: var(--forest);
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  letter-spacing: 0.02em;
+}
+
+/* Independent scroll body for each application */
+.desktop-window-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1.25rem 1.45rem 2rem;
+  background: #ffffff;
+}
+
+/* Sleek Apple-style scrollbar inside windows */
+.desktop-window-body::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.desktop-window-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.desktop-window-body::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 9999px;
+}
+
+.desktop-window-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.32);
+}
 .modal { max-width: 760px; max-height: 90dvh; overflow-y: auto; width: 100%; padding: 1.15rem; background: var(--white); border-radius: 18px; }
 .modal .persona-grid { margin-top: .85rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .modal-foot { margin-top: .8rem; display: flex; justify-content: flex-end; }

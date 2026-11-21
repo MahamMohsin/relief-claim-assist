@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Cloud, CloudOff, Fingerprint, HandHeart, House,
-  LoaderCircle, Radio, ShieldCheck, UserRound, Wifi, X } from "lucide-react";
+  LoaderCircle, Maximize2, Minimize2, Minus, Radio, ShieldCheck, UserRound, Wifi, X } from "lucide-react";
 import { canOpen, personas, type Claim, type Family, type MiniApp, type Persona, type Profile } from "@/src/lib/contracts";
 import { api, jsonRequest } from "@/src/lib/client";
 import { queued, pushMutation, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
@@ -19,7 +19,9 @@ const tools = Object.keys(apps) as MiniApp[];
 
 export function Workspace({ initialProfile, showLogin = false }: { initialProfile: Profile | null; showLogin?: boolean }) {
   const [profile, setProfile] = useState(initialProfile);
-  const [selection, setSelection] = useState<MiniApp | null>(null);
+  const [openApps, setOpenApps] = useState<MiniApp[]>([]);
+  const [activeApp, setActiveApp] = useState<MiniApp | null>(null);
+  const [windowState, setWindowState] = useState<Record<MiniApp, { maximized?: boolean; width?: number; height?: number }>>({} as any);
   const [chooser, setChooser] = useState(showLogin);
   const [family, setFamily] = useState<Family | null>(null);
   const [fixtureOnline, setFixtureOnline] = useState(true);
@@ -43,7 +45,6 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
   const citizen = profile?.role === "helper" ? family?.id ?? null : profile?.citizen_id ?? null;
   const scope = citizen ?? "self";
   const owner = profile?.id;
-  const current = selection ? apps[selection] : null;
   const available = profile ? tools.filter(tool => canOpen(profile.role, tool)) : [];
 
   useEffect(() => {
@@ -115,10 +116,34 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
     return id;
   };
 
-  function changeApp(next: MiniApp | null) {
-    if (next && (!profile || !canOpen(profile.role, next))) return;
+  function openAppWindow(appId: MiniApp) {
+    if (!profile || !canOpen(profile.role, appId)) return;
     setAlert("");
-    setSelection(next);
+    setOpenApps(prev => prev.includes(appId) ? prev : [...prev, appId]);
+    setActiveApp(appId);
+  }
+
+  function closeAppWindow(appId: MiniApp) {
+    setOpenApps(prev => prev.filter(id => id !== appId));
+    if (activeApp === appId) {
+      const remaining = openApps.filter(id => id !== appId);
+      setActiveApp(remaining.length > 0 ? remaining[remaining.length - 1] : null);
+    }
+  }
+
+  function toggleMaximize(appId: MiniApp) {
+    setWindowState(prev => ({
+      ...prev,
+      [appId]: { ...prev[appId], maximized: !prev[appId]?.maximized }
+    }));
+  }
+
+  function changeApp(next: MiniApp | null) {
+    if (next) {
+      openAppWindow(next);
+    } else {
+      setActiveApp(null);
+    }
   }
 
   async function clearContext() {
@@ -130,6 +155,8 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
     setAlert("");
     setPrefill(null);
     setPending([]);
+    setOpenApps([]);
+    setActiveApp(null);
   }
 
   async function signIn(persona: Persona) {
@@ -141,7 +168,8 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
       const next = await api<Profile>("profile");
       await clearContext();
       setProfile(next);
-      setSelection(null);
+      setOpenApps([]);
+      setActiveApp(null);
       setChooser(false);
     } catch (error) {
       setHeadMessage(error instanceof Error ? error.message : "Could not sign in.");
@@ -156,7 +184,8 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
       if (!response.ok) throw new Error("Could not sign out. Try again.");
       await clearContext();
       setProfile(null);
-      setSelection(null);
+      setOpenApps([]);
+      setActiveApp(null);
       setChooser(false);
       setHeadMessage("");
     } catch (error) {
@@ -170,7 +199,7 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
     await clearContext();
     setFamily(next);
     setHeadMessage("Previous session cleared. Active family: " + next.full_name + ".");
-    setSelection("claim");
+    openAppWindow("claim");
   }
 
   function dispatch(action: UIAction) {
@@ -233,123 +262,193 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
       {(headMessage || failed) && <div className="top-notice"><p role="status">{headMessage || failed?.failure}</p><button onClick={() => setHeadMessage("")} aria-label="Dismiss update"><X size={17} /></button></div>}
 
       <main className="content">
-        <LayoutGroup>
-          <AnimatePresence mode="wait" initial={false}>
-            {!profile ? (
-              <motion.div key="welcome" initial={{ opacity: motionDisabled ? 1 : 0 }} animate={{ opacity: 1 }} className="welcome">
-                <section className="hero">
-                  <div className="hero-art" aria-hidden="true"><i /><i /><i /><span /><span /></div>
-                  <div className="hero-content">
-                    <div className="hero-label"><span /> EMERGENCY CASH ASSISTANCE</div>
-                    <h1>Relief within<br />reach.</h1>
-                    <p>Apply for aid, check a payment, or help a family take the next step. Explore the full journey using a synthetic demo persona.</p>
-                    <a className="hero-button" href="#personas">Choose a persona <ArrowRight size={18} /></a>
-                  </div>
-                </section>
-                <section id="personas" aria-labelledby="persona-heading">
-                  <div className="section-heading"><div><h2 id="persona-heading">Enter the demo</h2><p>Choose a role to open its workspace.</p></div></div>
-                  <PersonaList onSelect={signIn} busy={busy} offline={offline} />
-                </section>
-              </motion.div>
-            ) : !selection || !current ? (
-              <motion.div key="home" initial={{ opacity: motionDisabled ? 1 : 0 }} animate={{ opacity: 1 }} className="dashboard-canvas">
-                {/* Top Row: Fatima Bibi + Compact Preview Tile side-by-side */}
-                <div className="ios-top-hero-row">
-                  <div className="ios-hero-name">
-                    <h1>Fatima Bibi</h1>
-                    <p>Emergency Cash Assistance</p>
-                  </div>
+        <AnimatePresence mode="wait" initial={false}>
+          {!profile ? (
+            <motion.div key="welcome" initial={{ opacity: motionDisabled ? 1 : 0 }} animate={{ opacity: 1 }} className="welcome">
+              <section className="hero">
+                <div className="hero-art" aria-hidden="true"><i /><i /><i /><span /><span /></div>
+                <div className="hero-content">
+                  <div className="hero-label"><span /> EMERGENCY CASH ASSISTANCE</div>
+                  <h1>Relief within<br />reach.</h1>
+                  <p>Apply for aid, check a payment, or help a family take the next step. Explore the full journey using a synthetic demo persona.</p>
+                  <a className="hero-button" href="#personas">Choose a persona <ArrowRight size={18} /></a>
+                </div>
+              </section>
+              <section id="personas" aria-labelledby="persona-heading">
+                <div className="section-heading"><div><h2 id="persona-heading">Enter the demo</h2><p>Choose a role to open its workspace.</p></div></div>
+                <PersonaList onSelect={signIn} busy={busy} offline={offline} />
+              </section>
+            </motion.div>
+          ) : (
+            <div className="dashboard-canvas">
+              {/* Top Row: Fatima Bibi + Compact Preview Tile side-by-side */}
+              <div className="ios-top-hero-row">
+                <div className="ios-hero-name">
+                  <h1>Fatima Bibi</h1>
+                  <p>Emergency Cash Assistance</p>
+                </div>
 
-                  {/* Apple-Style Compact Past Requests Widget (1/3 width preview) */}
-                  {canOpen(profile.role, "claim") && (
-                    <div className="ios-history-widget compact glass-card" onClick={() => changeApp("claim")} role="button" tabIndex={0}>
-                      <div className="ios-history-header">
-                        <div>
-                          <h3>Recent Claim</h3>
-                          <small>{pastClaims.length} on file</small>
-                        </div>
-                        <span className="ios-badge">History</span>
+                {/* Apple-Style Compact Past Requests Widget (1/3 width preview) */}
+                {canOpen(profile.role, "claim") && (
+                  <div className="ios-history-widget compact glass-card" onClick={() => openAppWindow("claim")} role="button" tabIndex={0}>
+                    <div className="ios-history-header">
+                      <div>
+                        <h3>Recent Claim</h3>
+                        <small>{pastClaims.length} on file</small>
                       </div>
-
-                      <div className="ios-history-list">
-                        {claimsLoading ? (
-                          <div className="ios-history-empty">
-                            <LoaderCircle size={16} className="spin" /> Loading…
-                          </div>
-                        ) : pastClaims.length === 0 ? (
-                          <div className="ios-history-empty">
-                            No applications yet.
-                          </div>
-                        ) : (
-                          (() => {
-                            const item = pastClaims[0];
-                            const stateColor = ["approved", "paid"].includes(item.status) ? "green"
-                              : ["needs_proof", "rejected"].includes(item.status) ? "amber" : "neutral";
-                            const title = item.status.replaceAll("_", " ").toUpperCase();
-                            return (
-                              <div className="ios-compact-preview">
-                                <div className="ios-compact-top">
-                                  <span className={"ios-status-badge " + stateColor}>{title}</span>
-                                  <strong>{item.amount_pkr ? "PKR " + new Intl.NumberFormat("en-PK").format(item.amount_pkr) : "Pending"}</strong>
-                                </div>
-                                <p className="ios-compact-id">
-                                  ID: {item.id.slice(0, 8)}…{item.id.slice(-4)}
-                                </p>
-                                {item.citizen_reason_en && (
-                                  <p className="ios-compact-reason">
-                                    {item.citizen_reason_en}
-                                  </p>
-                                )}
-                                <div className="ios-compact-footer">
-                                  <span>Tap to view all claims</span>
-                                  <ArrowRight size={13} />
-                                </div>
-                              </div>
-                            );
-                          })()
-                        )}
-                      </div>
+                      <span className="ios-badge">History</span>
                     </div>
-                  )}
-                </div>
 
-                {/* Apple iPad / Desktop App Grid (Icons with names below) */}
-                <div className="ios-desktop-grid">
-                  {available.map(id => {
-                    const item = apps[id];
-                    const Icon = item.icon;
-                    return (
-                      <motion.button
-                        layoutId={motionDisabled ? undefined : "app-" + id}
-                        className="ios-desktop-app"
-                        key={id}
-                        onClick={() => changeApp(id)}
-                        whileHover={motionDisabled ? undefined : { y: -4, scale: 1.05 }}
-                        whileTap={motionDisabled ? undefined : { scale: 0.95 }}
-                        transition={{ type: "spring", stiffness: 450, damping: 25 }}
-                      >
-                        <div className={"ios-desktop-icon " + item.color}>
-                          <Icon size={34} strokeWidth={2.1} />
+                    <div className="ios-history-list">
+                      {claimsLoading ? (
+                        <div className="ios-history-empty">
+                          <LoaderCircle size={16} className="spin" /> Loading…
                         </div>
-                        <span className="ios-desktop-label">{item.title}</span>
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              </motion.div>
-            ) : (
-              <motion.div key={selection + scope} initial={{ opacity: motionDisabled ? 1 : 0, y: motionDisabled ? 0 : 8 }} animate={{ opacity: 1, y: 0 }}>
-                <div className="breadcrumbs"><button onClick={() => changeApp(null)}><ArrowLeft size={17} /> All mini-apps</button></div>
-                <motion.section layoutId={motionDisabled ? undefined : "app-" + selection} className="mini-top">
-                  <span className={"app-icon " + current.color}><current.icon size={29} /></span>
-                  <div><h1>{current.title}</h1><p>{current.note}</p></div>
-                </motion.section>
-                {alert && <div className="notice warning" role="alert">{alert}</div>}
-                {context && <MiniApps app={selection} ctx={context} />}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </LayoutGroup>
+                      ) : pastClaims.length === 0 ? (
+                        <div className="ios-history-empty">
+                          No applications yet.
+                        </div>
+                      ) : (
+                        (() => {
+                          const item = pastClaims[0];
+                          const stateColor = ["approved", "paid"].includes(item.status) ? "green"
+                            : ["needs_proof", "rejected"].includes(item.status) ? "amber" : "neutral";
+                          const title = item.status.replaceAll("_", " ").toUpperCase();
+                          return (
+                            <div className="ios-compact-preview">
+                              <div className="ios-compact-top">
+                                <span className={"ios-status-badge " + stateColor}>{title}</span>
+                                <strong>{item.amount_pkr ? "PKR " + new Intl.NumberFormat("en-PK").format(item.amount_pkr) : "Pending"}</strong>
+                              </div>
+                              <p className="ios-compact-id">
+                                ID: {item.id.slice(0, 8)}…{item.id.slice(-4)}
+                              </p>
+                              {item.citizen_reason_en && (
+                                <p className="ios-compact-reason">
+                                  {item.citizen_reason_en}
+                                </p>
+                              )}
+                              <div className="ios-compact-footer">
+                                <span>Tap to view all claims</span>
+                                <ArrowRight size={13} />
+                              </div>
+                            </div>
+                          );
+                        })()
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Apple iPad / Desktop App Grid (Icons with names below) */}
+              <div className="ios-desktop-grid">
+                {available.map(id => {
+                  const item = apps[id];
+                  const Icon = item.icon;
+                  const isRunning = openApps.includes(id);
+                  return (
+                    <motion.button
+                      className={"ios-desktop-app" + (isRunning ? " running" : "")}
+                      key={id}
+                      onClick={() => openAppWindow(id)}
+                      whileHover={motionDisabled ? undefined : { y: -4, scale: 1.05 }}
+                      whileTap={motionDisabled ? undefined : { scale: 0.95 }}
+                      transition={{ type: "spring", stiffness: 450, damping: 25 }}
+                    >
+                      <div className={"ios-desktop-icon " + item.color}>
+                        <Icon size={34} strokeWidth={2.1} />
+                      </div>
+                      <span className="ios-desktop-label">{item.title}</span>
+                      {isRunning && <span className="ios-app-running-dot" />}
+                    </motion.button>
+                  );
+                })}
+              </div>
+
+              {/* Window Manager: Floating Desktop Windows with White BG, Header Controls & Independent Scroll */}
+              <div className="desktop-window-layer">
+                {openApps.map((appId, index) => {
+                  const appMeta = apps[appId];
+                  const isFocused = activeApp === appId;
+                  const state = windowState[appId] || {};
+                  const isMaximized = Boolean(state.maximized);
+                  const Icon = appMeta.icon;
+
+                  // Stagger initial positions for overlapping feel
+                  const offset = (index % 5) * 28;
+
+                  return (
+                    <motion.div
+                      key={appId}
+                      drag={!isMaximized}
+                      dragMomentum={false}
+                      initial={{ scale: 0.92, opacity: 0, y: 20 }}
+                      animate={{ scale: 1, opacity: 1, y: 0 }}
+                      exit={{ scale: 0.88, opacity: 0 }}
+                      style={{
+                        zIndex: isFocused ? 20 : 10 + index,
+                        top: isMaximized ? "36px" : `calc(50px + ${offset}px)`,
+                        left: isMaximized ? "12px" : `calc(max(20px, 50% - 440px) + ${offset}px)`,
+                      }}
+                      className={"desktop-window " + (isMaximized ? "maximized " : "") + (isFocused ? "focused " : "")}
+                      onPointerDown={() => setActiveApp(appId)}
+                    >
+                      {/* Window Title Bar */}
+                      <div className="desktop-window-titlebar">
+                        <div className="window-traffic-lights">
+                          <button
+                            type="button"
+                            className="traffic-light close"
+                            onClick={e => { e.stopPropagation(); closeAppWindow(appId); }}
+                            title="Close"
+                          >
+                            <X size={8} strokeWidth={3} />
+                          </button>
+                          <button
+                            type="button"
+                            className="traffic-light minimize"
+                            onClick={e => { e.stopPropagation(); setActiveApp(null); }}
+                            title="Minimize"
+                          >
+                            <Minus size={8} strokeWidth={3} />
+                          </button>
+                          <button
+                            type="button"
+                            className="traffic-light maximize"
+                            onClick={e => { e.stopPropagation(); toggleMaximize(appId); }}
+                            title={isMaximized ? "Restore" : "Maximize"}
+                          >
+                            {isMaximized ? <Minimize2 size={8} strokeWidth={3} /> : <Maximize2 size={8} strokeWidth={3} />}
+                          </button>
+                        </div>
+
+                        <div className="window-title-group">
+                          <span className={"window-mini-icon " + appMeta.color}>
+                            <Icon size={14} />
+                          </span>
+                          <span className="window-title-text">{appMeta.title}</span>
+                        </div>
+
+                        <div className="window-titlebar-right">
+                          <span className="window-badge">{appMeta.badge || "App"}</span>
+                        </div>
+                      </div>
+
+                      {/* Window Body with isolated white background & its own scrollbar */}
+                      <div className="desktop-window-body">
+                        {alert && activeApp === appId && (
+                          <div className="notice warning" role="alert">{alert}</div>
+                        )}
+                        {context && <MiniApps app={appId} ctx={context} />}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </AnimatePresence>
       </main>
 
       {!profile && <footer className="site-footer"><span><HandHeart size={17} /> Relief Claim Assist</span><Link href="/docs">API documentation <ArrowUpRight size={15} /></Link></footer>}
