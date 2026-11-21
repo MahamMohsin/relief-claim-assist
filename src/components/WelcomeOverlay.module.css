@@ -4,7 +4,7 @@
    backdrop rather than over sharp app chrome. The overlay is portalled to the
    body, so it stays crisp on top of this. */
 :global(.welcoming-workspace) {
-  filter: blur(22px) brightness(0.72) saturate(1.05);
+  filter: blur(12px) brightness(0.9) saturate(1.08);
   transition: filter 0.45s ease;
   pointer-events: none;
 }
@@ -25,11 +25,11 @@
   padding: 1.5rem;
   background: radial-gradient(
     ellipse at center,
-    rgba(8, 26, 23, 0.5),
-    rgba(4, 14, 12, 0.78)
+    rgba(10, 30, 26, 0.22),
+    rgba(6, 18, 16, 0.48)
   );
-  backdrop-filter: blur(10px) saturate(1.15);
-  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  backdrop-filter: blur(6px) saturate(1.1);
+  -webkit-backdrop-filter: blur(6px) saturate(1.1);
   animation: overlayIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
   cursor: pointer;
 }
