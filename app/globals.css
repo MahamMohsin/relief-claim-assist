@@ -1215,7 +1215,10 @@ html, body {
 
 .desktop-window-layer {
   position: absolute;
-  inset: 0;
+  top: 32px;
+  left: 0;
+  right: 0;
+  bottom: 80px;
   pointer-events: none;
   overflow: hidden;
   z-index: 10;
@@ -1225,43 +1228,47 @@ html, body {
   position: absolute;
   pointer-events: auto;
   width: min(780px, calc(100vw - 32px));
-  height: min(600px, calc(100vh - 120px));
+  height: min(600px, calc(100% - 30px));
+  max-width: calc(100vw - 20px);
+  max-height: calc(100% - 10px);
   background: #ffffff;
   border-radius: 18px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28), 0 4px 16px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28), 0 4px 16px rgba(0, 0, 0, 0.12);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   resize: both;
   min-width: 360px;
-  min-height: 300px;
-  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), height 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s;
+  min-height: 280px;
+  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), height 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s, border-color 0.15s;
 }
 
 .desktop-window.preset-compact {
   width: min(520px, calc(100vw - 32px));
-  height: min(540px, calc(100vh - 140px));
+  height: min(540px, calc(100% - 30px));
 }
 
 .desktop-window.preset-default {
   width: min(780px, calc(100vw - 32px));
-  height: min(600px, calc(100vh - 120px));
+  height: min(600px, calc(100% - 30px));
 }
 
 .desktop-window.preset-wide {
   width: min(1040px, calc(100vw - 32px));
-  height: min(640px, calc(100vh - 110px));
+  height: min(640px, calc(100% - 20px));
 }
 
 .desktop-window.focused {
-  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.38), 0 6px 20px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(0, 113, 93, 0.4);
+  border-color: rgba(0, 0, 0, 0.25);
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.38), 0 6px 20px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(0, 0, 0, 0.15);
 }
 
 .desktop-window.maximized {
-  width: calc(100vw - 24px) !important;
-  height: calc(100vh - 110px) !important;
-  top: 36px !important;
-  left: 12px !important;
+  width: calc(100% - 16px) !important;
+  height: calc(100% - 16px) !important;
+  top: 8px !important;
+  left: 8px !important;
   resize: none;
   border-radius: 14px;
 }
@@ -1295,44 +1302,49 @@ html, body {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: #d4d8d6;
   padding: 0;
   display: grid;
   place-items: center;
   cursor: pointer;
   color: transparent;
-  transition: transform 0.1s, color 0.1s;
+  transition: transform 0.1s, color 0.1s, background 0.12s;
 }
 
 .traffic-light:hover {
-  color: rgba(0, 0, 0, 0.6);
+  background: #b8bebc;
+  color: rgba(0, 0, 0, 0.65);
 }
 
 .traffic-light.close {
-  background: #ff5f56;
-  border-color: #e0443e;
+  background: #d4d8d6;
+  border-color: rgba(0, 0, 0, 0.15);
 }
 
 .traffic-light.close:hover {
-  color: #550000;
+  background: #b8bebc;
+  color: #333333;
 }
 
 .traffic-light.minimize {
-  background: #ffbd2e;
-  border-color: #dea123;
+  background: #d4d8d6;
+  border-color: rgba(0, 0, 0, 0.15);
 }
 
 .traffic-light.minimize:hover {
-  color: #553300;
+  background: #b8bebc;
+  color: #333333;
 }
 
 .traffic-light.maximize {
-  background: #27c93f;
-  border-color: #1aab29;
+  background: #d4d8d6;
+  border-color: rgba(0, 0, 0, 0.15);
 }
 
 .traffic-light.maximize:hover {
-  color: #004400;
+  background: #b8bebc;
+  color: #333333;
 }
 
 .window-title-group {

@@ -40,6 +40,7 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
   const [pastClaims, setPastClaims] = useState<Claim[]>([]);
   const [claimsLoading, setClaimsLoading] = useState(false);
   const activeCall = useRef<AbortController | null>(null);
+  const desktopBoundsRef = useRef<HTMLDivElement>(null);
   const motionDisabled = useReducedMotion() || lite;
   const offline = !browserOnline || !fixtureOnline;
   const citizen = profile?.role === "helper" ? family?.id ?? null : profile?.citizen_id ?? null;
@@ -385,7 +386,7 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
               </div>
 
               {/* Window Manager: Floating Desktop Windows with White BG, Header Controls & Independent Scroll */}
-              <div className="desktop-window-layer">
+              <div className="desktop-window-layer" ref={desktopBoundsRef}>
                 {openApps.map((appId, index) => {
                   const appMeta = apps[appId];
                   const isFocused = activeApp === appId;
@@ -401,14 +402,16 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                     <motion.div
                       key={appId}
                       drag={!isMaximized}
+                      dragConstraints={desktopBoundsRef}
+                      dragElastic={0.05}
                       dragMomentum={false}
                       initial={{ scale: 0.92, opacity: 0, y: 20 }}
                       animate={{ scale: 1, opacity: 1, y: 0 }}
                       exit={{ scale: 0.88, opacity: 0 }}
                       style={{
                         zIndex: isFocused ? 20 : 10 + index,
-                        top: isMaximized ? "36px" : `calc(50px + ${offset}px)`,
-                        left: isMaximized ? "12px" : `calc(max(20px, 50% - 440px) + ${offset}px)`,
+                        top: isMaximized ? "8px" : `calc(20px + ${offset}px)`,
+                        left: isMaximized ? "8px" : `calc(max(20px, 50% - 440px) + ${offset}px)`,
                       }}
                       className={"desktop-window preset-" + preset + (isMaximized ? " maximized " : " ") + (isFocused ? "focused " : "")}
                       onPointerDown={() => setActiveApp(appId)}
