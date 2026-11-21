@@ -222,10 +222,6 @@ export function ApplicantProfilePanel({
                 <Badge label={`${photoDocs.length} photo${photoDocs.length === 1 ? "" : "s"}`} variant="neutral" />
                 {occupation && <Token label={occupation} size="sm" color="green" />}
               </HStack>
-              <Text type="supporting" color="secondary" hasTabularNumbers>
-                {citizen.full_name}
-                {citizen.name_phonetic ? ` (${citizen.name_phonetic})` : ""} · {citizen.cnic_mock} · {citizen.phone}
-              </Text>
             </VStack>
           </HStack>
         </HStack>
