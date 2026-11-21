@@ -208,32 +208,15 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
               <motion.div key="home" initial={{ opacity: motionDisabled ? 1 : 0 }} animate={{ opacity: 1 }} className="dashboard-canvas">
                 {/* Apple-style Widget Canvas */}
                 <div className="ios-widget-row">
-                  {/* Persona Profile Widget */}
+                  {/* Persona Profile Widget: Minimal Fatima Bibi Apple Card */}
                   <div className="ios-widget glass-card widget-profile">
-                    <div className="widget-header">
-                      <span className="widget-badge"><span className="status-dot-pulse" /> Live Persona</span>
-                      <span className="widget-sub">{profile.locale === "ur" ? "اردو" : "English"}</span>
-                    </div>
-                    <div className="profile-identity">
-                      <div className="avatar-squircle" onClick={() => setChooser(true)} role="button" title="Switch persona" style={{ cursor: "pointer" }}>
-                        {profile.full_name.split(" ").map(w => w[0]).slice(0, 2).join("")}
+                    <div className="profile-identity" style={{ margin: 0 }}>
+                      <div className="avatar-squircle">
+                        FB
                       </div>
                       <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                          <h3>{profile.full_name}</h3>
-                          <button className="ios-badge" onClick={() => setChooser(true)} style={{ cursor: "pointer", border: "none" }}>Switch</button>
-                        </div>
-                        <p className="role-tag">{profile.role.toUpperCase()} WORKSPACE</p>
-                      </div>
-                    </div>
-                    <div className="widget-stats">
-                      <div className="stat-pill">
-                        <small>Family Record</small>
-                        <strong>{family ? family.full_name : citizen ? "Linked" : "Direct Access"}</strong>
-                      </div>
-                      <div className="stat-pill">
-                        <small>Security Tier</small>
-                        <strong>DPI Verified</strong>
+                        <h3 style={{ fontSize: "1.45rem", fontWeight: 800 }}>Fatima Bibi</h3>
+                        <p className="role-tag" style={{ color: "var(--forest)", fontWeight: 700 }}>CITIZEN WORKSPACE</p>
                       </div>
                     </div>
                   </div>
