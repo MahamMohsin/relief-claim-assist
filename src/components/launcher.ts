@@ -1,5 +1,10 @@
 import { BookOpen, ClipboardCheck, FileText, Fingerprint, IdCard, Scale, ShieldCheck, SlidersHorizontal, Users, UsersRound } from "lucide-react";
-import type { MiniApp } from "@/src/lib/contracts";
+import type { MiniApp, Role } from "@/src/lib/contracts";
+
+export function appTitle(id: MiniApp, role?: Role): string {
+  if (id === "profile" && role === "helper") return "Family Profile";
+  return apps[id].title;
+}
 
 export const apps = {
   claim: {

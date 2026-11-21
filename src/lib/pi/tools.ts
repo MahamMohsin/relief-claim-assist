@@ -25,7 +25,7 @@ const appAliases: Record<string, (typeof appKeys)[number]> = {};
 for (const key of appKeys) appAliases[key] = key;
 Object.assign(appAliases, {
   reliefclaim: "claim", claims: "claim", newclaim: "claim",
-  myprofile: "profile", citizenprofile: "profile", cnic: "profile", jobproof: "profile", utilitybill: "profile",
+  myprofile: "profile", familyprofile: "profile", citizenprofile: "profile", cnic: "profile", jobproof: "profile", utilitybill: "profile",
   scamshield: "scam", scamapp: "scam", fraud: "scam",
   policyask: "policy", ask: "policy",
   myprivacy: "privacy",

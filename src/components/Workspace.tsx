@@ -9,7 +9,7 @@ import { canOpen, personas, type Audit, type Claim, type Family, type MiniApp, t
 import { api, jsonRequest } from "@/src/lib/client";
 import { queued, pushMutation, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
 import { syncQueue } from "@/src/lib/offline/syncEngine";
-import { apps } from "./launcher";
+import { apps, appTitle } from "./launcher";
 import { MiniApps, type ViewContext } from "./MiniApps";
 import { AuditorGlassSuite, type SafetyMetric } from "./AuditVaultView";
 import { DesktopWindow, type LaunchOrigin } from "./DesktopWindow";
@@ -466,7 +466,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
         <nav className="macos-menu-center">
           <button className="macos-menu-item" onClick={() => changeApp(null)}>Dashboard</button>
           {available.includes("claim") && <button className="macos-menu-item" onClick={() => changeApp("claim")}>Claims</button>}
-          {available.includes("profile") && <button className="macos-menu-item" onClick={() => changeApp("profile")}>Profile</button>}
+          {available.includes("profile") && <button className="macos-menu-item" onClick={() => changeApp("profile")}>{profile?.role === "helper" ? "Family Profile" : "Profile"}</button>}
           {available.includes("review") && <button className="macos-menu-item" onClick={() => changeApp("review")}>Review</button>}
           {available.includes("policy") && <button className="macos-menu-item" onClick={() => changeApp("policy")}>Policy</button>}
           {available.includes("privacy") && <button className="macos-menu-item" onClick={() => changeApp("privacy")}>Privacy</button>}
@@ -913,6 +913,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
               <div className="ios-desktop-grid">
                 {available.map(id => {
                   const item = apps[id];
+                  const title = appTitle(id, profile.role);
                   const Icon = item.icon;
                   const isRunning = openApps.includes(id);
                   const isMinimized = isRunning && minimizedApps.includes(id);
@@ -922,7 +923,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                       key={id}
                       data-app-tile={id}
                       data-cua={"app-icon-" + id}
-                      aria-label={isMinimized ? item.title + " (minimized, click to restore)" : undefined}
+                      aria-label={isMinimized ? title + " (minimized, click to restore)" : undefined}
                       onClick={() => openAppWindow(id)}
                       whileHover={motionDisabled ? undefined : { y: -7, scale: 1.06 }}
                       whileTap={motionDisabled ? undefined : { scale: 0.91 }}
@@ -930,12 +931,12 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                     >
                       <div className={"ios-desktop-icon " + item.color}>
                         {"image" in item && item.image ? (
-                          <img src={item.image} alt={item.title} className="ios-desktop-icon-img" />
+                          <img src={item.image} alt={title} className="ios-desktop-icon-img" />
                         ) : (
                           <Icon size={34} strokeWidth={2.1} />
                         )}
                       </div>
-                      <span className="ios-desktop-label">{item.title}</span>
+                      <span className="ios-desktop-label">{title}</span>
                       {isRunning && <span className="ios-app-running-dot" />}
                     </motion.button>
                   );
@@ -1009,7 +1010,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                           <span className={"window-mini-icon " + appMeta.color}>
                             <Icon size={14} />
                           </span>
-                          <span className="window-title-text">{appMeta.title}</span>
+                          <span className="window-title-text">{appTitle(appId, profile.role)}</span>
                         </div>
 
                         {/* Window Quick Size & Close Options */}
@@ -1067,12 +1068,13 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
         <nav className="minimized-tray" aria-label="Minimized windows">
           {openApps.filter(id => minimizedApps.includes(id)).map(appId => {
             const meta = apps[appId];
+            const title = appTitle(appId, profile.role);
             const TrayIcon = meta.icon;
             return (
-              <button key={appId} type="button" className="minimized-chip" aria-label={"Restore " + meta.title + " window"}
+              <button key={appId} type="button" className="minimized-chip" aria-label={"Restore " + title + " window"}
                 onClick={() => openAppWindow(appId)}>
                 <span className={"window-mini-icon " + meta.color} aria-hidden="true"><TrayIcon size={14} /></span>
-                <span className="minimized-chip-label">{meta.title}</span>
+                <span className="minimized-chip-label">{title}</span>
               </button>
             );
           })}
