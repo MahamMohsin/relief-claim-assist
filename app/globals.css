@@ -4487,22 +4487,27 @@ html, body {
 .record-decision-top-card select,
 .record-decision-top-card textarea,
 .record-decision-top-card input {
-  background: #e9eff5;
-  border: 1px solid #94a3b8;
-  color: #0f172a;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  color: #111827;
   border-radius: 10px;
   padding: 0.65rem 0.8rem;
   font: inherit;
   font-size: 0.86rem;
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
+.record-decision-top-card select::placeholder,
+.record-decision-top-card textarea::placeholder,
+.record-decision-top-card input::placeholder {
+  color: #6b7280;
+}
 .record-decision-top-card select:focus,
 .record-decision-top-card textarea:focus,
 .record-decision-top-card input:focus {
-  background: #dfe7ef;
-  border-color: #0f172a;
+  background: #e5e7eb;
+  border-color: #374151;
   outline: none;
-  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.08);
 }
 .record-decision-top-card-head {
   display: flex;
