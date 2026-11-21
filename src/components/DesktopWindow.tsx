@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 type WindowSize = { width: number; height: number };
 type WindowPos = { x: number; y: number };
+export type LaunchOrigin = { x: number; y: number } | null;
 
 interface DesktopWindowProps {
   appId: string;
@@ -13,6 +14,8 @@ interface DesktopWindowProps {
   preset: "compact" | "default" | "wide" | "max";
   zIndex: number;
   initialOffset: number;
+  launchOrigin?: LaunchOrigin;
+  motionDisabled?: boolean;
   onFocus: () => void;
   titlebar: React.ReactNode;
   children: React.ReactNode;
@@ -34,6 +37,8 @@ export function DesktopWindow({
   preset,
   zIndex,
   initialOffset,
+  launchOrigin,
+  motionDisabled = false,
   onFocus,
   titlebar,
   children,
@@ -52,6 +57,19 @@ export function DesktopWindow({
   }, [preset]);
 
   const activeSize = customSize ?? PRESET_SIZES[preset];
+
+  // Compute Apple macOS / iPadOS spring-from-icon vector relative to the window center
+  const originDelta = useMemo(() => {
+    if (!launchOrigin || typeof window === "undefined") {
+      return { dx: 0, dy: 44 };
+    }
+    const finalCenterX = (isMaximized ? window.innerWidth / 2 : pos.x + activeSize.width / 2);
+    const finalCenterY = 32 + (isMaximized ? (window.innerHeight - 32) / 2 : pos.y + activeSize.height / 2);
+    return {
+      dx: launchOrigin.x - finalCenterX,
+      dy: launchOrigin.y - finalCenterY,
+    };
+  }, [launchOrigin, isMaximized, pos.x, pos.y, activeSize.width, activeSize.height]);
 
   const startDrag = (e: React.PointerEvent<HTMLDivElement>) => {
     if (isMaximized) return;
@@ -119,10 +137,55 @@ export function DesktopWindow({
   return (
     <motion.div
       ref={winRef}
-      initial={{ scale: 0.94, opacity: 0, y: 16 }}
-      animate={{ scale: 1, opacity: 1, y: 0 }}
-      exit={{ scale: 0.9, opacity: 0 }}
-      transition={{ duration: 0.16, ease: "easeOut" }}
+      initial={
+        motionDisabled
+          ? { opacity: 0 }
+          : {
+              x: originDelta.dx,
+              y: originDelta.dy,
+              scale: 0.16,
+              opacity: 0,
+              filter: "blur(10px)",
+              borderRadius: 46,
+            }
+      }
+      animate={
+        motionDisabled
+          ? { opacity: 1 }
+          : {
+              x: 0,
+              y: 0,
+              scale: 1,
+              opacity: 1,
+              filter: "blur(0px)",
+              borderRadius: isMaximized ? 14 : 20,
+            }
+      }
+      exit={
+        motionDisabled
+          ? { opacity: 0 }
+          : {
+              x: originDelta.dx * 0.85,
+              y: originDelta.dy * 0.85,
+              scale: 0.16,
+              opacity: 0,
+              filter: "blur(8px)",
+              borderRadius: 44,
+              transition: { duration: 0.24, ease: [0.32, 0.72, 0, 1] },
+            }
+      }
+      transition={
+        motionDisabled
+          ? { duration: 0.12 }
+          : {
+              type: "spring",
+              stiffness: 300,
+              damping: 27,
+              mass: 0.84,
+              opacity: { duration: 0.2, ease: [0.16, 1, 0.3, 1] },
+              filter: { duration: 0.24, ease: [0.16, 1, 0.3, 1] },
+            }
+      }
       style={{
         zIndex,
         top: isMaximized ? "8px" : `${pos.y}px`,
@@ -130,6 +193,7 @@ export function DesktopWindow({
         width: isMaximized ? undefined : `${activeSize.width}px`,
         height: isMaximized ? undefined : `${activeSize.height}px`,
         transition: interacting ? "none" : undefined,
+        willChange: "transform, opacity, filter",
       }}
       className={
         "desktop-window preset-" +

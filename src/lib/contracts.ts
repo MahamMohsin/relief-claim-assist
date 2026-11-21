@@ -114,8 +114,13 @@ export function canOpen(role: Role, app: MiniApp) {
 }
 
 export type UIAction = { type: "open_mini_app"; app: MiniApp }
-  | { type: "prefill_fields"; fields: Partial<Payload>; claimId?: string }
-  | { type: "advance_claim_step"; step: "evidence" | "review" | "submit" }
+  | { type: "start_new_claim"; fields?: Partial<Payload> }
+  | { type: "prefill_fields"; fields: Partial<Payload>; claimId?: string; saved?: boolean }
+  | { type: "advance_claim_step"; step: "household" | "evidence" | "review" | "submit"; docType?: "identity" | "income"; fixture?: "clear" | "blurred" | "altered" | "incomplete"; attachEvidence?: boolean }
+  | { type: "ask_policy_visual"; question: string }
+  | { type: "check_scam_visual"; message: string; reference?: string }
+  | { type: "privacy_correction_visual"; field: "full_name" | "phone" | "village_area" | "household_size" | "monthly_income_mock"; value: string }
+  | { type: "search_app_visual"; app: "family" | "review" | "users"; query: string }
   | { type: "show_jev_badge"; label: string; confidence: number; route: MiniApp | "clarification"; model: string }
   | { type: "ask_clarification"; question: string; options: MiniApp[] }
   | { type: "highlight_alert"; severity: "warning" | "info"; message: string };

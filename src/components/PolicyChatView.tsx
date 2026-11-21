@@ -6,6 +6,7 @@ import { api } from "@/src/lib/client";
 import type { PolicyAnswer } from "@/src/lib/contracts";
 import type { ViewContext } from "./MiniApps";
 import { speakText, stopSpeaking } from "./os/speech";
+import { cuaEngine } from "./os/cuaEngine";
 import {
   ChatComposer,
   ChatLayout,
@@ -111,9 +112,20 @@ export function PolicyChatView({ ctx }: { ctx: ViewContext }) {
   const [inputError, setInputError] = useState("");
   const [busy, setBusy] = useState(false);
   const activeController = useRef<AbortController | null>(null);
+  const askRef = useRef<(raw: string) => Promise<void>>(async () => {});
 
   useEffect(() => {
+    cuaEngine.policy = {
+      setDraft: value => {
+        setDraft(value);
+        setInputError("");
+      },
+      ask: question => {
+        void askRef.current(question);
+      },
+    };
     return () => {
+      if (cuaEngine.policy) cuaEngine.policy = null;
       activeController.current?.abort();
       stopSpeaking();
     };
@@ -209,6 +221,8 @@ export function PolicyChatView({ ctx }: { ctx: ViewContext }) {
     }
   }
 
+  askRef.current = askQuestion;
+
   function handleStop() {
     activeController.current?.abort();
     activeController.current = null;
@@ -268,23 +282,25 @@ export function PolicyChatView({ ctx }: { ctx: ViewContext }) {
         density="balanced"
         emptyState={emptyState}
         composer={
-          <ChatComposer
-            value={draft}
-            onChange={value => {
-              setDraft(value);
-              if (inputError) setInputError("");
-            }}
-            onSubmit={value => void askQuestion(value)}
-            onStop={handleStop}
-            isStopShown={busy}
-            isDisabled={ctx.offline}
-            status={composerStatus}
-            placeholder={
-              ctx.offline
-                ? "Reconnect to ask a policy question…"
-                : "Ask about eligibility, income cap, documents, Raast payouts, or scams…"
-            }
-          />
+          <div data-cua="policy-composer" style={{ width: "100%" }}>
+            <ChatComposer
+              value={draft}
+              onChange={value => {
+                setDraft(value);
+                if (inputError) setInputError("");
+              }}
+              onSubmit={value => void askQuestion(value)}
+              onStop={handleStop}
+              isStopShown={busy}
+              isDisabled={ctx.offline}
+              status={composerStatus}
+              placeholder={
+                ctx.offline
+                  ? "Reconnect to ask a policy question…"
+                  : "Ask about eligibility, income cap, documents, Raast payouts, or scams…"
+              }
+            />
+          </div>
         }
       >
         {turns.length > 0 ? (

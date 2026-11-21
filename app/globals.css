@@ -1723,7 +1723,7 @@ th { background: var(--faint); color: var(--forest); }
 
 .bottom-shell {
   position: fixed;
-  z-index: 25;
+  z-index: 120;
   bottom: max(0.75rem, env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
@@ -1872,21 +1872,46 @@ th { background: var(--faint); color: var(--forest); }
   backdrop-filter: blur(32px) saturate(185%);
   -webkit-backdrop-filter: blur(32px) saturate(185%);
   border-radius: 9999px;
-  padding: 0.22rem 0.35rem;
+  padding: 0.22rem 0.38rem;
   border: 1px solid rgba(255, 255, 255, 0.22);
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  transition: border-radius 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.voice-glass-form.multiline {
+  border-radius: 22px;
+  padding: 0.32rem 0.42rem;
 }
 
 .glass-voice-input {
   border: none;
   background: transparent;
   color: #f5f5f7;
+  font-family: inherit;
   font-size: 0.94rem;
   font-weight: 500;
-  padding: 0.4rem 0.75rem;
+  line-height: 1.42;
+  padding: 0.52rem 0.75rem;
   min-height: 40px;
+  max-height: 124px;
   min-width: 0;
   flex: 1;
+  resize: none;
+  overflow-y: auto;
+  display: block;
+}
+
+.glass-voice-input::-webkit-scrollbar {
+  width: 5px;
+}
+
+.glass-voice-input::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.glass-voice-input::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.24);
+  border-radius: 9999px;
 }
 
 @media (max-width: 480px) {
@@ -2202,33 +2227,38 @@ html, body {
 }
 
 .traffic-light.close {
-  background: #d4d8d6;
-  border-color: rgba(0, 0, 0, 0.15);
+  background: #ff5f56;
+  border-color: rgba(224, 68, 62, 0.55);
 }
 
 .traffic-light.close:hover {
-  background: #b8bebc;
-  color: #333333;
+  background: #ff453a;
+  color: rgba(74, 14, 10, 0.85);
 }
 
 .traffic-light.minimize {
-  background: #d4d8d6;
-  border-color: rgba(0, 0, 0, 0.15);
+  background: #ffbd2e;
+  border-color: rgba(222, 161, 35, 0.55);
 }
 
 .traffic-light.minimize:hover {
-  background: #b8bebc;
-  color: #333333;
+  background: #ffb000;
+  color: rgba(94, 58, 0, 0.85);
 }
 
 .traffic-light.maximize {
-  background: #d4d8d6;
-  border-color: rgba(0, 0, 0, 0.15);
+  background: #27c93f;
+  border-color: rgba(26, 171, 41, 0.55);
 }
 
 .traffic-light.maximize:hover {
-  background: #b8bebc;
-  color: #333333;
+  background: #1fc236;
+  color: rgba(8, 72, 18, 0.85);
+}
+
+.desktop-window:not(.focused) .traffic-light {
+  background: #d4d8d6;
+  border-color: rgba(0, 0, 0, 0.14);
 }
 
 .window-title-group {
@@ -3572,7 +3602,7 @@ html, body {
 .modal-scrim {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: 300;
   display: grid;
   place-items: center;
   padding: 1.25rem;
@@ -3837,6 +3867,146 @@ html, body {
 @media (max-width: 700px) {
   .kanban-board { grid-template-columns: minmax(0, 1fr); }
   .kanban-search { max-width: none; }
+}
+
+/* ========================================================
+   CUA VISUAL HELPER CURSOR, SPOTLIGHT & CLICK RIPPLE
+   ======================================================== */
+.cua-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.cua-spotlight {
+  position: fixed;
+  pointer-events: none;
+  border: 2px solid rgba(20, 184, 166, 0.85);
+  background: rgba(20, 184, 166, 0.08);
+  box-shadow:
+    0 0 0 4px rgba(20, 184, 166, 0.16),
+    0 0 24px rgba(20, 184, 166, 0.28),
+    inset 0 0 12px rgba(20, 184, 166, 0.12);
+}
+
+.cua-spotlight.tone-typing {
+  border-color: rgba(14, 165, 233, 0.9);
+  background: rgba(14, 165, 233, 0.07);
+  box-shadow:
+    0 0 0 4px rgba(14, 165, 233, 0.18),
+    0 0 26px rgba(14, 165, 233, 0.28);
+}
+
+.cua-spotlight.tone-done {
+  border-color: rgba(34, 197, 94, 0.9);
+  background: rgba(34, 197, 94, 0.08);
+  box-shadow:
+    0 0 0 4px rgba(34, 197, 94, 0.18),
+    0 0 24px rgba(34, 197, 94, 0.26);
+}
+
+.cua-ripple {
+  position: fixed;
+  width: 34px;
+  height: 34px;
+  margin-left: -17px;
+  margin-top: -17px;
+  border-radius: 9999px;
+  border: 2.5px solid rgba(20, 184, 166, 0.92);
+  background: radial-gradient(circle, rgba(20, 184, 166, 0.28) 0%, rgba(20, 184, 166, 0) 70%);
+  box-shadow: 0 0 18px rgba(20, 184, 166, 0.45);
+  pointer-events: none;
+}
+
+.cua-pointer-wrap {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  transform-origin: 3px 3px;
+  will-change: transform, opacity;
+}
+
+.cua-aura {
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(20, 184, 166, 0.52) 0%, rgba(20, 184, 166, 0) 72%);
+  filter: blur(4px);
+  animation: cua-aura-pulse 1.6s ease-in-out infinite;
+}
+
+.cua-aura.tone-typing {
+  background: radial-gradient(circle, rgba(14, 165, 233, 0.56) 0%, rgba(14, 165, 233, 0) 72%);
+}
+
+.cua-aura.tone-done {
+  background: radial-gradient(circle, rgba(34, 197, 94, 0.56) 0%, rgba(34, 197, 94, 0) 72%);
+}
+
+@keyframes cua-aura-pulse {
+  0%, 100% { transform: scale(0.92); opacity: 0.72; }
+  50% { transform: scale(1.24); opacity: 1; }
+}
+
+.cua-arrow-svg {
+  display: block;
+  position: relative;
+  z-index: 2;
+}
+
+.cua-label-pill {
+  position: absolute;
+  top: 22px;
+  left: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+  max-width: 280px;
+  padding: 0.36rem 0.72rem;
+  border-radius: 9999px;
+  background: rgba(15, 23, 32, 0.84);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  color: #f8fafc;
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.cua-label-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: rgba(20, 184, 166, 0.22);
+  color: #5eead4;
+  flex-shrink: 0;
+}
+
+.cua-label-pill.tone-typing .cua-label-icon {
+  background: rgba(14, 165, 233, 0.24);
+  color: #7dd3fc;
+}
+
+.cua-label-pill.tone-done .cua-label-icon {
+  background: rgba(34, 197, 94, 0.24);
+  color: #86efac;
+}
+
+.cua-label-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 }

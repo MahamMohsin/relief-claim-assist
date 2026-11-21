@@ -3,14 +3,14 @@ import {
   type FileEntry,
 } from "@earendil-works/pi-coding-agent";
 import { InMemoryCredentialStore, InMemoryModelsStore } from "@earendil-works/pi-ai";
-import { mimoModel } from "@/src/lib/ai/mimo";
+import { mimoModel, resolveMimoBaseUrl } from "@/src/lib/ai/mimo";
 import { createReliefExtension } from "./extension";
 import { names, type PiContext } from "./tools";
 
 export async function makeSession(context: PiContext, locale: "en" | "ur", entries: FileEntry[]) {
-  const endpoint = new URL(process.env.ANTHROPIC_BASE_URL ?? "https://invalid.invalid");
+  const baseUrl = resolveMimoBaseUrl();
   const key = process.env.ANTHROPIC_AUTH_TOKEN;
-  if (!key || endpoint.protocol !== "https:" || !/^(?:[a-z0-9-]+\.)?xiaomimimo\.com$/i.test(endpoint.hostname)) {
+  if (!key || !baseUrl) {
     throw new Error("MiMo model configuration is unavailable");
   }
   const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false } });
@@ -23,7 +23,7 @@ export async function makeSession(context: PiContext, locale: "en" | "ur", entri
   modelRuntime.registerProvider("relief-mimo", {
     name: "MiMo Token Plan",
     api: "anthropic-messages",
-    baseUrl: endpoint.href.replace(/\/$/, ""),
+    baseUrl,
     models: [{ id: mimoModel, name: "MiMo Flash", reasoning: false, input: ["text", "image"],
       contextWindow: 32768, maxTokens: 1100, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }],
   });
