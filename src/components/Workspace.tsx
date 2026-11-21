@@ -5,7 +5,7 @@ import Link from "next/link";
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Cloud, CloudOff, Fingerprint, HandHeart, House,
   LoaderCircle, Radio, ShieldCheck, UserRound, Wifi, X } from "lucide-react";
-import { canOpen, personas, type Family, type MiniApp, type Persona, type Profile } from "@/src/lib/contracts";
+import { canOpen, personas, type Claim, type Family, type MiniApp, type Persona, type Profile } from "@/src/lib/contracts";
 import { api, jsonRequest } from "@/src/lib/client";
 import { queued, pushMutation, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
 import { syncQueue } from "@/src/lib/offline/syncEngine";
@@ -34,6 +34,8 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
   const [transcript, setTranscript] = useState("");
   const [prefill, setPrefill] = useState<Extract<UIAction, { type: "prefill_fields" }> | null>(null);
   const [alert, setAlert] = useState("");
+  const [pastClaims, setPastClaims] = useState<Claim[]>([]);
+  const [claimsLoading, setClaimsLoading] = useState(false);
   const activeCall = useRef<AbortController | null>(null);
   const motionDisabled = useReducedMotion() || lite;
   const offline = !browserOnline || !fixtureOnline;
@@ -92,6 +94,17 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
       setSyncing(false);
     };
   }, [reloadQueue, synchronize, offline]);
+
+  useEffect(() => {
+    if (!profile || offline || !canOpen(profile.role, "claim")) return;
+    const controller = new AbortController();
+    setClaimsLoading(true);
+    api<Claim[]>("claims", citizen ? { citizenId: citizen } : {}, controller.signal)
+      .then(res => { if (!controller.signal.aborted && Array.isArray(res)) setPastClaims(res); })
+      .catch(() => {})
+      .finally(() => { if (!controller.signal.aborted) setClaimsLoading(false); });
+    return () => controller.abort();
+  }, [profile, citizen, offline, version]);
 
   const enqueue: ViewContext["enqueue"] = async (action, body, opts = {}) => {
     if (!owner) throw new Error("Sign in before queuing changes.");
@@ -212,6 +225,58 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                     Fatima Bibi
                   </h1>
                 </div>
+
+                {/* Apple-Style Past Requests / Claims Preview Card */}
+                {canOpen(profile.role, "claim") && (
+                  <div className="ios-history-widget glass-card">
+                    <div className="ios-history-header">
+                      <div>
+                        <h3>Recent Relief Claims</h3>
+                        <small>{pastClaims.length} total applications found</small>
+                      </div>
+                      <button className="ios-view-all-btn" onClick={() => changeApp("claim")}>
+                        Open Claims <ArrowRight size={14} />
+                      </button>
+                    </div>
+
+                    <div className="ios-history-list">
+                      {claimsLoading ? (
+                        <div className="ios-history-empty">
+                          <LoaderCircle size={18} className="spin" /> Checking past requests…
+                        </div>
+                      ) : pastClaims.length === 0 ? (
+                        <div className="ios-history-empty">
+                          No applications submitted yet. Say "Apply for relief" to start.
+                        </div>
+                      ) : (
+                        pastClaims.slice(0, 3).map(item => {
+                          const stateColor = ["approved", "paid"].includes(item.status) ? "green"
+                            : ["needs_proof", "rejected"].includes(item.status) ? "amber" : "neutral";
+                          const title = item.status.replaceAll("_", " ").toUpperCase();
+                          return (
+                            <div key={item.id} className="ios-history-item" onClick={() => changeApp("claim")}>
+                              <div className="ios-history-item-left">
+                                <div className={"ios-status-badge " + stateColor}>
+                                  {title}
+                                </div>
+                                <div className="ios-history-copy">
+                                  <strong>{item.amount_pkr ? "PKR " + new Intl.NumberFormat("en-PK").format(item.amount_pkr) : "Draft Pending"}</strong>
+                                  <small>ID: {item.id.slice(0, 8)}…{item.id.slice(-4)} · {new Date(item.updated_at).toLocaleDateString()}</small>
+                                </div>
+                              </div>
+                              {item.citizen_reason_en && (
+                                <p className="ios-history-reason">
+                                  "{item.citizen_reason_en}"
+                                </p>
+                              )}
+                              <ArrowRight size={15} className="ios-history-arrow" />
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Section title */}
                 <div className="ios-section-header">
