@@ -157,7 +157,6 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
 
   async function command(raw: string, viaVoice = false) {
     const prompt = raw.trim();
-    console.log("[command]", JSON.stringify({ viaVoice, prompt: prompt.slice(0, 24) }));
     if (!prompt) return;
     setExpanded(true);
     setInput("");
@@ -289,7 +288,6 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   // The mic reopens by itself once the assistant has finished speaking, so a
   // spoken conversation carries on without another tap.
   function resumeMic() {
-    console.log("[resumeMic]", JSON.stringify({ armed: autoMicArmed.current, pending: speechPending.current, rec: recordingRef.current, start: startingMicRef.current, micStart: Boolean(micStart.current), typed: inputRef.current.trim(), sent: sentPromptRef.current }));
     if (!autoMicArmed.current) return;
     if (speechPending.current > 0) return;
     if (recordingRef.current || startingMicRef.current || micStart.current) return;
