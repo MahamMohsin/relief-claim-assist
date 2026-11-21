@@ -14,10 +14,13 @@ import { MiniApps, type ViewContext } from "./MiniApps";
 import { VoiceDock } from "./os/VoiceDock";
 import type { UIAction } from "@/src/lib/contracts";
 
+import { AuthModal } from "./auth/AuthModal";
+
 const roleEntries = Object.entries(personas) as [Persona, (typeof personas)[Persona]][];
 const tools = Object.keys(apps) as MiniApp[];
 
 export function Workspace({ initialProfile, showLogin = false }: { initialProfile: Profile | null; showLogin?: boolean }) {
+  const [showAuthModal, setShowAuthModal] = useState(showLogin || !initialProfile);
   const [profile, setProfile] = useState(initialProfile);
   const [openApps, setOpenApps] = useState<MiniApp[]>([]);
   const [activeApp, setActiveApp] = useState<MiniApp | null>(null);
@@ -190,6 +193,7 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
       setOpenApps([]);
       setActiveApp(null);
       setChooser(false);
+      setShowAuthModal(false);
     } catch (error) {
       setHeadMessage(error instanceof Error ? error.message : "Could not sign in.");
     } finally { setBusy(null); }
@@ -206,6 +210,7 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
       setOpenApps([]);
       setActiveApp(null);
       setChooser(false);
+      setShowAuthModal(true);
       setHeadMessage("");
     } catch (error) {
       setHeadMessage(error instanceof Error ? error.message : "Could not sign out.");
@@ -267,9 +272,13 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
 
         <div className="macos-menu-right">
           <span className="macos-status-pill">{offline ? "Offline" : "Online"}</span>
-          {profile && (
+          {profile ? (
             <button className="macos-user-btn" onClick={() => setChooser(true)}>
               {profile.full_name.split(" ")[0]}
+            </button>
+          ) : (
+            <button className="macos-user-btn" onClick={() => setShowAuthModal(true)}>
+              Log in
             </button>
           )}
           <span className="macos-clock">
@@ -290,11 +299,11 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                   <div className="hero-label"><span /> EMERGENCY CASH ASSISTANCE</div>
                   <h1>Relief within<br />reach.</h1>
                   <p>Apply for aid, check a payment, or help a family take the next step. Explore the full journey using a synthetic demo persona.</p>
-                  <a className="hero-button" href="#personas">Choose a persona <ArrowRight size={18} /></a>
+                  <button className="hero-button" onClick={() => setShowAuthModal(true)}>Log in to continue <ArrowRight size={18} /></button>
                 </div>
               </section>
               <section id="personas" aria-labelledby="persona-heading">
-                <div className="section-heading"><div><h2 id="persona-heading">Enter the demo</h2><p>Choose a role to open its workspace.</p></div></div>
+                <div className="section-heading"><div><h2 id="persona-heading">Enter the demo</h2><p>Choose a role or log in to open its workspace.</p></div></div>
                 <PersonaList onSelect={signIn} busy={busy} offline={offline} />
               </section>
             </motion.div>
@@ -604,6 +613,15 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
           <div className="modal-foot"><button className="secondary" disabled={Boolean(busy) || offline} onClick={signOut}>Sign out</button></div>
         </section>
       </div>}
+
+      {/* Spotify-Style Signup/Login Screen */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSelectPersona={signIn}
+        busy={busy}
+        offline={offline}
+      />
     </div>
   );
 }
