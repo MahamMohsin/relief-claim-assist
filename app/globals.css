@@ -943,17 +943,26 @@ th { background: var(--faint); color: var(--forest); }
 
 .voice-dock-glass {
   pointer-events: auto;
-  background: rgba(255, 255, 255, 0.42);
-  backdrop-filter: blur(40px) saturate(220%);
-  -webkit-backdrop-filter: blur(40px) saturate(220%);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   border: 1px solid transparent;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+  box-shadow: none;
   border-radius: 24px;
-  padding: 0.45rem 0.55rem;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.voice-dock-glass.voice-revealed {
+  background: rgba(255, 255, 255, 0.42);
+  backdrop-filter: blur(40px) saturate(220%);
+  -webkit-backdrop-filter: blur(40px) saturate(220%);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+  padding: 0.45rem 0.55rem;
 }
 
 /* Rounded rectangular glowing boundary ONLY appears when speaking / listening */

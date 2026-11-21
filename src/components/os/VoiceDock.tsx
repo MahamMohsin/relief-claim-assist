@@ -30,9 +30,18 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   const [clarify, setClarify] = useState<Extract<UIAction, { type: "ask_clarification" }> | null>(null);
   const [decision, setDecision] = useState<Extract<UIAction, { type: "show_jev_badge" }> | null>(null);
 
+  const [hasEngagedVoice, setHasEngagedVoice] = useState(false);
+
   // Deepgram Live WebSocket Stream Hook from coffeebrew
   const dgVoice = useVoiceStream(lang);
   const recording = dgVoice.listening;
+
+  // Mark voice engaged as soon as user starts speaking or recording
+  useEffect(() => {
+    if (recording || dgVoice.partial || dgVoice.utterance || input.trim()) {
+      setHasEngagedVoice(true);
+    }
+  }, [recording, dgVoice.partial, dgVoice.utterance, input]);
 
   // Stream live words into input box in real time as user speaks
   useEffect(() => {
@@ -190,7 +199,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
 
   function submit(event: FormEvent) { event.preventDefault(); void command(input); }
 
-  return <section className={"voice-dock-glass" + (recording ? " is-recording" : "") + (working ? " is-working" : "") + (clarify ? " clarifying" : "")} aria-label="Relief voice assistant">
+  return <section className={"voice-dock-glass" + (hasEngagedVoice ? " voice-revealed" : "") + (recording ? " is-recording" : "") + (working ? " is-working" : "") + (clarify ? " clarifying" : "")} aria-label="Relief voice assistant">
     {expanded && (answer || error || clarify) && <div className="voice-reply-glass">
       {clarify && <div><p className="clarify-title">{clarify.question}</p><div className="voice-options">{clarify.options.map(app => <button type="button" key={app} onClick={() => choose(app)}>{apps[app].title}</button>)}</div></div>}
       {answer && <div className="voice-answer"><p>{answer}</p><button className="glass-icon-btn" onClick={() => void speakText(answer.slice(0, 1400), lang, lite || offline).then(setStage)} aria-label="Play assistant response"><Volume2 size={18} /></button></div>}
