@@ -219,64 +219,65 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
               </motion.div>
             ) : !selection || !current ? (
               <motion.div key="home" initial={{ opacity: motionDisabled ? 1 : 0 }} animate={{ opacity: 1 }} className="dashboard-canvas">
-                {/* Clean Top Title */}
-                <div style={{ padding: "0.5rem 0.2rem 0" }}>
-                  <h1 style={{ fontSize: "clamp(2rem, 4.5vw, 2.75rem)", fontWeight: 800, color: "#ffffff", letterSpacing: "-0.04em", textShadow: "0 2px 14px rgba(0,0,0,0.3)" }}>
-                    Fatima Bibi
-                  </h1>
-                </div>
-
-                {/* Apple-Style Compact Past Requests Widget (1/3 width preview) */}
-                {canOpen(profile.role, "claim") && (
-                  <div className="ios-history-widget compact glass-card" onClick={() => changeApp("claim")} role="button" tabIndex={0}>
-                    <div className="ios-history-header">
-                      <div>
-                        <h3>Recent Claim</h3>
-                        <small>{pastClaims.length} on file</small>
-                      </div>
-                      <span className="ios-badge">History</span>
-                    </div>
-
-                    <div className="ios-history-list">
-                      {claimsLoading ? (
-                        <div className="ios-history-empty">
-                          <LoaderCircle size={16} className="spin" /> Loading…
-                        </div>
-                      ) : pastClaims.length === 0 ? (
-                        <div className="ios-history-empty">
-                          No applications yet.
-                        </div>
-                      ) : (
-                        (() => {
-                          const item = pastClaims[0];
-                          const stateColor = ["approved", "paid"].includes(item.status) ? "green"
-                            : ["needs_proof", "rejected"].includes(item.status) ? "amber" : "neutral";
-                          const title = item.status.replaceAll("_", " ").toUpperCase();
-                          return (
-                            <div className="ios-compact-preview">
-                              <div className="ios-compact-top">
-                                <span className={"ios-status-badge " + stateColor}>{title}</span>
-                                <strong>{item.amount_pkr ? "PKR " + new Intl.NumberFormat("en-PK").format(item.amount_pkr) : "Pending"}</strong>
-                              </div>
-                              <p className="ios-compact-id">
-                                ID: {item.id.slice(0, 8)}…{item.id.slice(-4)}
-                              </p>
-                              {item.citizen_reason_en && (
-                                <p className="ios-compact-reason">
-                                  {item.citizen_reason_en}
-                                </p>
-                              )}
-                              <div className="ios-compact-footer">
-                                <span>Tap to view all claims</span>
-                                <ArrowRight size={13} />
-                              </div>
-                            </div>
-                          );
-                        })()
-                      )}
-                    </div>
+                {/* Top Row: Fatima Bibi + Compact Preview Tile side-by-side */}
+                <div className="ios-top-hero-row">
+                  <div className="ios-hero-name">
+                    <h1>Fatima Bibi</h1>
+                    <p>Emergency Cash Assistance</p>
                   </div>
-                )}
+
+                  {/* Apple-Style Compact Past Requests Widget (1/3 width preview) */}
+                  {canOpen(profile.role, "claim") && (
+                    <div className="ios-history-widget compact glass-card" onClick={() => changeApp("claim")} role="button" tabIndex={0}>
+                      <div className="ios-history-header">
+                        <div>
+                          <h3>Recent Claim</h3>
+                          <small>{pastClaims.length} on file</small>
+                        </div>
+                        <span className="ios-badge">History</span>
+                      </div>
+
+                      <div className="ios-history-list">
+                        {claimsLoading ? (
+                          <div className="ios-history-empty">
+                            <LoaderCircle size={16} className="spin" /> Loading…
+                          </div>
+                        ) : pastClaims.length === 0 ? (
+                          <div className="ios-history-empty">
+                            No applications yet.
+                          </div>
+                        ) : (
+                          (() => {
+                            const item = pastClaims[0];
+                            const stateColor = ["approved", "paid"].includes(item.status) ? "green"
+                              : ["needs_proof", "rejected"].includes(item.status) ? "amber" : "neutral";
+                            const title = item.status.replaceAll("_", " ").toUpperCase();
+                            return (
+                              <div className="ios-compact-preview">
+                                <div className="ios-compact-top">
+                                  <span className={"ios-status-badge " + stateColor}>{title}</span>
+                                  <strong>{item.amount_pkr ? "PKR " + new Intl.NumberFormat("en-PK").format(item.amount_pkr) : "Pending"}</strong>
+                                </div>
+                                <p className="ios-compact-id">
+                                  ID: {item.id.slice(0, 8)}…{item.id.slice(-4)}
+                                </p>
+                                {item.citizen_reason_en && (
+                                  <p className="ios-compact-reason">
+                                    {item.citizen_reason_en}
+                                  </p>
+                                )}
+                                <div className="ios-compact-footer">
+                                  <span>Tap to view all claims</span>
+                                  <ArrowRight size={13} />
+                                </div>
+                              </div>
+                            );
+                          })()
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* Section title */}
                 <div className="ios-section-header">
