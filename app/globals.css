@@ -335,12 +335,12 @@ th { background: var(--faint); color: var(--forest); }
   gap: 1.6rem;
 }
 
-/* Background canvas: User Apple wallpaper random-bg-4.jpg with subtle Apple depth blur */
+/* Background canvas: User Apple wallpaper random-bg-4.jpg, sharp and untinted */
 .workspace {
   position: relative;
   min-height: 100dvh;
   isolation: isolate;
-  background-color: #0b1528;
+  background-color: #0e0e10;
 }
 
 .workspace::before {
@@ -351,8 +351,6 @@ th { background: var(--faint); color: var(--forest); }
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
-  filter: blur(12px) brightness(0.96);
-  transform: scale(1.04);
   z-index: -1;
   pointer-events: none;
 }
