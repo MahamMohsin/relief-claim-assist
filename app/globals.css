@@ -292,8 +292,8 @@ th { background: var(--faint); color: var(--forest); }
   right: 0;
   width: 100%;
   height: 28px;
-  background: var(--brand-900);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  border-bottom: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -6127,4 +6127,29 @@ button.active-cases-card:hover {
   background: var(--glass-solid);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+}
+
+/* ========================================================
+   ACCOUNT MENU: opaque buttons, and the email under the title.
+   ======================================================== */
+
+/* The plain menu buttons are opaque, not the light card fill. */
+.liquid-action-btn {
+  background: #173f38;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.liquid-action-btn:not(.primary):not(.danger):hover:not(:disabled) {
+  background: #215b52;
+}
+
+/* The email sits under the title and appears as the menu expands. */
+.liquid-user-email {
+  display: block;
+  margin-top: 0.32rem;
+  font-size: 0.76rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: #ffffff;
 }
