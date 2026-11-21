@@ -88,7 +88,21 @@ export function PipLoginModal({
       {
         rec: false,
         reduced: Boolean(reduced),
-        onLogin: (email: string) => {
+        onLogin: async (email: string) => {
+          // If a registered user or email is entered, sign in via real auth or refresh profile
+          try {
+            const res = await fetch("/api/auth/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email, password: "demo123456" }),
+            });
+            if (res.ok && onUserAuthenticated) {
+              await onUserAuthenticated();
+              return;
+            }
+          } catch {}
+
+          // Fallback to synthetic personas matching the email or default
           const match = (Object.keys(personas) as Persona[]).find((p) =>
             email.toLowerCase().includes(p)
           ) || "fatima";
@@ -98,7 +112,7 @@ export function PipLoginModal({
     );
 
     return () => e.dispose();
-  }, [isOpen, onSelectPersona]);
+  }, [isOpen, onSelectPersona, onUserAuthenticated]);
 
   const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
