@@ -275,6 +275,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   function focusApp(appId: MiniApp) {
     setActiveApp(appId);
     setZOrder(prev => [...prev.filter(id => id !== appId), appId]);
+    setMinimizedApps(prev => prev.filter(id => id !== appId));
   }
 
   function openAppWindow(appId: MiniApp) {
@@ -289,6 +290,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
       }));
     }
     setOpenApps(prev => prev.includes(appId) ? prev : [...prev, appId]);
+    setMinimizedApps(prev => prev.filter(id => id !== appId));
     focusApp(appId);
   }
 

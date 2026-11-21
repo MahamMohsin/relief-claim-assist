@@ -29,7 +29,7 @@ Object.assign(appAliases, {
   myprofile: "profile", familyprofile: "profile", citizenprofile: "profile", cnic: "profile", jobproof: "profile", utilitybill: "profile",
   scamshield: "scam", scamapp: "scam", fraud: "scam",
   policyask: "policy", ask: "policy",
-  myprivacy: "privacy",
+  myprivacy: "privacy", privacyapp: "privacy", library: "privacy", privacylibrary: "privacy",
   familyswitch: "family", switchfamily: "family",
   reviewdesk: "review", queue: "review",
   rulestudio: "rules",
