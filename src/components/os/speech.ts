@@ -14,10 +14,27 @@ export function stopSpeaking() {
 }
 
 /**
+ * Remove UUIDs and ugly identifiers from speech before sending to Cartesia/TTS
+ */
+export function sanitizeSpeechText(text: string): string {
+  return text
+    // Remove UUID patterns (e.g., 3a97da52-0cf7-4645-b3df-22e990785f36)
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "")
+    // Remove "ID:" or "ID" prefixes left behind
+    .replace(/\bID:?\s*/gi, "")
+    // Clean up empty parentheses or awkward leftover punctuation
+    .replace(/\(\s*\)/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/**
  * Queue a speech segment to play sequentially as sentences stream in.
+ * Cartesia is exclusively used for speech. Fallback to browser SpeechSynthesis is disabled
+ * so no random robot voices speak over Cartesia.
  */
 export async function queueSpeakSegment(text: string, locale: "en" | "ur", localOnly: boolean): Promise<void> {
-  const clean = text.trim();
+  const clean = sanitizeSpeechText(text);
   if (!clean || clean.length < 2) return;
 
   const version = playbackVersion;
@@ -69,18 +86,8 @@ export async function queueSpeakSegment(text: string, locale: "en" | "ur", local
         return;
       }
     } catch {
-      /* Fallback to browser below if needed */
+      /* Do not fall back to browser robot voice */
     }
-  }
-
-  if (version !== playbackVersion) return;
-  if ("speechSynthesis" in window) {
-    const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.lang = locale === "ur" ? "ur-PK" : "en-US";
-    const voices = window.speechSynthesis.getVoices();
-    const matching = voices.find(voice => voice.lang.startsWith(locale));
-    if (matching) utterance.voice = matching;
-    window.speechSynthesis.speak(utterance);
   }
 }
 
