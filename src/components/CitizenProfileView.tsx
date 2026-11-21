@@ -1,30 +1,35 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Briefcase,
-  CheckCircle2,
-  ExternalLink,
-  FileText,
+  Expand,
   IdCard,
   Receipt,
+  RefreshCw,
   Sparkles,
+  Upload,
   UsersRound,
 } from "lucide-react";
 import { api, HttpError } from "@/src/lib/client";
 import { prepareDocumentImage } from "@/src/lib/compressImage";
 import type { CitizenDocument, CitizenProfileData, CitizenRecord } from "@/src/lib/contracts";
 import type { ViewContext } from "./MiniApps";
+import { AspectRatio } from "@astryxdesign/core/AspectRatio";
+import { Avatar } from "@astryxdesign/core/Avatar";
 import { Badge } from "@astryxdesign/core/Badge";
 import { Banner } from "@astryxdesign/core/Banner";
 import { Button } from "@astryxdesign/core/Button";
 import { Card } from "@astryxdesign/core/Card";
-import { Collapsible } from "@astryxdesign/core/Collapsible";
+import { Center } from "@astryxdesign/core/Center";
+import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { FileInput } from "@astryxdesign/core/FileInput";
 import { Grid } from "@astryxdesign/core/Grid";
 import { Icon } from "@astryxdesign/core/Icon";
 import { HStack, VStack } from "@astryxdesign/core/Layout";
+import { Lightbox } from "@astryxdesign/core/Lightbox";
+import { Overlay } from "@astryxdesign/core/Overlay";
 import { Selector } from "@astryxdesign/core/Selector";
 import { Spinner } from "@astryxdesign/core/Spinner";
 import { Heading, Text } from "@astryxdesign/core/Text";
@@ -42,48 +47,58 @@ type StoredDocMeta = {
   fields?: Record<string, string>;
 };
 
+const DOC_ORDER: ProfileDocKind[] = ["cnic", "utility_bill", "job_proof"];
+
 const DOC_META: Record<
   ProfileDocKind,
   {
-    label: string;
     short: string;
-    description: string;
+    optionLabel: string;
     icon: typeof IdCard;
-    color: "blue" | "teal" | "green";
+    highlightKeys: string[];
   }
 > = {
   cnic: {
-    label: "Synthetic CNIC",
     short: "Fake CNIC",
-    description: "Extracts mock CNIC number, name, area, and expiry date.",
+    optionLabel: "Fake CNIC (identity card)",
     icon: IdCard,
-    color: "blue",
+    highlightKeys: ["cnic_number", "holder_name", "address_area", "expiry_date"],
   },
   utility_bill: {
-    label: "Utility bill",
     short: "Utility Bill",
-    description: "Extracts provider, consumer ref, billing month, units, and address.",
+    optionLabel: "Utility bill (electricity / gas / water)",
     icon: Receipt,
-    color: "teal",
+    highlightKeys: ["provider", "bill_amount_pkr", "billing_month", "address_area"],
   },
   job_proof: {
-    label: "Job / income proof",
     short: "Job Proof",
-    description: "Extracts occupation, employer, pay period, and monthly income.",
+    optionLabel: "Job proof / salary slip",
     icon: Briefcase,
-    color: "green",
+    highlightKeys: ["monthly_income_pkr", "demo_amount", "occupation", "employer", "pay_period", "month"],
   },
 };
 
 const currency = (value: number) => "PKR " + new Intl.NumberFormat("en-PK").format(value);
 const formatKey = (key: string) => key.replaceAll("_", " ").replace(/^./, c => c.toUpperCase());
-const pct = (value: number) => `${Math.round(value * 100)}%`;
 
-function statusBadgeVariant(status: string): "success" | "warning" | "error" | "neutral" {
+function statusBadgeVariant(status?: string): "success" | "warning" | "error" | "neutral" {
+  if (!status) return "neutral";
   if (["readable", "verified", "genuine"].includes(status)) return "success";
   if (["suspect", "tampered"].includes(status)) return "error";
   if (["unreadable", "incomplete"].includes(status)) return "warning";
   return "neutral";
+}
+
+function pickTopFields(kind: ProfileDocKind, fields?: Record<string, string>): [string, string][] {
+  if (!fields) return [];
+  const clean = Object.entries(fields).filter(([, v]) => String(v).trim().length > 0);
+  if (clean.length === 0) return [];
+  const preferred = DOC_META[kind].highlightKeys;
+  const prioritized = preferred
+    .map(key => clean.find(([k]) => k === key))
+    .filter((entry): entry is [string, string] => Boolean(entry));
+  const rest = clean.filter(([k]) => !preferred.includes(k));
+  return [...prioritized, ...rest].slice(0, 3);
 }
 
 export function CitizenProfileView({ ctx }: { ctx: ViewContext }) {
@@ -93,12 +108,15 @@ export function CitizenProfileView({ ctx }: { ctx: ViewContext }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [docType, setDocType] = useState<ProfileDocKind>("cnic");
   const [file, setFile] = useState<File | null>(null);
   const [imageData, setImageData] = useState<string | null>(null);
   const [applyToCore, setApplyToCore] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [latestDoc, setLatestDoc] = useState<CitizenDocument | null>(null);
+
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   const loadProfile = useCallback(async (signal?: AbortSignal) => {
     if (ctx.offline || !ctx.citizen) {
@@ -118,7 +136,6 @@ export function CitizenProfileView({ ctx }: { ctx: ViewContext }) {
       setData(res);
     } catch (err) {
       if (signal?.aborted) return;
-      // Fallback to read-only NADRA record if the new SQL migration hasn't been applied yet
       const msg = err instanceof Error ? err.message : "Could not load citizen profile.";
       if (err instanceof HttpError && (err.status === 400 || err.status === 403 || err.status === 404)) {
         try {
@@ -144,6 +161,74 @@ export function CitizenProfileView({ ctx }: { ctx: ViewContext }) {
     return () => controller.abort();
   }, [loadProfile, ctx.version]);
 
+  const citizen = data?.citizen;
+  const documents = useMemo(() => data?.documents ?? [], [data?.documents]);
+  const meta = useMemo(
+    () => (citizen?.profile_metadata_json ?? {}) as Record<string, unknown>,
+    [citizen?.profile_metadata_json],
+  );
+
+  // All uploaded documents that carry an actual image, newest first
+  const photoDocs = useMemo(
+    () => documents.filter(d => Boolean(d.file_url)),
+    [documents],
+  );
+
+  // Latest uploaded photo per primary category (CNIC, Utility Bill, Job Proof)
+  const heroPhotoByKind = useMemo(() => {
+    const map: Partial<Record<ProfileDocKind, CitizenDocument>> = {};
+    for (const kind of DOC_ORDER) {
+      map[kind] = photoDocs.find(d => d.doc_type === kind);
+    }
+    return map;
+  }, [photoDocs]);
+
+  const heroPhotoIds = useMemo(
+    () => new Set(Object.values(heroPhotoByKind).filter(Boolean).map(d => d!.id)),
+    [heroPhotoByKind],
+  );
+
+  const extraPhotoDocs = useMemo(
+    () => photoDocs.filter(d => !heroPhotoIds.has(d.id)),
+    [photoDocs, heroPhotoIds],
+  );
+
+  const lightboxMedia = useMemo(
+    () =>
+      photoDocs.map(doc => {
+        const label =
+          doc.doc_type in DOC_META
+            ? DOC_META[doc.doc_type as ProfileDocKind].short
+            : formatKey(doc.doc_type);
+        const fieldPairs = Object.entries(doc.extracted_json?.fields ?? {}).filter(
+          ([, v]) => String(v).trim().length > 0,
+        );
+        return {
+          src: doc.file_url!,
+          alt: `${label} document`,
+          caption: (
+            <VStack gap={1.5}>
+              <HStack gap={2} vAlign="center" wrap="wrap">
+                <Text weight="semibold">{label}</Text>
+                <Badge
+                  label={formatKey(doc.verified_status)}
+                  variant={statusBadgeVariant(doc.verified_status)}
+                />
+              </HStack>
+              {fieldPairs.length > 0 && (
+                <HStack gap={1} wrap="wrap">
+                  {fieldPairs.map(([k, v]) => (
+                    <Token key={k} label={`${formatKey(k)}: ${v}`} size="sm" color="gray" />
+                  ))}
+                </HStack>
+              )}
+            </VStack>
+          ),
+        };
+      }),
+    [photoDocs],
+  );
+
   if (!ctx.citizen) {
     return (
       <Card padding={6}>
@@ -151,12 +236,28 @@ export function CitizenProfileView({ ctx }: { ctx: ViewContext }) {
           <Icon icon={UsersRound} size="lg" color="secondary" />
           <Heading level={3}>Choose a family first</Heading>
           <Text color="secondary">
-            Family Switch verifies consent before viewing or updating a citizen&apos;s VLM profile.
+            Family Switch verifies consent before viewing or updating a citizen&apos;s profile.
           </Text>
           <Button variant="primary" label="Open Family Switch" onClick={() => ctx.go("family")} />
         </VStack>
       </Card>
     );
+  }
+
+  function openUploadModal(kind: ProfileDocKind) {
+    setDocType(kind);
+    setFile(null);
+    setImageData(null);
+    setError("");
+    setUploadOpen(true);
+  }
+
+  function openLightboxFor(docId: string) {
+    const idx = photoDocs.findIndex(d => d.id === docId);
+    if (idx >= 0) {
+      setLightboxIndex(idx);
+      setLightboxOpen(true);
+    }
   }
 
   function handleFilePick(picked: File | File[] | null) {
@@ -177,381 +278,333 @@ export function CitizenProfileView({ ctx }: { ctx: ViewContext }) {
       });
   }
 
-  async function runExtraction(useSample: boolean) {
+  async function runExtraction(useSample: boolean, targetKind?: ProfileDocKind) {
+    const kind = targetKind ?? docType;
     if (busy || ctx.offline) return;
     if (!useSample && !imageData) {
-      setError("Upload a synthetic document image or click Try sample extraction.");
+      setError("Choose a document image or use a sample.");
       return;
     }
     setBusy(true);
     setError("");
     setNotice("");
-    setLatestDoc(null);
     try {
       const res = await api<{ document: CitizenDocument; citizen: CitizenRecord }>(
         "citizen_doc_upload",
         {
           citizenId: ctx.citizen,
-          docType,
+          docType: kind,
           applyToCore,
           useSample,
           ...(imageData && !useSample ? { image: imageData } : {}),
         },
       );
-      setLatestDoc(res.document);
       setData(prev => ({
         citizen: res.citizen,
         documents: [res.document, ...(prev?.documents ?? [])],
       }));
       setFile(null);
       setImageData(null);
-      if (res.document.verified_status === "readable") {
-        setNotice(`${DOC_META[docType].short} extracted and synced to your profile.`);
-      } else if (res.document.verified_status === "unreadable") {
-        setNotice("Document saved, but the image was too blurry to read. Try a clearer image.");
-      }
+      setUploadOpen(false);
+      setNotice(`${DOC_META[kind].short} saved to profile.`);
       ctx.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "VLM extraction failed. Try again.");
+      setError(err instanceof Error ? err.message : "Could not extract document.");
     } finally {
       setBusy(false);
     }
   }
-
-  const citizen = data?.citizen;
-  const documents = data?.documents ?? [];
-  const meta = (citizen?.profile_metadata_json ?? {}) as Record<string, unknown>;
-  const verifiedKinds = (["cnic", "utility_bill", "job_proof"] as ProfileDocKind[]).filter(
-    kind => Boolean(meta[kind]) || documents.some(d => d.doc_type === kind && !d.tamper_flag),
-  );
 
   return (
     <VStack gap={4} width="100%">
       {migrationMissing && (
         <Banner
           status="warning"
-          title="Database migration needed to save VLM documents"
-          description="Run supabase/migrations/20261122014000_citizen_profile_vlm.sql in Supabase to enable profile_metadata_json and citizen_documents storage. Showing your base citizen record below."
+          title="Database migration required"
+          description="Run supabase/migrations/20261122014000_citizen_profile_vlm.sql to save profile photos."
         />
       )}
-      {error && <Banner status="error" title="Could not update profile" description={error} />}
+      {error && !uploadOpen && <Banner status="error" title={error} />}
       {notice && <Banner status="success" title={notice} />}
 
-      {/* 1. Core Citizen Profile Summary */}
-      <Card padding={5}>
-        {loading && !citizen ? (
-          <HStack gap={2} vAlign="center">
-            <Spinner size="sm" />
-            <Text color="secondary">Loading citizen profile…</Text>
-          </HStack>
-        ) : citizen ? (
-          <VStack gap={4} width="100%">
-            <HStack justify="between" vAlign="start" gap={3} wrap="wrap">
-              <VStack gap={0.5}>
-                <Heading level={2}>{citizen.full_name}</Heading>
-                <Text type="supporting" color="secondary">
-                  Mock CNIC: {citizen.cnic_mock} · {citizen.village_area} · {citizen.phone}
-                </Text>
-              </VStack>
-            </HStack>
-
-            <Grid columns={{ minWidth: 150, max: 4 }} gap={2} width="100%">
-              <Card variant="muted" padding={3}>
-                <VStack gap={0.5}>
-                  <Text type="supporting" color="secondary">
-                    Monthly income
-                  </Text>
-                  <Text type="large" weight="semibold" hasTabularNumbers>
-                    {currency(citizen.monthly_income_mock)}
-                  </Text>
-                </VStack>
-              </Card>
-              <Card variant="muted" padding={3}>
-                <VStack gap={0.5}>
-                  <Text type="supporting" color="secondary">
-                    Household size
-                  </Text>
-                  <Text type="large" weight="semibold" hasTabularNumbers>
-                    {citizen.household_size} people
-                  </Text>
-                </VStack>
-              </Card>
-              <Card variant="muted" padding={3}>
-                <VStack gap={0.5}>
-                  <Text type="supporting" color="secondary">
-                    Area / Colony
-                  </Text>
-                  <Text type="large" weight="semibold">
-                    {citizen.village_area}
-                  </Text>
-                </VStack>
-              </Card>
-              <Card variant="muted" padding={3}>
-                <VStack gap={0.5}>
-                  <Text type="supporting" color="secondary">
-                    Occupation
-                  </Text>
-                  <Text type="large" weight="semibold">
-                    {typeof meta.occupation === "string" ? meta.occupation : "Not extracted yet"}
-                  </Text>
-                </VStack>
-              </Card>
-            </Grid>
-
-            {/* Proof readiness checklist */}
-            <HStack gap={2} wrap="wrap" vAlign="center">
-              {(["cnic", "utility_bill", "job_proof"] as ProfileDocKind[]).map(kind => {
-                const done = verifiedKinds.includes(kind);
-                return (
-                  <Token
-                    key={kind}
-                    label={DOC_META[kind].short}
-                    size="sm"
-                    color={done ? "green" : "gray"}
-                    icon={<Icon icon={done ? CheckCircle2 : DOC_META[kind].icon} size="sm" />}
-                    onClick={() => setDocType(kind)}
-                  />
-                );
-              })}
-            </HStack>
-          </VStack>
-        ) : (
-          <EmptyState
-            isCompact
-            title="Profile unavailable"
-            description="Reconnect to load your citizen profile."
-          />
-        )}
-      </Card>
-
-      {/* 2. VLM Document Upload & Extraction */}
-      <Card padding={5}>
-        <VStack gap={3} width="100%">
-          <Selector
-            label="Document category"
-            value={docType}
-            onChange={val => setDocType((val ?? "cnic") as ProfileDocKind)}
-            options={[
-              { value: "cnic", label: "Fake CNIC (identity card)" },
-              { value: "utility_bill", label: "Utility bill (electricity / gas / water)" },
-              { value: "job_proof", label: "Job proof / salary slip" },
-            ]}
-          />
-
-          <Text type="supporting" color="secondary">
-            {DOC_META[docType].description}
-          </Text>
-
-          <FileInput
-            label={`Upload synthetic ${DOC_META[docType].short} image (PNG, JPEG, or WebP)`}
-            value={file}
-            onChange={handleFilePick}
-            accept="image/png,image/jpeg,image/webp"
-            mode="dropzone"
-            isOptional
-          />
-
-          <HStack gap={2} wrap="wrap" vAlign="center" justify="between">
-            <HStack gap={2} wrap="wrap">
-              <Button
-                variant="primary"
-                label={busy ? "Extracting metadata…" : "Extract & update profile"}
-                icon={<Icon icon={Sparkles} size="sm" />}
-                isLoading={busy}
-                isDisabled={busy || ctx.offline || !imageData || migrationMissing}
-                onClick={() => void runExtraction(false)}
-              />
-              <Button
-                variant="secondary"
-                label={`Try ${DOC_META[docType].short} sample`}
-                isDisabled={busy || ctx.offline || migrationMissing}
-                onClick={() => void runExtraction(true)}
-              />
-            </HStack>
-
-            <ToggleButton
-              label="Sync income & area to profile"
-              isPressed={applyToCore}
-              onPressedChange={setApplyToCore}
-              size="sm"
-            />
-          </HStack>
-
-          {latestDoc && (
-            <Card variant="muted" padding={3}>
-              <VStack gap={2}>
-                <HStack justify="between" vAlign="center" gap={2} wrap="wrap">
-                  <Text weight="semibold">
-                    Latest extraction · {DOC_META[docType].label}
-                  </Text>
-                  <HStack gap={1.5}>
-                    <Badge
-                      label={formatKey(latestDoc.verified_status)}
-                      variant={statusBadgeVariant(latestDoc.verified_status)}
-                    />
-                    {latestDoc.confidence !== null && (
-                      <Token label={pct(latestDoc.confidence)} size="sm" color="blue" />
-                    )}
-                  </HStack>
-                </HStack>
-                {latestDoc.extracted_json.summary && (
-                  <Text type="supporting" color="secondary">
-                    {latestDoc.extracted_json.summary}
-                  </Text>
+      {/* 1. Compact Identity Bar */}
+      {loading && !citizen ? (
+        <HStack gap={2} vAlign="center">
+          <Spinner size="sm" />
+          <Text color="secondary">Loading profile…</Text>
+        </HStack>
+      ) : citizen ? (
+        <HStack justify="between" vAlign="center" gap={3} wrap="wrap" width="100%">
+          <HStack gap={3} vAlign="center">
+            <Avatar name={citizen.full_name} size="lg" />
+            <VStack gap={0.5}>
+              <HStack gap={2} vAlign="center" wrap="wrap">
+                <Heading level={3}>{citizen.full_name}</Heading>
+                {typeof meta.occupation === "string" && (
+                  <Token label={meta.occupation} size="sm" color="green" />
                 )}
-                {latestDoc.extracted_json.fields &&
-                  Object.keys(latestDoc.extracted_json.fields).length > 0 && (
-                    <HStack gap={1.5} wrap="wrap">
-                      {Object.entries(latestDoc.extracted_json.fields).map(([k, v]) => (
-                        <Token key={k} label={`${formatKey(k)}: ${v}`} size="sm" color="gray" />
+              </HStack>
+              <Text type="supporting" color="secondary" hasTabularNumbers>
+                {citizen.cnic_mock} · {citizen.village_area} · {currency(citizen.monthly_income_mock)}/mo · {citizen.household_size} people
+              </Text>
+            </VStack>
+          </HStack>
+
+          <Button
+            variant="primary"
+            size="sm"
+            label="Upload photo"
+            icon={<Icon icon={Upload} size="sm" />}
+            isDisabled={ctx.offline || migrationMissing}
+            onClick={() => openUploadModal("cnic")}
+          />
+        </HStack>
+      ) : (
+        <EmptyState
+          isCompact
+          title="Profile unavailable"
+          description="Reconnect to load your profile."
+        />
+      )}
+
+      {/* 2. Hero Visual Proofs — CNIC, Utility Bill, Job Proof Images First */}
+      <Grid columns={{ minWidth: 220, max: 3 }} gap={3} width="100%">
+        {DOC_ORDER.map(kind => {
+          const info = DOC_META[kind];
+          const photoDoc = heroPhotoByKind[kind];
+          const stored = meta[kind] as StoredDocMeta | undefined;
+          const activeStatus = photoDoc?.verified_status ?? stored?.verified_status;
+          const topFields = pickTopFields(kind, photoDoc?.extracted_json?.fields ?? stored?.fields);
+
+          return (
+            <Card key={kind} padding={0}>
+              <VStack gap={0} width="100%">
+                {/* Primary Image Surface */}
+                {photoDoc?.file_url ? (
+                  <Overlay
+                    showOn="always"
+                    position="bottom"
+                    scrim="dark"
+                    align="end"
+                    content={
+                      <HStack justify="between" vAlign="center" width="100%" gap={2}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          label="Zoom"
+                          icon={<Icon icon={Expand} size="sm" />}
+                          onClick={() => openLightboxFor(photoDoc.id)}
+                        />
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          label="Replace"
+                          icon={<Icon icon={RefreshCw} size="sm" />}
+                          isDisabled={ctx.offline || migrationMissing}
+                          onClick={() => openUploadModal(kind)}
+                        />
+                      </HStack>
+                    }
+                  >
+                    <AspectRatio ratio={16 / 10} fit="cover">
+                      <img src={photoDoc.file_url} alt={`${info.short} upload`} />
+                    </AspectRatio>
+                  </Overlay>
+                ) : (
+                  <AspectRatio ratio={16 / 10} fit="center">
+                    <Card variant="muted" padding={0} width="100%" height="100%">
+                      <Center width="100%" height="100%" padding={3}>
+                        <VStack gap={2} hAlign="center">
+                          <Icon icon={info.icon} size="lg" color="secondary" />
+                          <HStack gap={1.5} wrap="wrap" hAlign="center">
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              label={`Add ${info.short}`}
+                              icon={<Icon icon={Upload} size="sm" />}
+                              isDisabled={ctx.offline || migrationMissing || busy}
+                              onClick={() => openUploadModal(kind)}
+                            />
+                            {!stored && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                label="Sample"
+                                isDisabled={ctx.offline || migrationMissing || busy}
+                                onClick={() => void runExtraction(true, kind)}
+                              />
+                            )}
+                          </HStack>
+                        </VStack>
+                      </Center>
+                    </Card>
+                  </AspectRatio>
+                )}
+
+                {/* Compact Image Caption & Key Extracted Pills */}
+                <VStack gap={1.5} padding={3} width="100%">
+                  <HStack justify="between" vAlign="center" gap={2} width="100%">
+                    <HStack gap={1.5} vAlign="center">
+                      <Icon icon={info.icon} size="sm" color="secondary" />
+                      <Text weight="semibold">{info.short}</Text>
+                    </HStack>
+                    <Badge
+                      label={activeStatus ? formatKey(activeStatus) : "Empty"}
+                      variant={statusBadgeVariant(activeStatus)}
+                    />
+                  </HStack>
+
+                  {topFields.length > 0 && (
+                    <HStack gap={1} wrap="wrap">
+                      {topFields.map(([k, v]) => (
+                        <Token key={k} label={v} size="sm" color="gray" />
                       ))}
                     </HStack>
                   )}
+                </VStack>
               </VStack>
             </Card>
-          )}
-        </VStack>
-      </Card>
+          );
+        })}
+      </Grid>
 
-      {/* 3. VLM-Maintained Metadata Breakdown */}
-      <Card padding={5}>
-        <VStack gap={3} width="100%">
-          <VStack gap={0.5}>
-            <Heading level={3}>VLM-maintained profile metadata</Heading>
-            <Text type="supporting" color="secondary">
-              Structured fields extracted across your uploaded proofs.
-            </Text>
-          </VStack>
-
-          <Grid columns={{ minWidth: 210, max: 3 }} gap={3} width="100%">
-            {(["cnic", "utility_bill", "job_proof"] as ProfileDocKind[]).map(kind => {
-              const info = DOC_META[kind];
-              const stored = meta[kind] as StoredDocMeta | undefined;
-              const entries = Object.entries(stored?.fields ?? {}).filter(([, v]) => String(v).trim().length > 0);
+      {/* 3. Additional Uploaded Photos Strip */}
+      {extraPhotoDocs.length > 0 && (
+        <VStack gap={2} width="100%">
+          <HStack gap={2} vAlign="center">
+            <Heading level={4}>Previous uploads</Heading>
+            <Badge label={`${extraPhotoDocs.length}`} variant="neutral" />
+          </HStack>
+          <Grid columns={{ minWidth: 140, max: 5 }} gap={2} width="100%">
+            {extraPhotoDocs.map(doc => {
+              const label =
+                doc.doc_type in DOC_META
+                  ? DOC_META[doc.doc_type as ProfileDocKind].short
+                  : formatKey(doc.doc_type);
               return (
-                <Card key={kind} variant="muted" padding={3}>
-                  <VStack gap={2}>
-                    <HStack justify="between" vAlign="center" gap={1.5}>
-                      <HStack gap={1.5} vAlign="center">
-                        <Icon icon={info.icon} size="sm" color="secondary" />
-                        <Text weight="semibold">{info.short}</Text>
-                      </HStack>
+                <Card key={doc.id} padding={0}>
+                  <VStack gap={0} width="100%">
+                    <Overlay
+                      showOn="hover-or-focus"
+                      position="fill"
+                      scrim="dark"
+                      align="center"
+                      content={
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          label="View"
+                          icon={<Icon icon={Expand} size="sm" />}
+                          onClick={() => openLightboxFor(doc.id)}
+                        />
+                      }
+                    >
+                      <AspectRatio ratio={4 / 3} fit="cover">
+                        <img src={doc.file_url!} alt={label} />
+                      </AspectRatio>
+                    </Overlay>
+                    <HStack justify="between" vAlign="center" padding={2} gap={1}>
+                      <Text type="supporting" weight="medium">
+                        {label}
+                      </Text>
                       <Badge
-                        label={stored?.verified_status ? formatKey(stored.verified_status) : "Pending"}
-                        variant={stored?.verified_status ? statusBadgeVariant(stored.verified_status) : "neutral"}
+                        label={formatKey(doc.verified_status)}
+                        variant={statusBadgeVariant(doc.verified_status)}
                       />
                     </HStack>
-
-                    {entries.length > 0 ? (
-                      <VStack gap={1}>
-                        {entries.map(([k, v]) => (
-                          <HStack key={k} justify="between" gap={2}>
-                            <Text type="supporting" color="secondary">
-                              {formatKey(k)}
-                            </Text>
-                            <Text type="supporting" weight="medium">
-                              {v}
-                            </Text>
-                          </HStack>
-                        ))}
-                      </VStack>
-                    ) : (
-                      <Text type="supporting" color="secondary">
-                        Upload a {info.short.toLowerCase()} above to populate these fields.
-                      </Text>
-                    )}
                   </VStack>
                 </Card>
               );
             })}
           </Grid>
         </VStack>
-      </Card>
+      )}
 
-      {/* 4. Uploaded Document History */}
-      <Card padding={5}>
+      {/* 4. Focused Upload & Live Preview Dialog */}
+      <Dialog
+        isOpen={uploadOpen}
+        onOpenChange={open => {
+          if (!busy) setUploadOpen(open);
+        }}
+        width={480}
+        maxHeight="90dvh"
+        padding={4}
+        purpose="form"
+      >
         <VStack gap={3} width="100%">
-          <HStack justify="between" vAlign="center">
-            <Heading level={3}>Uploaded profile documents</Heading>
-            <Badge label={`${documents.length}`} variant="neutral" />
-          </HStack>
+          <DialogHeader
+            title={`Upload ${DOC_META[docType].short}`}
+            onOpenChange={open => {
+              if (!busy) setUploadOpen(open);
+            }}
+          />
 
-          {documents.length === 0 ? (
-            <EmptyState
-              isCompact
-              title="No profile documents yet"
-              description="Upload a fake CNIC, utility bill, or job proof above to extract and store metadata."
-            />
-          ) : (
-            <VStack gap={2} width="100%">
-              {documents.map(doc => {
-                const kindInfo =
-                  doc.doc_type in DOC_META
-                    ? DOC_META[doc.doc_type as ProfileDocKind]
-                    : null;
-                const fields = Object.fromEntries(
-                  Object.entries(doc.extracted_json?.fields ?? {}).filter(([, v]) => String(v).trim().length > 0),
-                );
-                return (
-                  <Card key={doc.id} variant="muted" padding={3}>
-                    <Collapsible
-                      defaultIsOpen={false}
-                      trigger={
-                        <HStack gap={2} vAlign="center" wrap="wrap">
-                          <Token
-                            label={kindInfo?.short ?? formatKey(doc.doc_type)}
-                            size="sm"
-                            color={kindInfo?.color ?? "gray"}
-                          />
-                          <Badge
-                            label={formatKey(doc.verified_status)}
-                            variant={statusBadgeVariant(doc.verified_status)}
-                          />
-                          <Text type="supporting" color="secondary">
-                            {doc.model_version}
-                            {doc.confidence !== null ? ` · ${pct(doc.confidence)}` : ""}
-                            {" · "}
-                            {new Date(doc.created_at).toLocaleString()}
-                          </Text>
-                        </HStack>
-                      }
-                    >
-                      <VStack gap={2} paddingBlockStart={2}>
-                        {doc.extracted_json?.summary && (
-                          <Text>{doc.extracted_json.summary}</Text>
-                        )}
-                        {doc.tamper_reason && (
-                          <Banner status="error" title="Tamper alert" description={doc.tamper_reason} />
-                        )}
-                        {Object.keys(fields).length > 0 && (
-                          <HStack gap={1.5} wrap="wrap">
-                            {Object.entries(fields).map(([k, v]) => (
-                              <Token key={k} label={`${formatKey(k)}: ${v}`} size="sm" color="gray" />
-                            ))}
-                          </HStack>
-                        )}
-                        {doc.file_url && (
-                          <HStack>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              label="Open synthetic image"
-                              href={doc.file_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              endContent={<Icon icon={ExternalLink} size="sm" />}
-                            />
-                          </HStack>
-                        )}
-                      </VStack>
-                    </Collapsible>
-                  </Card>
-                );
-              })}
-            </VStack>
+          {error && <Banner status="error" title={error} />}
+
+          <Selector
+            label="Document type"
+            value={docType}
+            onChange={val => setDocType((val ?? "cnic") as ProfileDocKind)}
+            options={DOC_ORDER.map(kind => ({
+              value: kind,
+              label: DOC_META[kind].optionLabel,
+            }))}
+          />
+
+          {imageData && (
+            <Card variant="muted" padding={0}>
+              <AspectRatio ratio={2.2} fit="contain">
+                <img src={imageData} alt="Selected document preview" />
+              </AspectRatio>
+            </Card>
           )}
+
+          <FileInput
+            label="Document photo (PNG, JPEG, or WebP)"
+            value={file}
+            onChange={handleFilePick}
+            accept="image/png,image/jpeg,image/webp,.jfif"
+            mode={imageData ? "input" : "dropzone"}
+          />
+
+          <HStack justify="between" vAlign="center" gap={2} wrap="wrap" width="100%">
+            <ToggleButton
+              label="Sync to profile"
+              isPressed={applyToCore}
+              onPressedChange={setApplyToCore}
+              size="sm"
+            />
+            <HStack gap={2}>
+              <Button
+                variant="secondary"
+                label="Use sample"
+                isDisabled={busy || ctx.offline || migrationMissing}
+                onClick={() => void runExtraction(true)}
+              />
+              <Button
+                variant="primary"
+                label={busy ? "Extracting…" : "Extract & save"}
+                icon={<Icon icon={Sparkles} size="sm" />}
+                isLoading={busy}
+                isDisabled={busy || ctx.offline || !imageData || migrationMissing}
+                onClick={() => void runExtraction(false)}
+              />
+            </HStack>
+          </HStack>
         </VStack>
-      </Card>
+      </Dialog>
+
+      {/* 5. Fullscreen Zoomable Image Lightbox */}
+      {lightboxMedia.length > 0 && (
+        <Lightbox
+          isOpen={lightboxOpen}
+          onOpenChange={setLightboxOpen}
+          media={lightboxMedia}
+          index={lightboxIndex}
+          onIndexChange={setLightboxIndex}
+          hasZoom
+        />
+      )}
     </VStack>
   );
 }
