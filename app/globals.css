@@ -470,13 +470,17 @@ th { background: var(--faint); color: var(--forest); }
   background: #fff;
 }
 
-/* Top Hero Row: Fatima Bibi title on left + Compact Tile on right */
+/* Top Hero Row: Fatima Bibi title and Compact Tile top-aligned, starting naturally together */
 .ios-top-hero-row {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1.5rem;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 2.2rem;
   padding: 0.5rem 0.2rem;
+}
+
+.ios-hero-name {
+  flex-shrink: 0;
 }
 
 .ios-hero-name h1 {
@@ -502,7 +506,7 @@ th { background: var(--faint); color: var(--forest); }
   .ios-top-hero-row {
     flex-direction: column;
     align-items: flex-start;
-    gap: 1rem;
+    gap: 1.2rem;
   }
   .ios-history-widget.compact {
     max-width: 100%;
