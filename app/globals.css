@@ -4471,8 +4471,8 @@ html, body {
 .record-decision-top-card select,
 .record-decision-top-card textarea,
 .record-decision-top-card input {
-  background: #f1f5f9;
-  border: 1px solid #cbd5e1;
+  background: #e9eff5;
+  border: 1px solid #94a3b8;
   color: #0f172a;
   border-radius: 10px;
   padding: 0.65rem 0.8rem;
@@ -4483,7 +4483,7 @@ html, body {
 .record-decision-top-card select:focus,
 .record-decision-top-card textarea:focus,
 .record-decision-top-card input:focus {
-  background: #e2e8f0;
+  background: #dfe7ef;
   border-color: #0f172a;
   outline: none;
   box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.12);
