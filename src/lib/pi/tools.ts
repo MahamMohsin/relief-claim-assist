@@ -7,7 +7,7 @@ import { classifyScam } from "@/src/lib/ai/jev";
 import { answerPolicy } from "@/src/lib/ai/rag";
 
 export const names = ["ui_control", "jev_classify_and_route", "claim_draft_upsert", "claim_step_navigate", "mock_dpi_verify", "policy_rag_search", "escalate_to_officer"];
-const appKeys = ["claim", "scam", "policy", "privacy", "family", "review", "rules", "audit"] as const;
+const appKeys = ["claim", "profile", "scam", "policy", "privacy", "family", "review", "rules", "audit"] as const;
 export const miniApp = z.enum(appKeys);
 
 // Map whatever the model sends ("Scam Shield", "scam_shield", "open the scam app") to a canonical key.
@@ -15,6 +15,7 @@ const appAliases: Record<string, (typeof appKeys)[number]> = {};
 for (const key of appKeys) appAliases[key] = key;
 Object.assign(appAliases, {
   reliefclaim: "claim", claims: "claim", newclaim: "claim",
+  myprofile: "profile", citizenprofile: "profile", cnic: "profile", jobproof: "profile", utilitybill: "profile",
   scamshield: "scam", scamapp: "scam", fraud: "scam",
   policyask: "policy", ask: "policy",
   myprivacy: "privacy",

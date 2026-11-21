@@ -65,6 +65,14 @@ export const actions = {
   audit: z.object({}),
   safety: z.object({}),
   nadra: z.object({ citizenId: person }),
+  citizen_profile: z.object({ citizenId: person }),
+  citizen_doc_upload: z.object({
+    citizenId: person,
+    docType: z.enum(["cnic", "utility_bill", "job_proof"]),
+    applyToCore: z.boolean().default(true),
+    useSample: z.boolean().default(false),
+    image: z.string().max(2800000).regex(/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/).optional(),
+  }).refine(data => Boolean(data.image) || data.useSample, "Upload a synthetic document image or choose a sample."),
   scheme: z.object({}),
   raast: z.object({ reference: z.string().trim().min(1).max(80) }),
 };
@@ -95,8 +103,37 @@ export type ScamResult = { id: string; claim_id: string | null; jev_label: strin
   explanation?: string; red_flags?: string[]; extracted_text?: string; detected_reference?: string;
   citations?: Policy[]; tools_used?: ScamToolTrace[] };
 
+export type CitizenDocument = {
+  id: string;
+  citizen_id: string;
+  doc_type: "cnic" | "utility_bill" | "job_proof" | "income" | "other";
+  file_url: string | null;
+  extracted_json: { summary?: string; note?: string; fields?: Record<string, string>; model?: string };
+  blur_score: number | null;
+  tamper_flag: boolean;
+  tamper_reason: string | null;
+  verified_status: string;
+  model_version: string;
+  confidence: number | null;
+  created_at: string;
+};
+export type CitizenRecord = {
+  id: string;
+  cnic_mock: string;
+  full_name: string;
+  name_phonetic: string;
+  household_size: number;
+  monthly_income_mock: number;
+  phone: string;
+  village_area: string;
+  profile_metadata_json?: Record<string, unknown>;
+  updated_at?: string;
+};
+export type CitizenProfileData = { citizen: CitizenRecord; documents: CitizenDocument[] };
+
 export const appRoles = {
   claim: ["citizen", "helper"],
+  profile: ["citizen", "helper"],
   scam: ["citizen", "helper", "shopkeeper"],
   policy: ["citizen", "helper", "shopkeeper", "officer", "admin", "auditor"],
   privacy: ["citizen", "helper"],

@@ -12,6 +12,7 @@ import {
   Volume2,
 } from "lucide-react";
 import { api } from "@/src/lib/client";
+import { prepareDocumentImage } from "@/src/lib/compressImage";
 import type { ScamResult } from "@/src/lib/contracts";
 import type { ViewContext } from "./MiniApps";
 import { speakText, stopSpeaking } from "./os/speech";
@@ -160,23 +161,10 @@ export function ScamChatView({ ctx }: { ctx: ViewContext }) {
   function ingestFiles(files: File[]) {
     const file = files.find(item => item.type.startsWith("image/")) ?? files[0];
     if (!file) return;
-    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-      setInputError("Attach a PNG, JPEG, or WebP screenshot.");
-      return;
-    }
-    if (file.size > 2_000_000) {
-      setInputError("Choose a screenshot under 2 MB.");
-      return;
-    }
     setInputError("");
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setAttachment({ dataUrl: reader.result, name: file.name || "screenshot.png" });
-      }
-    };
-    reader.onerror = () => setInputError("Could not read that image file.");
-    reader.readAsDataURL(file);
+    void prepareDocumentImage(file)
+      .then(dataUrl => setAttachment({ dataUrl, name: file.name || "screenshot.png" }))
+      .catch(err => setInputError(err instanceof Error ? err.message : "Could not read that image file."));
   }
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {

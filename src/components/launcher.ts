@@ -1,4 +1,4 @@
-import { BookOpen, ClipboardCheck, FileText, Fingerprint, Scale, ShieldCheck, SlidersHorizontal, Users, UsersRound } from "lucide-react";
+import { BookOpen, ClipboardCheck, FileText, Fingerprint, IdCard, Scale, ShieldCheck, SlidersHorizontal, Users, UsersRound } from "lucide-react";
 import type { MiniApp } from "@/src/lib/contracts";
 
 export const apps = {
@@ -10,6 +10,15 @@ export const apps = {
     image: "/icons/apps/claim.jpg",
     color: "ios-green",
     gradient: "from-[#1B5C51] to-[#134A41]",
+    bg: "#E6F0ED"
+  },
+  profile: {
+    title: "My Profile",
+    note: "CNIC, bills & job proofs · VLM",
+    badge: "Documents",
+    icon: IdCard,
+    color: "ios-teal",
+    gradient: "from-[#2A7364] to-[#134A41]",
     bg: "#E6F0ED"
   },
   scam: {

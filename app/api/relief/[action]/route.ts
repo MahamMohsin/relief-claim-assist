@@ -2,6 +2,7 @@ import { actions, type Action } from "@/src/lib/contracts";
 import { apiError, ApiError, gateway, readJson } from "@/src/lib/server";
 import { answerPolicy } from "@/src/lib/ai/rag";
 import { inspectEvidence } from "@/src/lib/ai/ocr";
+import { extractProfileDocument } from "@/src/lib/ai/profileVlm";
 import { analyzeScamCheck } from "@/src/lib/ai/scamCheck";
 import { runSafetyEval } from "@/src/lib/fixtures/safety";
 
@@ -19,7 +20,7 @@ export async function POST(request: Request, context: RouteContext<"/api/relief/
     const { action } = await context.params;
     if (!Object.hasOwn(actions, action)) throw new ApiError(404, "Unknown relief operation.");
     const operation = action as Action;
-    const body = await readJson(request, operation === "evidence" || operation === "check" ? 3000000 : 20000);
+    const body = await readJson(request, ["evidence", "check", "citizen_doc_upload"].includes(operation) ? 3000000 : 20000);
     const checked = actions[operation].safeParse(body);
     if (!checked.success) throw new ApiError(400, checked.error.issues[0]?.message ?? "Invalid fields.");
 
@@ -36,6 +37,24 @@ export async function POST(request: Request, context: RouteContext<"/api/relief/
         const analysis = await inspectEvidence(evidence);
         const { image, ...fields } = evidence;
         result = await gateway(operation, { ...fields, image, imageDigest: image ? await hashImage(image) : null, analysis });
+        break;
+      }
+      case "citizen_doc_upload": {
+        const upload = actions.citizen_doc_upload.parse(body);
+        await gateway("nadra", { citizenId: upload.citizenId });
+        if (upload.image) validateImage(upload.image);
+        const analysis = await extractProfileDocument({
+          docType: upload.docType,
+          image: upload.image,
+          useSample: upload.useSample,
+        });
+        result = await gateway("citizen_doc_upload", {
+          citizenId: upload.citizenId,
+          docType: upload.docType,
+          applyToCore: upload.applyToCore,
+          image: upload.image ?? null,
+          analysis,
+        });
         break;
       }
       case "check": {

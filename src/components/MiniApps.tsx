@@ -9,6 +9,7 @@ import { speakText } from "./os/speech";
 import { PolicyChatView } from "./PolicyChatView";
 import { ScamChatView } from "./ScamChatView";
 import { AuditVaultView, type SafetyMetric } from "./AuditVaultView";
+import { CitizenProfileView } from "./CitizenProfileView";
 import { Button } from "@astryxdesign/core/Button";
 import { Card } from "@astryxdesign/core/Card";
 import { Badge } from "@astryxdesign/core/Badge";
@@ -39,6 +40,7 @@ export type ViewContext = {
 export function MiniApps({ app, ctx }: { app: MiniApp; ctx: ViewContext }) {
   switch (app) {
     case "claim": return <ClaimView ctx={ctx} />;
+    case "profile": return <CitizenProfileView ctx={ctx} />;
     case "scam": return <ScamChatView ctx={ctx} />;
     case "policy": return <PolicyChatView ctx={ctx} />;
     case "privacy": return <PrivacyView ctx={ctx} />;
@@ -473,18 +475,18 @@ function PrivacyView({ ctx }: { ctx: ViewContext }) {
 const reviewOptions = { assign: "Assign to me", more_proof: "Request more proof", escalate: "Escalate", approve: "Approve", reject: "Reject", close: "Close case" } as const;
 
 const kanbanColumns: { key: string; label: string; dot: string; statuses: Claim["status"][] }[] = [
-  { key: "todo", label: "To do", dot: "#9AA8A4", statuses: ["submitted"] },
-  { key: "proof", label: "Needs proof", dot: "#A35B12", statuses: ["needs_proof"] },
-  { key: "review", label: "In review", dot: "#3F4FB8", statuses: ["in_review"] },
-  { key: "decided", label: "Decided", dot: "#1F7A4D", statuses: ["approved", "rejected", "closed"] },
+  { key: "todo", label: "To do", dot: "#a3a3a3", statuses: ["submitted"] },
+  { key: "proof", label: "Needs proof", dot: "#525252", statuses: ["needs_proof"] },
+  { key: "review", label: "In review", dot: "#262626", statuses: ["in_review"] },
+  { key: "decided", label: "Decided", dot: "#0a0a0a", statuses: ["approved", "rejected", "closed"] },
 ];
 
 function ConfidenceRing({ value }: { value: number | null }) {
   const size = 34, stroke = 4, radius = (size - stroke) / 2, circumference = 2 * Math.PI * radius;
   const ratio = Math.min(Math.max(value ?? 0, 0), 1);
-  const color = value === null ? "#C9D3D0" : value < 0.5 ? "#3F4FB8" : "#2A7364";
+  const color = value === null ? "#d4d4d4" : value < 0.5 ? "#525252" : "#111111";
   return <svg className="kanban-ring" width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
-    <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(19,74,65,0.14)" strokeWidth={stroke} />
+    <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(0,0,0,0.1)" strokeWidth={stroke} />
     <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round"
       strokeDasharray={circumference} strokeDashoffset={circumference * (1 - ratio)} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
   </svg>;
@@ -507,6 +509,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "accepted" | "rejected">("all");
   const claim = data?.find(item => item.id === selected);
 
   async function update(action: "review" | "disburse", outcome: "paid" | "failed" = "paid") {
@@ -564,20 +567,46 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
   </div>;
 
   const needle = query.trim().toLowerCase();
+  const statusMatches = (status: Claim["status"]) => {
+    if (statusFilter === "pending") return ["submitted", "needs_proof", "in_review"].includes(status);
+    if (statusFilter === "accepted") return ["approved", "closed"].includes(status);
+    if (statusFilter === "rejected") return status === "rejected";
+    return true;
+  };
   const filtered = (data ?? []).filter(item =>
-    !needle || (item.citizen_name ?? "").toLowerCase().includes(needle) || item.id.toLowerCase().includes(needle));
+    statusMatches(item.status) &&
+    (!needle || (item.citizen_name ?? "").toLowerCase().includes(needle) || item.id.toLowerCase().includes(needle)));
 
   return <div className="view-stack">
     <Panel className="kanban-panel">
-      <div className="panel-head"><div><h2>Review queue</h2><p>Board view · lower confidence cases appear first.</p></div><span className="pill neutral">{data?.length ?? 0} cases</span></div>
+      <div className="panel-head"><div><h2>Review queue</h2><p>Board view · lower confidence cases appear first.</p></div><span className="pill neutral">{filtered.length} cases</span></div>
       <div className="kanban-toolbar">
         <span className="kanban-search"><Search size={15} /><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search citizen or claim ID" aria-label="Search claims" /></span>
+        <div className="kanban-filters" role="tablist" aria-label="Filter by status">
+          {([
+            ["all", "All"],
+            ["pending", "Pending"],
+            ["accepted", "Accepted"],
+            ["rejected", "Rejected"],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={statusFilter === key}
+              className={"kanban-filter-btn" + (statusFilter === key ? " active" : "")}
+              onClick={() => setStatusFilter(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
       <Notice text={error} warning />
       {loading && !data ? <Spinner /> : !data ?
         <p className="empty">{ctx.offline ? "Reconnect to load the officer queue." : "The queue is unavailable right now."}</p> :
         filtered.length === 0 ?
-          <p className="empty">No claims match “{query}”.</p> :
+          <p className="empty">{query ? `No claims match “${query}”.` : "No cases match this filter."}</p> :
         <div className="kanban-board">
           {kanbanColumns.map(column => {
             const items = filtered.filter(item => column.statuses.includes(item.status));
@@ -594,7 +623,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                   const urgent = ["submitted", "in_review", "needs_proof"].includes(item.status)
                     && (item.status === "needs_proof" || (item.ai_confidence ?? 1) <= 0.55);
                   const initials = (item.citizen_name ?? "?").split(" ").map(word => word[0]).slice(0, 2).join("");
-                  const confColor = item.ai_confidence === null ? "var(--soft-ink)" : item.ai_confidence < 0.5 ? "#3F4FB8" : "#5F6B68";
+                  const confColor = item.ai_confidence === null ? "#737373" : item.ai_confidence < 0.5 ? "#525252" : "#111111";
                   return <button type="button" key={item.id} className="kanban-card" onClick={() => pick(item)}>
                     <div className="kanban-card-top">
                       <span className="kanban-tag">{item.rule_version_used ? "Rule v" + item.rule_version_used : "No rule"}</span>

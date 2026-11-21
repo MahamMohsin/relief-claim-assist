@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, ArrowRight, ArrowUpRight, Award, CheckCircle2, ChevronDown, Clock, Cloud, CloudOff, Fingerprint, HandHeart, House,
+import { ArrowLeft, ArrowRight, ArrowUpRight, Award, Bell, CheckCircle2, ChevronDown, Clock, Cloud, CloudOff, Fingerprint, HandHeart, House,
   LoaderCircle, LogOut, Maximize2, Minimize2, Minus, Radio, ShieldCheck, Trophy, UserPlus, UserRound, Users, Wifi, X } from "lucide-react";
 import { canOpen, personas, type Audit, type Claim, type Family, type MiniApp, type Overview, type Persona, type Profile } from "@/src/lib/contracts";
 import { api, jsonRequest } from "@/src/lib/client";
@@ -64,6 +64,10 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   const [claimsLoading, setClaimsLoading] = useState(false);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [officerQueue, setOfficerQueue] = useState<Claim[]>([]);
+  const [officerAlerts, setOfficerAlerts] = useState<{ id: string; citizen: string; status: string; time: string; unread: boolean }[]>([]);
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [toastAlert, setToastAlert] = useState<{ id: string; citizen: string; status: string } | null>(null);
+  const seenOfficerClaimsRef = useRef<Set<string> | null>(null);
   const [auditLogs, setAuditLogs] = useState<Audit[]>([]);
   const [auditSafety, setAuditSafety] = useState<SafetyMetric[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -139,18 +143,62 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   }, [profile, citizen, offline, version]);
 
   useEffect(() => {
-    if (!profile || offline || profile.role !== "officer") return;
-    const controller = new AbortController();
-    api<Overview>("overview", {}, controller.signal)
-      .then(res => { if (!controller.signal.aborted) setOverview(res); })
-      .catch(() => {});
-    if (profile.role === "officer") {
-      api<Claim[]>("queue", {}, controller.signal)
-        .then(cases => { if (!controller.signal.aborted) setOfficerQueue(cases); })
-        .catch(() => {});
+    if (!profile || offline || profile.role !== "officer") {
+      seenOfficerClaimsRef.current = null;
+      return;
     }
-    return () => controller.abort();
+    let activeController: AbortController | null = null;
+    const loadOfficer = () => {
+      activeController?.abort();
+      const controller = new AbortController();
+      activeController = controller;
+      api<Overview>("overview", {}, controller.signal)
+        .then(res => { if (!controller.signal.aborted) setOverview(res); })
+        .catch(() => {});
+      api<Claim[]>("queue", {}, controller.signal)
+        .then(cases => {
+          if (controller.signal.aborted || !Array.isArray(cases)) return;
+          setOfficerQueue(cases);
+          if (seenOfficerClaimsRef.current === null) {
+            seenOfficerClaimsRef.current = new Set(cases.map(c => c.id));
+          } else {
+            const fresh = cases.filter(c => !seenOfficerClaimsRef.current!.has(c.id));
+            if (fresh.length > 0) {
+              fresh.forEach(c => seenOfficerClaimsRef.current!.add(c.id));
+              const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+              setOfficerAlerts(prev => [
+                ...fresh.map(c => ({
+                  id: c.id,
+                  citizen: c.citizen_name ?? "New applicant",
+                  status: c.status,
+                  time: now,
+                  unread: true,
+                })),
+                ...prev,
+              ].slice(0, 20));
+              setToastAlert({
+                id: fresh[0].id,
+                citizen: fresh[0].citizen_name ?? "New applicant",
+                status: fresh[0].status,
+              });
+            }
+          }
+        })
+        .catch(() => {});
+    };
+    loadOfficer();
+    const interval = window.setInterval(loadOfficer, 10000);
+    return () => {
+      window.clearInterval(interval);
+      activeController?.abort();
+    };
   }, [profile, offline, version]);
+
+  useEffect(() => {
+    if (!toastAlert) return;
+    const timer = window.setTimeout(() => setToastAlert(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [toastAlert]);
 
   useEffect(() => {
     if (!profile || offline || profile.role !== "auditor") return;
@@ -390,6 +438,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
         <nav className="macos-menu-center">
           <button className="macos-menu-item" onClick={() => changeApp(null)}>Dashboard</button>
           {available.includes("claim") && <button className="macos-menu-item" onClick={() => changeApp("claim")}>Claims</button>}
+          {available.includes("profile") && <button className="macos-menu-item" onClick={() => changeApp("profile")}>Profile</button>}
           {available.includes("review") && <button className="macos-menu-item" onClick={() => changeApp("review")}>Review</button>}
           {available.includes("policy") && <button className="macos-menu-item" onClick={() => changeApp("policy")}>Policy</button>}
           {available.includes("privacy") && <button className="macos-menu-item" onClick={() => changeApp("privacy")}>Privacy</button>}
@@ -397,6 +446,64 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
         </nav>
 
         <div className="macos-menu-right">
+          {profile?.role === "officer" && (
+            <div className="officer-bell-wrap">
+              <button
+                type="button"
+                className="macos-menu-item officer-bell-btn"
+                aria-label="Review desk notifications"
+                aria-expanded={alertsOpen}
+                onClick={() => setAlertsOpen(open => !open)}
+              >
+                <Bell size={14} />
+                {officerAlerts.some(a => a.unread) && (
+                  <span className="officer-bell-badge">
+                    {officerAlerts.filter(a => a.unread).length}
+                  </span>
+                )}
+              </button>
+              {alertsOpen && (
+                <div className="officer-alerts-popover" role="region" aria-label="Review desk notifications">
+                  <div className="officer-alerts-head">
+                    <strong>Review Desk Alerts</strong>
+                    {officerAlerts.some(a => a.unread) && (
+                      <button
+                        type="button"
+                        className="officer-alerts-clear"
+                        onClick={() => setOfficerAlerts(prev => prev.map(a => ({ ...a, unread: false })))}
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+                  {officerAlerts.length === 0 ? (
+                    <p className="officer-alerts-empty">No new claims since you opened Review Desk.</p>
+                  ) : (
+                    <div className="officer-alerts-list">
+                      {officerAlerts.map(item => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={"officer-alert-item" + (item.unread ? " unread" : "")}
+                          onClick={() => {
+                            setOfficerAlerts(prev => prev.map(a => a.id === item.id ? { ...a, unread: false } : a));
+                            setAlertsOpen(false);
+                            openAppWindow("review");
+                          }}
+                        >
+                          <div className="officer-alert-title">
+                            <span>{item.citizen}</span>
+                            <small>{item.time}</small>
+                          </div>
+                          <small>New claim on Review Desk · {item.status.replace("_", " ")}</small>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           <span className="macos-status-pill">{offline ? "Offline" : "Online"}</span>
           {profile ? (
             <button className="macos-user-btn" onClick={() => setChooser(true)}>
@@ -414,6 +521,27 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
       </header>
 
       {(headMessage || failed) && <div className="top-notice"><p role="status">{headMessage || failed?.failure}</p><button onClick={() => setHeadMessage("")} aria-label="Dismiss update"><X size={17} /></button></div>}
+
+      <AnimatePresence>
+        {toastAlert && profile?.role === "officer" && (
+          <motion.div
+            className="officer-toast"
+            role="status"
+            initial={{ opacity: 0, y: -12, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -12, scale: 0.96 }}
+          >
+            <Bell size={16} />
+            <div className="officer-toast-copy" onClick={() => { setToastAlert(null); openAppWindow("review"); }}>
+              <strong>New claim on Review Desk</strong>
+              <small>{toastAlert.citizen} · {toastAlert.status.replace("_", " ")}</small>
+            </div>
+            <button type="button" onClick={() => setToastAlert(null)} aria-label="Dismiss notification">
+              <X size={14} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <main className="content">
         <AnimatePresence mode="wait" initial={false}>
