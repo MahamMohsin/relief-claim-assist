@@ -6,6 +6,16 @@ import { api, HttpError } from "@/src/lib/client";
 import { getDraft, resolveDraft, saveDraft, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
 import type { Action, Audit, Claim, Family, MiniApp, Payload, PolicyAnswer, Privacy, Profile, Rule, RuleConfig, ScamResult, UIAction } from "@/src/lib/contracts";
 import { speakText } from "./os/speech";
+import { Button } from "@astryxdesign/core/Button";
+import { Card } from "@astryxdesign/core/Card";
+import { Badge } from "@astryxdesign/core/Badge";
+import { Banner } from "@astryxdesign/core/Banner";
+import { NumberInput } from "@astryxdesign/core/NumberInput";
+import { TextArea } from "@astryxdesign/core/TextArea";
+import { Selector } from "@astryxdesign/core/Selector";
+import { FileInput } from "@astryxdesign/core/FileInput";
+import { HStack } from "@astryxdesign/core/HStack";
+import { VStack } from "@astryxdesign/core/VStack";
 
 export type ViewContext = {
   profile: Profile;
@@ -96,6 +106,7 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
   const [fixture, setFixture] = useState("clear");
   const [image, setImage] = useState<string | null>(null);
   const [attached, setAttached] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [fault, setFault] = useState("");
@@ -168,6 +179,7 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
     setAttached(item?.documents?.map(doc => title(doc.verified_status)).join(", ") ?? "");
     setPendingDraft(undefined);
     setImage(null);
+    setFile(null);
     setEditing(true);
     setFault("");
     setMessage("");
@@ -227,65 +239,106 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
     reader.readAsDataURL(file);
   }
 
+  const badge = (status: string) => ["approved", "paid", "granted", "genuine", "readable"].includes(status)
+    ? "success" as const
+    : ["needs_proof", "revoked", "scam", "suspect", "unreadable", "rejected"].includes(status) ? "warning" as const : "neutral" as const;
+
   return <div className="view-stack">
-    <Notice text={error || fault} warning />
-    <Notice text={message} />
-    {editing ? <Panel>
-      <div className="panel-head"><div><h2>{draft?.status === "needs_proof" ? "Replace evidence" : "Prepare a claim"}</h2><p>Use synthetic details and pretend documents only.</p></div><button className="secondary" onClick={() => setEditing(false)}>Back to claims</button></div>
-      <ol className="steps" aria-label="Claim steps">{progressSteps.map((label, index) => (
-        <li key={label} aria-current={step === index ? "step" : undefined}><span>{index < step ? <Check size={14} /> : index + 1}</span>{label}</li>
-      ))}</ol>
+    {(error || fault) && <Banner status="error" title="Something went wrong" description={error || fault} />}
+    {message && <Banner status="success" title={message} />}
+    {editing ? <Card padding={6}>
+      <HStack justify="between" hAlign="start" gap={4} wrap="wrap">
+        <VStack gap={0.5}>
+          <h2>{draft?.status === "needs_proof" ? "Replace evidence" : "Prepare a claim"}</h2>
+          <p>Use synthetic details and pretend documents only.</p>
+        </VStack>
+        <Button variant="secondary" label="Back to claims" onClick={() => setEditing(false)} />
+      </HStack>
+      <HStack gap={1} wrap="wrap" paddingBlockStart={3}>
+        {progressSteps.map((label, index) => (
+          <Badge key={label} label={index + 1 + ". " + label} variant={step === index ? "info" : "neutral"} />
+        ))}
+      </HStack>
       {step === 0 && <form onSubmit={event => { event.preventDefault(); setStep(1); }}>
-        <div className="form-grid">
-          <label>Monthly household income (PKR)<input type="number" min="0" required value={details.monthly_income} onChange={event => setDetails({ ...details, monthly_income: +event.target.value })} /></label>
-          <label>People in household<input type="number" min="1" required value={details.household_size} onChange={event => setDetails({ ...details, household_size: +event.target.value })} /></label>
-        </div>
-        <label>Additional details<textarea maxLength={600} value={details.notes} onChange={event => setDetails({ ...details, notes: event.target.value })} placeholder="Optional information for the officer" /></label>
-        <div className="actions"><button className="primary" type="submit">Continue to evidence <ChevronRight size={17} /></button><button type="button" className="secondary" disabled={busy} onClick={() => void run("draft")}>Save draft</button></div>
-      </form>}
-      {step === 1 && <div className="view-stack">
-        <div className="form-grid">
-          <label>Document type<select value={docType} onChange={event => setDocType(event.target.value as typeof docType)}><option value="identity">Mock identity card</option><option value="income">Mock income slip</option></select></label>
-          <label>Sample document<select value={fixture} onChange={event => { setImage(null); setFixture(event.target.value); }}>
-            <option value="clear">Readable sample</option><option value="blurred">Blurry sample</option><option value="altered">Altered sample</option><option value="incomplete">Incomplete sample</option>
-          </select></label>
-        </div>
-        <label className="file-field"><FileUp size={19} /> Upload or take a picture of a synthetic document<input type="file" accept="image/png,image/jpeg,image/webp" capture="environment" onChange={event => void readImage(event.target.files?.[0])} /></label>
-        {attached && <p className="muted">Latest evidence: {attached}</p>}
-        <div className="actions">
-          {claimId || pendingDraft ? <button className="secondary" disabled={busy} onClick={() => void run("evidence")}>{busy ? "Processing…" : "Attach evidence"}</button>
-            : <button className="secondary" disabled={busy} onClick={() => void run("draft")}>Save draft to attach evidence</button>}
-          <button className="primary" onClick={() => setStep(2)} disabled={busy}>Review claim</button>
-          <button className="quiet" onClick={() => setStep(0)}>Back</button>
-        </div>
-      </div>}
-      {step === 2 && <div className="view-stack">
-        <div className="facts"><div><small>Monthly income</small><strong>{currency(details.monthly_income)}</strong></div>
-          <div><small>Household size</small><strong>{details.household_size} people</strong></div>
-          <div><small>Evidence</small><strong>{attached || "Awaiting proof"}</strong></div></div>
-        <p className="muted">An officer reviews every claim before any simulated payment can be issued.</p>
-        <div className="actions"><button className="primary" disabled={busy} onClick={() => void run("submit")}>{busy ? "Submitting…" : ctx.offline ? "Queue claim" : "Submit claim"}</button><button className="quiet" onClick={() => setStep(1)}>Back</button></div>
-      </div>}
-    </Panel> : <Panel>
-      <div className="panel-head"><div><h2>Your claims</h2><p>Follow applications, officer requests, and payment receipts.</p></div><button className="primary" onClick={() => start()}><Plus size={18} /> New claim</button></div>
-      {loading && !claims ? <Spinner /> : !claims?.length ? <p className="empty">{ctx.offline ? "Saved drafts are available offline. Reconnect to see submitted claims." : "This family has no claims yet."}</p> :
-        <div className="rows">{claims.map(item => <div className="row-group" key={item.id}>
-          <button className="list-row" onClick={() => setOpened(opened === item.id ? undefined : item.id)} aria-expanded={opened === item.id}>
-            <div><strong>Claim {short(item.id)}</strong><small>{new Date(item.updated_at).toLocaleDateString()} · {item.amount_pkr ? currency(item.amount_pkr) : "Draft amount pending"}</small></div><StateTag value={item.status} /><ChevronRight size={17} />
-          </button>
-          {opened === item.id && <div className="row-detail">
-            <ol className="timeline"><li>Draft created</li>{item.status !== "draft" && <li>Submitted to the relief scheme</li>}<li>{title(item.status)}{item.rule_version_used ? " · Rule v" + item.rule_version_used : ""}</li>{item.payment && <li>Payment {item.payment.status}</li>}</ol>
-            {item.citizen_reason_en && <p>{item.citizen_reason_en}</p>}
-            {item.citizen_reason_ur && <p lang="ur" dir="rtl">{item.citizen_reason_ur}</p>}
-            <p className="muted breakable">Claim ID: {item.id}</p>
-            {item.payment && <p className="receipt"><CircleDollarSign size={21} /> {currency(item.payment.amount_pkr)} · <strong>{item.payment.raast_ref}</strong> · {title(item.payment.status)}</p>}
-            <div className="actions">
-              {["draft", "needs_proof"].includes(item.status) && <button className="primary" onClick={() => start(item)}>{item.status === "draft" ? "Edit draft" : "Update evidence"}</button>}
-              {item.citizen_reason_en && <button className="secondary" onClick={() => void speakText(item.citizen_reason_ur || item.citizen_reason_en!, item.citizen_reason_ur ? "ur" : "en", ctx.lite || ctx.offline).then(setMessage)}><AudioLines size={17} /> Play decision</button>}
+        <VStack gap={3} paddingBlockStart={3}>
+          <HStack gap={3} wrap="wrap">
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <NumberInput label="Monthly household income (PKR)" value={details.monthly_income} onChange={value => setDetails({ ...details, monthly_income: value ?? 0 })} min={0} isRequired width="100%" />
             </div>
-          </div>}
-        </div>)}</div>}
-    </Panel>}
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <NumberInput label="People in household" value={details.household_size} onChange={value => setDetails({ ...details, household_size: value ?? 1 })} min={1} isRequired width="100%" />
+            </div>
+          </HStack>
+          <TextArea label="Additional details" value={details.notes} onChange={value => setDetails({ ...details, notes: value })} placeholder="Optional information for the officer" isOptional />
+          <HStack gap={2} wrap="wrap">
+            <Button type="submit" variant="primary" label="Continue to evidence" endContent={<ChevronRight size={16} />} />
+            <Button variant="secondary" label="Save draft" isDisabled={busy} onClick={() => void run("draft")} />
+          </HStack>
+        </VStack>
+      </form>}
+      {step === 1 && <VStack gap={3} paddingBlockStart={3}>
+        <HStack gap={3} wrap="wrap">
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <Selector label="Document type" value={docType} onChange={value => setDocType((value ?? "identity") as typeof docType)} options={[{ value: "identity", label: "Mock identity card" }, { value: "income", label: "Mock income slip" }]} />
+          </div>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <Selector label="Sample document" value={fixture} onChange={value => { setImage(null); setFile(null); setFixture(value ?? "clear"); }} options={[{ value: "clear", label: "Readable sample" }, { value: "blurred", label: "Blurry sample" }, { value: "altered", label: "Altered sample" }, { value: "incomplete", label: "Incomplete sample" }]} />
+          </div>
+        </HStack>
+        <FileInput label="Upload or take a picture of a synthetic document" value={file} onChange={next => { const picked = Array.isArray(next) ? next[0] ?? null : next; setFile(picked); void readImage(picked ?? undefined); }} accept="image/png,image/jpeg,image/webp" mode="dropzone" isOptional />
+        {attached && <p className="muted">Latest evidence: {attached}</p>}
+        <HStack gap={2} wrap="wrap">
+          {claimId || pendingDraft
+            ? <Button variant="secondary" label={busy ? "Processing…" : "Attach evidence"} isDisabled={busy} onClick={() => void run("evidence")} />
+            : <Button variant="secondary" label="Save draft to attach evidence" isDisabled={busy} onClick={() => void run("draft")} />}
+          <Button variant="primary" label="Review claim" isDisabled={busy} onClick={() => setStep(2)} />
+          <Button variant="ghost" label="Back" onClick={() => setStep(0)} />
+        </HStack>
+      </VStack>}
+      {step === 2 && <VStack gap={3} paddingBlockStart={3}>
+        <HStack gap={2} wrap="wrap">
+          <Card variant="muted" padding={3}><VStack gap={0.5}><small>Monthly income</small><strong>{currency(details.monthly_income)}</strong></VStack></Card>
+          <Card variant="muted" padding={3}><VStack gap={0.5}><small>Household size</small><strong>{details.household_size} people</strong></VStack></Card>
+          <Card variant="muted" padding={3}><VStack gap={0.5}><small>Evidence</small><strong>{attached || "Awaiting proof"}</strong></VStack></Card>
+        </HStack>
+        <p className="muted">An officer reviews every claim before any simulated payment can be issued.</p>
+        <HStack gap={2}>
+          <Button variant="primary" label={busy ? "Submitting…" : ctx.offline ? "Queue claim" : "Submit claim"} isDisabled={busy} onClick={() => void run("submit")} />
+          <Button variant="ghost" label="Back" onClick={() => setStep(1)} />
+        </HStack>
+      </VStack>}
+    </Card> : <Card padding={6}>
+      <HStack justify="between" hAlign="start" gap={4} wrap="wrap">
+        <VStack gap={0.5}>
+          <h2>Your claims</h2>
+          <p>Follow applications, officer requests, and payment receipts.</p>
+        </VStack>
+        <Button variant="primary" label="New claim" icon={<Plus size={16} />} onClick={() => start()} />
+      </HStack>
+      {loading && !claims ? <Spinner /> : !claims?.length ? <p className="empty">{ctx.offline ? "Saved drafts are available offline. Reconnect to see submitted claims." : "This family has no claims yet."}</p> :
+        <VStack gap={2} paddingBlockStart={3}>
+          {claims.map(item => <Card key={item.id} variant="muted" padding={3}>
+            <VStack gap={2}>
+              <HStack gap={2} justify="between" wrap="wrap">
+                <HStack gap={2} wrap="wrap"><strong>Claim {short(item.id)}</strong><Badge label={title(item.status)} variant={badge(item.status)} /></HStack>
+                <Button variant="ghost" size="sm" label={opened === item.id ? "Hide details" : "View details"} onClick={() => setOpened(opened === item.id ? undefined : item.id)} />
+              </HStack>
+              <small>{new Date(item.updated_at).toLocaleDateString()} · {item.amount_pkr ? currency(item.amount_pkr) : "Draft amount pending"}</small>
+              {opened === item.id && <VStack gap={2}>
+                <ol className="timeline"><li>Draft created</li>{item.status !== "draft" && <li>Submitted to the relief scheme</li>}<li>{title(item.status)}{item.rule_version_used ? " · Rule v" + item.rule_version_used : ""}</li>{item.payment && <li>Payment {item.payment.status}</li>}</ol>
+                {item.citizen_reason_en && <p>{item.citizen_reason_en}</p>}
+                {item.citizen_reason_ur && <p lang="ur" dir="rtl">{item.citizen_reason_ur}</p>}
+                <p className="muted breakable">Claim ID: {item.id}</p>
+                {item.payment && <p className="receipt"><CircleDollarSign size={21} /> {currency(item.payment.amount_pkr)} · <strong>{item.payment.raast_ref}</strong> · {title(item.payment.status)}</p>}
+                <HStack gap={2} wrap="wrap">
+                  {["draft", "needs_proof"].includes(item.status) && <Button variant="primary" label={item.status === "draft" ? "Edit draft" : "Update evidence"} onClick={() => start(item)} />}
+                  {item.citizen_reason_en && <Button variant="secondary" label="Play decision" icon={<AudioLines size={16} />} onClick={() => void speakText(item.citizen_reason_ur || item.citizen_reason_en!, item.citizen_reason_ur ? "ur" : "en", ctx.lite || ctx.offline).then(setMessage)} />}
+                </HStack>
+              </VStack>}
+            </VStack>
+          </Card>)}
+        </VStack>}
+    </Card>}
   </div>;
 }
 
