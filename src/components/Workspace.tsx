@@ -273,21 +273,26 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
       }));
     }
     setOpenApps(prev => prev.includes(appId) ? prev : [...prev, appId]);
+    // Opening an app that is minimized (tray chip, tile, nav, assistant) restores it.
+    setMinimizedApps(prev => prev.filter(id => id !== appId));
     focusApp(appId);
   }
 
   // Focus the most recent window that is still visible (open and not minimized).
   function focusNextVisible(leaving: MiniApp) {
-    const visible = openApps.filter(id => id !== leaving && !minimizedApps.includes(id));
+    const visible = zOrder.filter(id => id !== leaving && openApps.includes(id) && !minimizedApps.includes(id));
     setActiveApp(visible.length > 0 ? visible[visible.length - 1] : null);
   }
 
   function closeAppWindow(appId: MiniApp) {
     setOpenApps(prev => prev.filter(id => id !== appId));
+    setMinimizedApps(prev => prev.filter(id => id !== appId));
     setZOrder(prev => {
       const next = prev.filter(id => id !== appId);
       if (activeApp === appId) {
-        setActiveApp(next.length > 0 ? next[next.length - 1] : null);
+        // Hand focus to the top-most window that is still visible (not minimized).
+        const visible = next.filter(id => !minimizedApps.includes(id));
+        setActiveApp(visible.length > 0 ? visible[visible.length - 1] : null);
       }
       return next;
     });
