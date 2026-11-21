@@ -604,10 +604,155 @@ th { background: var(--faint); color: var(--forest); }
 
 .ios-hero-name {
   flex-shrink: 0;
+  position: relative;
+  z-index: 15;
+}
+
+/* Liquid Glass Interactive User Pill */
+.liquid-user-pill {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 24px;
+  padding: 0.6rem 1rem 0.65rem 0.85rem;
+  cursor: pointer;
+  backdrop-filter: blur(28px) saturate(200%);
+  -webkit-backdrop-filter: blur(28px) saturate(200%);
+  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  min-width: 280px;
+}
+
+.liquid-user-pill:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+}
+
+.liquid-user-pill.expanded {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.45);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.35);
+  border-radius: 26px;
+}
+
+.liquid-user-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.2rem;
+}
+
+.liquid-chevron {
+  color: rgba(255, 255, 255, 0.8);
+  display: grid;
+  place-items: center;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s;
+}
+
+.liquid-chevron.rotated {
+  transform: rotate(180deg);
+  color: #ffffff;
+}
+
+/* Liquid Glass Animated Dropdown */
+.liquid-glass-menu {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.liquid-menu-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.18);
+  margin: 0.85rem 0 0.75rem;
+}
+
+.liquid-menu-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.1rem 0 0.35rem;
+}
+
+.liquid-user-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.liquid-role-badge {
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.18rem 0.55rem;
+  background: rgba(0, 113, 93, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  border-radius: 9999px;
+}
+
+.liquid-user-meta small {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.liquid-action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.liquid-action-btn {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-size: 0.84rem;
+  font-weight: 650;
+  border-radius: 14px;
+  padding: 0.6rem 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  cursor: pointer;
+  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+  text-align: left;
+}
+
+.liquid-action-btn:hover {
+  transform: scale(1.02) translateX(2px);
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.liquid-action-btn:active {
+  transform: scale(0.97);
+}
+
+.liquid-action-btn.primary {
+  background: rgba(52, 199, 89, 0.3);
+  border-color: rgba(52, 199, 89, 0.5);
+}
+
+.liquid-action-btn.primary:hover {
+  background: rgba(52, 199, 89, 0.45);
+}
+
+.liquid-action-btn.danger {
+  background: rgba(255, 59, 48, 0.25);
+  border-color: rgba(255, 59, 48, 0.45);
+}
+
+.liquid-action-btn.danger:hover {
+  background: rgba(255, 59, 48, 0.45);
 }
 
 .ios-hero-name h1 {
-  font-size: clamp(2rem, 4.2vw, 2.9rem);
+  font-size: clamp(1.8rem, 3.8vw, 2.5rem);
   font-weight: 300;
   color: #ffffff;
   letter-spacing: -0.035em;
@@ -617,10 +762,10 @@ th { background: var(--faint); color: var(--forest); }
 }
 
 .ios-hero-name p {
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   font-weight: 300;
   color: rgba(255, 255, 255, 0.75);
-  margin-top: 0.25rem;
+  margin-top: 0.2rem;
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.2);
   letter-spacing: 0.01em;
 }

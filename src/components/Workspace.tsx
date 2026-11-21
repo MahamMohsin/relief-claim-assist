@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, ArrowRight, ArrowUpRight, Award, CheckCircle2, Clock, Cloud, CloudOff, Fingerprint, HandHeart, House,
-  LoaderCircle, Maximize2, Minimize2, Minus, Radio, ShieldCheck, Trophy, UserRound, Wifi, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Award, CheckCircle2, ChevronDown, Clock, Cloud, CloudOff, Fingerprint, HandHeart, House,
+  LoaderCircle, LogOut, Maximize2, Minimize2, Minus, Radio, ShieldCheck, Trophy, UserPlus, UserRound, Users, Wifi, X } from "lucide-react";
 import { canOpen, personas, type Claim, type Family, type MiniApp, type Persona, type Profile } from "@/src/lib/contracts";
 import { api, jsonRequest } from "@/src/lib/client";
 import { queued, pushMutation, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
@@ -21,6 +21,7 @@ const tools = Object.keys(apps) as MiniApp[];
 
 export function Workspace({ initialProfile, showLogin = false }: { initialProfile: Profile | null; showLogin?: boolean }) {
   const [showAuthModal, setShowAuthModal] = useState(showLogin || !initialProfile);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [profile, setProfile] = useState(initialProfile);
   const [openApps, setOpenApps] = useState<MiniApp[]>([]);
   const [activeApp, setActiveApp] = useState<MiniApp | null>(null);
@@ -312,8 +313,83 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
               {/* Top Row: Fatima Bibi + Compact Preview Tile side-by-side */}
               <div className="ios-top-hero-row">
                 <div className="ios-hero-name">
-                  <h1>Fatima Bibi</h1>
-                  <p>Emergency Cash Assistance</p>
+                  <div
+                    className={"liquid-user-pill" + (userDropdownOpen ? " expanded" : "")}
+                    onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                    role="button"
+                    tabIndex={0}
+                    title="Click to expand account menu"
+                  >
+                    <div className="liquid-user-header">
+                      <div>
+                        <h1>{profile ? profile.full_name : "Fatima Bibi"}</h1>
+                        <p>{profile?.role === "helper" ? "Community Health Worker" : profile?.role === "officer" ? "Department Review Officer" : "Emergency Cash Assistance"}</p>
+                      </div>
+                      <span className={"liquid-chevron" + (userDropdownOpen ? " rotated" : "")}>
+                        <ChevronDown size={22} strokeWidth={2.4} />
+                      </span>
+                    </div>
+
+                    {/* Liquid Glass Dropdown Menu */}
+                    <AnimatePresence>
+                      {userDropdownOpen && (
+                        <motion.div
+                          className="liquid-glass-menu"
+                          initial={{ opacity: 0, height: 0, scale: 0.96 }}
+                          animate={{ opacity: 1, height: "auto", scale: 1 }}
+                          exit={{ opacity: 0, height: 0, scale: 0.96 }}
+                          transition={{ type: "spring", stiffness: 380, damping: 28 }}
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <div className="liquid-menu-divider" />
+                          <div className="liquid-menu-body">
+                            <div className="liquid-user-meta">
+                              <span className="liquid-role-badge">{profile?.role || "citizen"}</span>
+                              <small>{profile?.full_name ? profile.full_name.toLowerCase().replace(/\s+/g, ".") + "@relief-demo.example" : "fatima@relief-demo.example"}</small>
+                            </div>
+
+                            <div className="liquid-action-buttons">
+                              <button
+                                type="button"
+                                className="liquid-action-btn primary"
+                                onClick={() => {
+                                  setUserDropdownOpen(false);
+                                  setShowAuthModal(true);
+                                }}
+                              >
+                                <UserPlus size={16} />
+                                <span>Register / Switch Account</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                className="liquid-action-btn secondary"
+                                onClick={() => {
+                                  setUserDropdownOpen(false);
+                                  setChooser(true);
+                                }}
+                              >
+                                <Users size={16} />
+                                <span>Switch Demo Persona</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                className="liquid-action-btn danger"
+                                onClick={() => {
+                                  setUserDropdownOpen(false);
+                                  void signOut();
+                                }}
+                              >
+                                <LogOut size={16} />
+                                <span>Sign Out</span>
+                              </button>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
 
                 {/* Right Side Widgets: Status Progress Card + Recent Claim Preview Card */}
