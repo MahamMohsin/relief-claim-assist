@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { AlertCircle, AudioLines, BookOpen, Check, ChevronRight, CircleDollarSign, Clipboard, FileUp, LoaderCircle, LockKeyhole, Plus, ShieldCheck, UsersRound } from "lucide-react";
+import { AlertCircle, ArrowLeft, AudioLines, BookOpen, CalendarDays, Check, ChevronRight, CircleDollarSign, FileUp, Flag, LoaderCircle, LockKeyhole, MessageSquare, Paperclip, Plus, Search, ShieldCheck, UsersRound } from "lucide-react";
 import { api, HttpError } from "@/src/lib/client";
 import { getDraft, resolveDraft, saveDraft, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
 import type { Action, Audit, Claim, Family, MiniApp, Payload, PolicyAnswer, Privacy, Profile, Rule, RuleConfig, ScamResult, UIAction } from "@/src/lib/contracts";
@@ -428,6 +428,32 @@ function PrivacyView({ ctx }: { ctx: ViewContext }) {
 }
 
 const reviewOptions = { assign: "Assign to me", more_proof: "Request more proof", escalate: "Escalate", approve: "Approve", reject: "Reject", close: "Close case" } as const;
+
+const kanbanColumns: { key: string; label: string; dot: string; statuses: Claim["status"][] }[] = [
+  { key: "todo", label: "To do", dot: "#0A84FF", statuses: ["submitted"] },
+  { key: "proof", label: "Needs proof", dot: "#FF9F0A", statuses: ["needs_proof"] },
+  { key: "review", label: "In review", dot: "#5856D6", statuses: ["in_review"] },
+  { key: "decided", label: "Decided", dot: "#34C759", statuses: ["approved", "rejected", "closed"] },
+];
+
+function ConfidenceRing({ value }: { value: number | null }) {
+  const size = 34, stroke = 4, radius = (size - stroke) / 2, circumference = 2 * Math.PI * radius;
+  const ratio = Math.min(Math.max(value ?? 0, 0), 1);
+  const color = value === null ? "#C7C7CC" : value >= 0.8 ? "#34C759" : value >= 0.5 ? "#FF9F0A" : "#FF3B30";
+  return <svg className="kanban-ring" width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+    <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(120,120,128,0.16)" strokeWidth={stroke} />
+    <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round"
+      strokeDasharray={circumference} strokeDashoffset={circumference * (1 - ratio)} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+  </svg>;
+}
+
+function kanbanSummary(claim: Claim) {
+  const people = claim.payload_json.household_size;
+  const income = claim.payload_json.monthly_income;
+  const parts = [people ? people + " people" : "", income ? currency(income) + "/mo" : ""].filter(Boolean);
+  return parts.join(" · ") || claim.handoff_notes || "Relief claim awaiting review";
+}
+
 function ReviewView({ ctx }: { ctx: ViewContext }) {
   const { data, error, loading } = useActionList<Claim[]>("queue", ctx);
   const [selected, setSelected] = useState("");
@@ -437,6 +463,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
   const [notice, setNotice] = useState("");
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState("");
   const claim = data?.find(item => item.id === selected);
 
   async function update(action: "review" | "disburse") {
@@ -450,17 +477,20 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
     } catch (error) { setProblem(getMessage(error)); }
     finally { setBusy(false); }
   }
-  return <div className="split">
-    <Panel><div className="panel-head"><div><h2>Review queue</h2><p>Open cases with lower confidence appear first.</p></div><span className="pill neutral">{data?.length ?? 0} cases</span></div>
-      <Notice text={error} warning />
-      {loading && !data ? <Spinner /> : <div className="rows">{data?.map(item => <button key={item.id} className={"list-row" + (selected === item.id ? " selected" : "")}
-        onClick={() => { setSelected(item.id); setDecision(["approved", "rejected"].includes(item.status) ? "close" : "assign"); setNotice(""); setProblem(""); }}>
-        <div><strong>{item.citizen_name}</strong><small>{short(item.id)}{item.ai_confidence !== null ? " · " + pc(item.ai_confidence) + " confidence" : ""}</small></div>
-        <StateTag value={item.status} /><ChevronRight size={16} />
-      </button>)}</div>}
-    </Panel>
-    <Panel>{!claim ? <div className="empty state"><Clipboard size={26} /><h2>Choose a case</h2><p>Review the evidence before recording an officer decision.</p></div> : <>
-      <div className="panel-head"><div><h2>{claim.citizen_name}</h2><p className="breakable">{claim.id}</p></div><StateTag value={claim.status} /></div>
+
+  function pick(item: Claim) {
+    setSelected(item.id);
+    setDecision(["approved", "rejected"].includes(item.status) ? "close" : "assign");
+    setNotice(""); setProblem("");
+  }
+
+  if (claim) return <div className="view-stack">
+    <Panel>
+      <div className="panel-head">
+        <div><h2>{claim.citizen_name}</h2><p className="breakable">{claim.id}</p></div>
+        <div className="detail-head-actions"><StateTag value={claim.status} />
+          <button className="secondary" onClick={() => { setSelected(""); setNotice(""); setProblem(""); }}><ArrowLeft size={16} /> Board</button></div>
+      </div>
       <div className="facts two"><div><small>Rule version</small><strong>v{claim.rule_version_used ?? "–"}</strong></div><div><small>Payment</small><strong>{title(claim.payment_status)}</strong></div></div>
       <p>{claim.handoff_notes}</p>
       {Boolean(claim.reports) && <Notice text={String(claim.reports) + " missing payment report(s) on this case."} warning />}
@@ -481,7 +511,66 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
           {claim.status === "approved" && claim.payment_status === "pending" && <button className="secondary" type="button" disabled={busy || ctx.offline} onClick={() => void update("disburse")}>Issue simulated payment</button>}</div>
       </form>}
       {claim.payment && <p className="receipt">{claim.payment.raast_ref} · {currency(claim.payment.amount_pkr)} · {title(claim.payment.status)}</p>}
-    </>}</Panel>
+    </Panel>
+  </div>;
+
+  const needle = query.trim().toLowerCase();
+  const filtered = (data ?? []).filter(item =>
+    !needle || (item.citizen_name ?? "").toLowerCase().includes(needle) || item.id.toLowerCase().includes(needle));
+
+  return <div className="view-stack">
+    <Panel className="kanban-panel">
+      <div className="panel-head"><div><h2>Review queue</h2><p>Board view · lower confidence cases appear first.</p></div><span className="pill neutral">{data?.length ?? 0} cases</span></div>
+      <div className="kanban-toolbar">
+        <span className="kanban-search"><Search size={15} /><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search citizen or claim ID" aria-label="Search claims" /></span>
+      </div>
+      <Notice text={error} warning />
+      {loading && !data ? <Spinner /> : !data ?
+        <p className="empty">{ctx.offline ? "Reconnect to load the officer queue." : "The queue is unavailable right now."}</p> :
+        filtered.length === 0 ?
+          <p className="empty">No claims match “{query}”.</p> :
+        <div className="kanban-board">
+          {kanbanColumns.map(column => {
+            const items = filtered.filter(item => column.statuses.includes(item.status));
+            return <section className="kanban-col" key={column.key} aria-label={column.label}>
+              <header className="kanban-col-head">
+                <span className="kanban-dot" style={{ background: column.dot }} />
+                <h3>{column.label}</h3>
+                <span className="kanban-count">{items.length}</span>
+              </header>
+              {items.length === 0 ? <p className="kanban-empty">No cases here</p> :
+                items.map(item => {
+                  const docs = item.documents ?? [];
+                  const verified = docs.filter(doc => ["genuine", "readable"].includes(doc.verified_status)).length;
+                  const urgent = item.status === "needs_proof" || (item.ai_confidence !== null && item.ai_confidence < 0.5);
+                  const initials = (item.citizen_name ?? "?").split(" ").map(word => word[0]).slice(0, 2).join("");
+                  const confColor = item.ai_confidence === null ? "var(--soft-ink)" : item.ai_confidence >= 0.8 ? "#1d8f43" : item.ai_confidence >= 0.5 ? "#b26a00" : "#d70015";
+                  return <button type="button" key={item.id} className="kanban-card" onClick={() => pick(item)}>
+                    <div className="kanban-card-top">
+                      <span className="kanban-tag">{item.rule_version_used ? "Rule v" + item.rule_version_used : "No rule"}</span>
+                      {urgent && <span className="kanban-tag urgent"><Flag size={10} /> Urgent</span>}
+                    </div>
+                    <div className="kanban-card-body">
+                      <div className="kanban-card-title">{item.citizen_name ?? "Unnamed citizen"}</div>
+                      <div className="kanban-card-desc">{kanbanSummary(item)}</div>
+                    </div>
+                    <div className="kanban-progress">
+                      <ConfidenceRing value={item.ai_confidence} />
+                      <span className="kanban-progress-label">{docs.length ? `${verified}/${docs.length} docs verified` : "No evidence attached"}</span>
+                      <span className="kanban-progress-pct" style={{ color: confColor }}>{item.ai_confidence !== null ? pc(item.ai_confidence) : "—"}</span>
+                    </div>
+                    <div className="kanban-card-foot">
+                      <span className="kanban-avatar" aria-hidden="true">{initials}</span>
+                      {Boolean(item.reports) && <span className="kanban-meta"><MessageSquare size={12} /> {item.reports}</span>}
+                      <span className="kanban-meta"><Paperclip size={12} /> {docs.length}</span>
+                      <span className="kanban-meta kanban-date"><CalendarDays size={12} /> {new Date(item.updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+                    </div>
+                  </button>;
+                })}
+            </section>;
+          })}
+        </div>}
+    </Panel>
   </div>;
 }
 
