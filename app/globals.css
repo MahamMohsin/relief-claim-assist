@@ -736,6 +736,17 @@ th { background: var(--faint); color: var(--forest); }
   align-items: center;
   justify-content: space-between;
   gap: 1.2rem;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.liquid-user-title-col {
+  min-width: 0;
 }
 
 .liquid-chevron {
@@ -2851,6 +2862,10 @@ html, body {
   height: 10px;
   border-radius: 50%;
   display: inline-block;
+}
+
+.audit-heat-legend i.is-square {
+  border-radius: 3px;
 }
 
 .audit-heat-body {

@@ -419,17 +419,22 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
               <div className="ios-top-hero-row">
                 <div className="ios-hero-name">
                   <div className={"liquid-user-pill" + (userDropdownOpen ? " expanded" : "")}>
-                    <div className="liquid-user-header">
-                      <div>
+                    <button
+                      type="button"
+                      className="liquid-user-header"
+                      aria-label="Account menu"
+                      aria-expanded={userDropdownOpen}
+                      aria-controls="account-menu"
+                      onClick={() => setUserDropdownOpen(open => !open)}
+                    >
+                      <div className="liquid-user-title-col">
                         <h1>{profile ? profile.full_name : "Fatima Bibi"}</h1>
                         <p>{profile?.role === "helper" ? "Community Health Worker" : profile?.role === "officer" ? "Department Review Officer" : profile?.role === "auditor" ? "Read-Only Compliance Auditor" : profile?.role === "admin" ? "Scheme Administrator" : "Emergency Cash Assistance"}</p>
                       </div>
-                      <button type="button" className={"liquid-chevron" + (userDropdownOpen ? " rotated" : "")}
-                        aria-label="Account menu" aria-expanded={userDropdownOpen} aria-controls="account-menu"
-                        onClick={() => setUserDropdownOpen(open => !open)}>
+                      <span className={"liquid-chevron" + (userDropdownOpen ? " rotated" : "")} aria-hidden="true">
                         <ChevronDown size={22} strokeWidth={2.4} />
-                      </button>
-                    </div>
+                      </span>
+                    </button>
 
                     {/* Liquid Glass Dropdown Menu */}
                     <AnimatePresence>

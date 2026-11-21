@@ -14,7 +14,7 @@ export type SafetyMetric = {
 
 type AuditStage = "flagged" | "ai" | "consent" | "verified";
 type ScopeFilter = "recent" | "ai" | "all";
-type HeatFilter = "all" | "ai" | "consent";
+type StreakRange = "hourly" | "monthly";
 
 const STAGE_META: Record<
   AuditStage,
@@ -59,15 +59,16 @@ const STAGE_META: Record<
 const STAGE_ORDER: AuditStage[] = ["verified", "ai", "consent", "flagged"];
 const LANE_LABELS: AuditStage[] = ["flagged", "ai", "consent", "verified"];
 
-const ROLE_ROWS = [
-  { key: "citizen", label: "Citizen" },
-  { key: "helper", label: "Helper" },
-  { key: "shopkeeper", label: "Shop" },
-  { key: "officer", label: "Officer" },
-  { key: "admin", label: "Admin" },
-  { key: "auditor", label: "Auditor" },
-  { key: "partner", label: "Partner" },
-] as const;
+const HOUR_SLICE_LABELS = [":00", ":10", ":20", ":30", ":40", ":50"] as const;
+const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+
+const formatHour12 = (hour24: number) => {
+  const h = ((hour24 % 24) + 24) % 24;
+  const suffix = h >= 12 ? "PM" : "AM";
+  const twelve = h % 12 === 0 ? 12 : h % 12;
+  return `${twelve} ${suffix}`;
+};
 
 const HEAT_FILLS = [
   "rgba(255, 255, 255, 0.08)",
@@ -205,15 +206,15 @@ function buildHypnogramBlocks(events: Audit[], maxBuckets: number): StageBlock[]
   return merged;
 }
 
-type HeatCell = {
-  roleKey: string;
-  roleLabel: string;
+type StreakCell = {
+  row: number;
   col: number;
   count: number;
   level: 0 | 1 | 2 | 3 | 4;
   topEvent: string;
-  windowLabel: string;
-  isLatestActive: boolean;
+  label: string;
+  isCurrent: boolean;
+  isFuture: boolean;
 };
 
 export function AuditorGlassSuite({
@@ -222,9 +223,7 @@ export function AuditorGlassSuite({
   loading = false,
   compact = false,
   stageFilter = null,
-  roleFilter = null,
   onSelectStage,
-  onSelectRole,
   onOpenVault,
 }: {
   logs: Audit[];
@@ -232,15 +231,13 @@ export function AuditorGlassSuite({
   loading?: boolean;
   compact?: boolean;
   stageFilter?: AuditStage | null;
-  roleFilter?: string | null;
   onSelectStage?: (stage: AuditStage | null) => void;
-  onSelectRole?: (role: string | null) => void;
   onOpenVault?: () => void;
 }) {
   const [streamScope, setStreamScope] = useState<ScopeFilter>("all");
-  const [heatFilter, setHeatFilter] = useState<HeatFilter>("all");
+  const [streakRange, setStreakRange] = useState<StreakRange>("hourly");
   const [selectedBlock, setSelectedBlock] = useState<number | null>(null);
-  const [hoveredCell, setHoveredCell] = useState<HeatCell | null>(null);
+  const [hoveredCell, setHoveredCell] = useState<StreakCell | null>(null);
 
   const scopedLogs = useMemo(() => {
     if (streamScope === "ai") return logs.filter(isAiEvent);
@@ -307,111 +304,228 @@ export function AuditorGlassSuite({
 
   const hypnoBlocks = useMemo(() => buildHypnogramBlocks(scopedLogs, 20), [scopedLogs]);
 
-  const heatmap = useMemo(() => {
+  // GitHub-style Streak Matrix: Hourly (16 hrs x 6 ten-min slices) or Monthly (16 weeks x 7 weekdays)
+  const streakGrid = useMemo(() => {
     const COLS = 16;
-    const source =
-      heatFilter === "ai"
-        ? logs.filter(isAiEvent)
-        : heatFilter === "consent"
-          ? logs.filter(isConsentEvent)
-          : logs;
+    const now = new Date();
+    const anchor = logs.length
+      ? new Date(Math.max(now.getTime(), new Date(logs[0].created_at).getTime()))
+      : now;
 
-    const chronological = [...source].sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-    );
+    if (streakRange === "hourly") {
+      const ROWS = 6;
+      const endHourStart = new Date(anchor);
+      endHourStart.setMinutes(0, 0, 0);
+      const startMs = endHourStart.getTime() - (COLS - 1) * 3600_000;
+      const currentMinuteSlice = Math.min(5, Math.floor(anchor.getMinutes() / 10));
 
-    const roleTotals = new Map<string, number>();
-    const modelTotals = new Map<string, number>();
-    let aiScored = 0;
-    let lowConf = 0;
+      const buckets: Audit[][][] = Array.from({ length: ROWS }, () =>
+        Array.from({ length: COLS }, () => []),
+      );
+      const hourTotals = Array.from({ length: COLS }, () => 0);
 
-    for (const row of source) {
-      roleTotals.set(row.actor_role, (roleTotals.get(row.actor_role) ?? 0) + 1);
-      if (row.model_version) {
-        modelTotals.set(row.model_version, (modelTotals.get(row.model_version) ?? 0) + 1);
+      for (const row of logs) {
+        const ts = new Date(row.created_at).getTime();
+        const col = Math.floor((ts - startMs) / 3600_000);
+        if (col < 0 || col >= COLS) continue;
+        const minute = new Date(ts).getMinutes();
+        const r = Math.min(ROWS - 1, Math.floor(minute / 10));
+        buckets[r][col].push(row);
+        hourTotals[col]++;
       }
-      if (row.confidence !== null) {
-        aiScored++;
-        if (row.confidence < 0.7) lowConf++;
-      }
-    }
 
-    const colBuckets: Audit[][] = Array.from({ length: COLS }, () => []);
-    if (chronological.length > 0) {
-      for (let i = 0; i < chronological.length; i++) {
-        const col = Math.min(COLS - 1, Math.floor((i / chronological.length) * COLS));
-        colBuckets[col].push(chronological[i]);
-      }
-    }
-
-    const rawCounts: number[][] = ROLE_ROWS.map(() => Array.from({ length: COLS }, () => 0));
-    const cellTopEvents: string[][] = ROLE_ROWS.map(() => Array.from({ length: COLS }, () => ""));
-    let maxCount = 0;
-    let latestRoleIdx = -1;
-    let latestColIdx = -1;
-
-    for (let c = 0; c < COLS; c++) {
-      for (let r = 0; r < ROLE_ROWS.length; r++) {
-        const roleKey = ROLE_ROWS[r].key;
-        const hits = colBuckets[c].filter(ev => ev.actor_role === roleKey);
-        rawCounts[r][c] = hits.length;
-        if (hits.length > maxCount) maxCount = hits.length;
-        if (hits.length > 0) {
-          const evFreq = new Map<string, number>();
-          for (const h of hits) evFreq.set(h.event_type, (evFreq.get(h.event_type) ?? 0) + 1);
-          const topEv = [...evFreq.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
-          cellTopEvents[r][c] = topEv;
-          if (c >= latestColIdx) {
-            latestColIdx = c;
-            latestRoleIdx = r;
-          }
+      let maxCount = 0;
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (buckets[r][c].length > maxCount) maxCount = buckets[r][c].length;
         }
+      }
+
+      // Compute current hourly streak (ending at latest active hour or current hour)
+      let streak = 0;
+      let cursor = COLS - 1;
+      if (hourTotals[cursor] === 0 && cursor > 0 && hourTotals[cursor - 1] > 0) cursor--;
+      while (cursor >= 0 && hourTotals[cursor] > 0) {
+        streak++;
+        cursor--;
+      }
+
+      let peakCol = COLS - 1;
+      let peakCount = 0;
+      for (let c = 0; c < COLS; c++) {
+        if (hourTotals[c] > peakCount) {
+          peakCount = hourTotals[c];
+          peakCol = c;
+        }
+      }
+      const peakHourDate = new Date(startMs + peakCol * 3600_000);
+
+      const colHeaders: { col: number; label: string }[] = [];
+      for (let c = 0; c < COLS; c += 4) {
+        const d = new Date(startMs + c * 3600_000);
+        colHeaders.push({
+          col: c,
+          label: `${String(d.getHours()).padStart(2, "0")}:00`,
+        });
+      }
+
+      const cells: StreakCell[] = [];
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const hits = buckets[r][c];
+          const count = hits.length;
+          const ratio = maxCount > 0 ? count / maxCount : 0;
+          const level: 0 | 1 | 2 | 3 | 4 =
+            count === 0 ? 0 : ratio <= 0.25 ? 1 : ratio <= 0.5 ? 2 : ratio <= 0.78 ? 3 : 4;
+          const freq = new Map<string, number>();
+          for (const h of hits) freq.set(h.event_type, (freq.get(h.event_type) ?? 0) + 1);
+          const topEvent = [...freq.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+          const cellHour = new Date(startMs + c * 3600_000);
+          const hh = String(cellHour.getHours()).padStart(2, "0");
+          const mm = String(r * 10).padStart(2, "0");
+          const isFuture = c === COLS - 1 && r > currentMinuteSlice;
+          const isCurrent = c === COLS - 1 && r === currentMinuteSlice;
+
+          cells.push({
+            row: r,
+            col: c,
+            count,
+            level,
+            topEvent,
+            label: `${hh}:${mm}–${hh}:${String(r * 10 + 9).padStart(2, "0")}`,
+            isCurrent,
+            isFuture,
+          });
+        }
+      }
+
+      return {
+        rows: ROWS,
+        cols: COLS,
+        rowLabels: [...HOUR_SLICE_LABELS],
+        subtitle: "Last 16 hours",
+        colHeaders,
+        cells,
+        streakValue: streak,
+        streakUnit: streak === 1 ? "hr" : "hrs",
+        totalEvents: hourTotals.reduce((a, b) => a + b, 0),
+        activeBuckets: hourTotals.filter(v => v > 0).length,
+        activeBucketsUnit: "active hrs",
+        peakLabel: peakCount > 0 ? formatHour12(peakHourDate.getHours()) : "—",
+        peakMeta: peakCount > 0 ? `${peakCount} events` : "No events",
+      };
+    }
+
+    // Monthly mode: 16 calendar weeks x 7 days (Mon..Sun) — classic GitHub contribution grid
+    const ROWS = 7;
+    const todayStart = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+    const todayDayIdx = (todayStart.getDay() + 6) % 7; // Mon=0 .. Sun=6
+    const thisWeekMon = new Date(todayStart.getTime() - todayDayIdx * 86400_000);
+    const gridStart = new Date(thisWeekMon.getTime() - (COLS - 1) * 7 * 86400_000);
+
+    const buckets: Audit[][][] = Array.from({ length: ROWS }, () =>
+      Array.from({ length: COLS }, () => []),
+    );
+    const dayTotals = new Map<number, number>();
+    const weekdayTotals = Array.from({ length: 7 }, () => 0);
+
+    for (const row of logs) {
+      const d = new Date(row.created_at);
+      const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const diffDays = Math.round((dayStart.getTime() - gridStart.getTime()) / 86400_000);
+      if (diffDays < 0 || diffDays >= COLS * 7) continue;
+      const c = Math.floor(diffDays / 7);
+      const r = diffDays % 7;
+      buckets[r][c].push(row);
+      dayTotals.set(diffDays, (dayTotals.get(diffDays) ?? 0) + 1);
+      weekdayTotals[r]++;
+    }
+
+    let maxCount = 0;
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (buckets[r][c].length > maxCount) maxCount = buckets[r][c].length;
+      }
+    }
+
+    const todayOffset = (COLS - 1) * 7 + todayDayIdx;
+    let streak = 0;
+    let dayCursor = todayOffset;
+    if (!dayTotals.get(dayCursor) && dayCursor > 0 && dayTotals.get(dayCursor - 1)) dayCursor--;
+    while (dayCursor >= 0 && (dayTotals.get(dayCursor) ?? 0) > 0) {
+      streak++;
+      dayCursor--;
+    }
+
+    let peakWeekday = 0;
+    let peakCount = 0;
+    for (let r = 0; r < 7; r++) {
+      if (weekdayTotals[r] > peakCount) {
+        peakCount = weekdayTotals[r];
+        peakWeekday = r;
       }
     }
 
     const colHeaders: { col: number; label: string }[] = [];
-    for (const c of [0, 5, 10, 15]) {
-      const first = colBuckets[c][0];
-      if (first) colHeaders.push({ col: c, label: shortTime(first.created_at) });
+    let lastMonth = -1;
+    for (let c = 0; c < COLS; c++) {
+      const colDate = new Date(gridStart.getTime() + c * 7 * 86400_000);
+      const m = colDate.getMonth();
+      if (m !== lastMonth) {
+        colHeaders.push({ col: c, label: MONTH_NAMES[m] });
+        lastMonth = m;
+      }
     }
 
-    const cells: HeatCell[] = [];
-    for (let r = 0; r < ROLE_ROWS.length; r++) {
+    const cells: StreakCell[] = [];
+    for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
-        const count = rawCounts[r][c];
+        const dayOffset = c * 7 + r;
+        const cellDate = new Date(gridStart.getTime() + dayOffset * 86400_000);
+        const hits = buckets[r][c];
+        const count = hits.length;
         const ratio = maxCount > 0 ? count / maxCount : 0;
         const level: 0 | 1 | 2 | 3 | 4 =
           count === 0 ? 0 : ratio <= 0.25 ? 1 : ratio <= 0.5 ? 2 : ratio <= 0.78 ? 3 : 4;
-        const bucketStart = colBuckets[c][0]?.created_at;
+        const freq = new Map<string, number>();
+        for (const h of hits) freq.set(h.event_type, (freq.get(h.event_type) ?? 0) + 1);
+        const topEvent = [...freq.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+        const isFuture = dayOffset > todayOffset;
+        const isCurrent = dayOffset === todayOffset;
+
         cells.push({
-          roleKey: ROLE_ROWS[r].key,
-          roleLabel: ROLE_ROWS[r].label,
+          row: r,
           col: c,
           count,
           level,
-          topEvent: cellTopEvents[r][c],
-          windowLabel: bucketStart ? shortTime(bucketStart) : `W${c + 1}`,
-          isLatestActive: r === latestRoleIdx && c === latestColIdx && count > 0,
+          topEvent,
+          label: cellDate.toLocaleDateString(undefined, {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+          }),
+          isCurrent,
+          isFuture,
         });
       }
     }
 
-    const topRoleEntry = [...roleTotals.entries()].sort((a, b) => b[1] - a[1])[0];
-    const topModelEntry = [...modelTotals.entries()].sort((a, b) => b[1] - a[1])[0];
-
     return {
+      rows: ROWS,
       cols: COLS,
-      cells,
+      rowLabels: [...WEEKDAY_LABELS],
+      subtitle: "Last 16 weeks",
       colHeaders,
-      totalEvents: source.length,
-      aiScored,
-      lowConf,
-      topRole: topRoleEntry ? formatLabel(topRoleEntry[0]) : "—",
-      topModel: topModelEntry ? topModelEntry[0] : "—",
-      modelsCount: modelTotals.size,
-      rulesCount: new Set(source.map(s => s.rule_version).filter(Boolean)).size,
+      cells,
+      streakValue: streak,
+      streakUnit: streak === 1 ? "day" : "days",
+      totalEvents: [...dayTotals.values()].reduce((a, b) => a + b, 0),
+      activeBuckets: dayTotals.size,
+      activeBucketsUnit: dayTotals.size === 1 ? "active day" : "active days",
+      peakLabel: peakCount > 0 ? WEEKDAY_LABELS[peakWeekday] : "—",
+      peakMeta: peakCount > 0 ? `${peakCount} events` : "No events",
     };
-  }, [logs, heatFilter]);
+  }, [logs, streakRange]);
 
   const HYPNO_W = 680;
   const HYPNO_H = compact ? 124 : 168;
@@ -445,11 +559,12 @@ export function AuditorGlassSuite({
 
   const HEAT_W = 540;
   const HEAT_H = compact ? 156 : 198;
-  const HEAT_LEFT = 52;
+  const HEAT_LEFT = 36;
   const HEAT_TOP = 18;
-  const COL_STEP = (HEAT_W - HEAT_LEFT - 6) / heatmap.cols;
-  const ROW_STEP = (HEAT_H - HEAT_TOP - 6) / ROLE_ROWS.length;
-  const DOT_R = Math.min(compact ? 8.2 : 10.5, Math.min(COL_STEP, ROW_STEP) * 0.4);
+  const COL_STEP = (HEAT_W - HEAT_LEFT - 6) / streakGrid.cols;
+  const ROW_STEP = (HEAT_H - HEAT_TOP - 6) / streakGrid.rows;
+  const CELL_SIZE = Math.min(compact ? 17.5 : 22, Math.min(COL_STEP, ROW_STEP) * 0.78);
+  const CELL_RX = Math.max(3, CELL_SIZE * 0.26);
 
   return (
     <div className={"audit-glass-suite" + (compact ? " is-compact" : "")}>
@@ -731,32 +846,32 @@ export function AuditorGlassSuite({
         </div>
       </section>
 
-      {/* CARD 2: Liquid Glass Workout-Consistency / Circular Dot Heatmap Style */}
+      {/* CARD 2: GitHub Streak Contribution Grid — Hourly & Monthly */}
       <section className="audit-glass-card">
         <div className="audit-glass-head">
           <div className="audit-glass-title-group">
             <span className="audit-glass-dot green" />
             <strong className="audit-glass-title">Audit activity</strong>
-            <span className="audit-glass-kicker">
-              {heatmap.modelsCount} models · {heatmap.rulesCount} rules
-            </span>
+            <span className="audit-glass-kicker">{streakGrid.subtitle}</span>
           </div>
 
-          <div className="audit-glass-seg" role="tablist" aria-label="Role heatmap filter">
+          <div className="audit-glass-seg" role="tablist" aria-label="Activity timeframe">
             {(
               [
-                ["all", "All"],
-                ["ai", "AI"],
-                ["consent", "Consent"],
+                ["hourly", "Hourly"],
+                ["monthly", "Monthly"],
               ] as const
             ).map(([key, label]) => (
               <button
                 key={key}
                 type="button"
                 role="tab"
-                aria-selected={heatFilter === key}
-                className={"audit-glass-seg-btn" + (heatFilter === key ? " active" : "")}
-                onClick={() => setHeatFilter(key)}
+                aria-selected={streakRange === key}
+                className={"audit-glass-seg-btn" + (streakRange === key ? " active" : "")}
+                onClick={() => {
+                  setStreakRange(key);
+                  setHoveredCell(null);
+                }}
               >
                 {label}
               </button>
@@ -766,7 +881,7 @@ export function AuditorGlassSuite({
           <div className="audit-heat-legend" aria-hidden="true">
             <span>Less</span>
             {HEAT_FILLS.map((fill, idx) => (
-              <i key={idx} style={{ background: fill }} />
+              <i key={idx} className="is-square" style={{ background: fill }} />
             ))}
             <span>More</span>
           </div>
@@ -778,89 +893,81 @@ export function AuditorGlassSuite({
               viewBox={`0 0 ${HEAT_W} ${HEAT_H}`}
               className="audit-svg"
               role="img"
-              aria-label="Actor role activity heatmap across audit windows"
+              aria-label={`GitHub-style ${streakRange} audit streak heatmap`}
             >
-              {heatmap.colHeaders.map(header => (
+              {streakGrid.colHeaders.map(header => (
                 <text
-                  key={header.col}
+                  key={`${header.col}-${header.label}`}
                   x={HEAT_LEFT + header.col * COL_STEP + COL_STEP * 0.5}
-                  y={14}
+                  y={12}
                   textAnchor="middle"
                   fontSize={10.5}
                   fontFamily="Geist Mono, ui-monospace, monospace"
-                  fill="rgba(255, 255, 255, 0.48)"
+                  fill="rgba(255, 255, 255, 0.5)"
                 >
                   {header.label}
                 </text>
               ))}
 
-              {ROLE_ROWS.map((role, r) => (
-                <text
-                  key={role.key}
-                  x={0}
-                  y={HEAT_TOP + r * ROW_STEP + ROW_STEP * 0.5 + 4}
-                  fontSize={11}
-                  fontWeight={roleFilter === role.key ? 700 : 500}
-                  fill={
-                    roleFilter === role.key ? "#ffffff" : "rgba(255, 255, 255, 0.56)"
-                  }
-                  className="audit-svg-interactive"
-                  onClick={() => {
-                    if (onSelectRole) onSelectRole(roleFilter === role.key ? null : role.key);
-                    else if (onOpenVault) onOpenVault();
-                  }}
-                >
-                  {role.label}
-                </text>
-              ))}
+              {streakGrid.rowLabels.map((label, r) => {
+                // Keep labels uncluttered like GitHub (Mon/Wed/Fri/Sun for Monthly; :00/:20/:40 for Hourly)
+                const show =
+                  streakRange === "monthly" ? r % 2 === 0 : r % 2 === 0;
+                if (!show) return null;
+                return (
+                  <text
+                    key={label}
+                    x={0}
+                    y={HEAT_TOP + r * ROW_STEP + ROW_STEP * 0.5 + 3.5}
+                    fontSize={10.5}
+                    fontFamily={streakRange === "hourly" ? "Geist Mono, ui-monospace, monospace" : undefined}
+                    fill="rgba(255, 255, 255, 0.52)"
+                  >
+                    {label}
+                  </text>
+                );
+              })}
 
-              {heatmap.cells.map(cell => {
-                const rowIdx = ROLE_ROWS.findIndex(r => r.key === cell.roleKey);
-                const cx = HEAT_LEFT + cell.col * COL_STEP + COL_STEP * 0.5;
-                const cy = HEAT_TOP + rowIdx * ROW_STEP + ROW_STEP * 0.5;
-                const isRoleActive = roleFilter === cell.roleKey;
-                const isDimmed = roleFilter !== null && !isRoleActive;
-                const isTrailingEmpty =
-                  !cell.isLatestActive && cell.count === 0 && cell.col === heatmap.cols - 1;
+              {streakGrid.cells.map(cell => {
+                const cx = HEAT_LEFT + cell.col * COL_STEP + (COL_STEP - CELL_SIZE) * 0.5;
+                const cy = HEAT_TOP + cell.row * ROW_STEP + (ROW_STEP - CELL_SIZE) * 0.5;
 
                 return (
-                  <circle
-                    key={`${cell.roleKey}-${cell.col}`}
-                    cx={cx}
-                    cy={cy}
-                    r={DOT_R}
-                    fill={isTrailingEmpty ? "transparent" : HEAT_FILLS[cell.level]}
-                    opacity={isDimmed ? 0.28 : 1}
+                  <rect
+                    key={`${cell.row}-${cell.col}`}
+                    x={cx}
+                    y={cy}
+                    width={CELL_SIZE}
+                    height={CELL_SIZE}
+                    rx={CELL_RX}
+                    fill={cell.isFuture ? "transparent" : HEAT_FILLS[cell.level]}
                     stroke={
-                      cell.isLatestActive
+                      cell.isCurrent
                         ? "#ffffff"
-                        : isTrailingEmpty
-                          ? "rgba(255, 255, 255, 0.24)"
-                          : "none"
+                        : cell.isFuture
+                          ? "rgba(255, 255, 255, 0.22)"
+                          : "rgba(255, 255, 255, 0.06)"
                     }
-                    strokeWidth={cell.isLatestActive ? 2 : 1}
-                    strokeDasharray={isTrailingEmpty ? "2.5 2.5" : undefined}
+                    strokeWidth={cell.isCurrent ? 1.8 : 0.8}
+                    strokeDasharray={cell.isFuture ? "2.5 2.5" : undefined}
                     className="audit-svg-interactive"
                     onMouseEnter={() => setHoveredCell(cell)}
                     onMouseLeave={() => setHoveredCell(null)}
                     onClick={() => {
-                      if (onSelectRole) onSelectRole(roleFilter === cell.roleKey ? null : cell.roleKey);
-                      else if (onOpenVault) onOpenVault();
+                      if (onOpenVault) onOpenVault();
                     }}
                   >
                     <title>
-                      {`${cell.roleLabel} · ${cell.windowLabel} · ${cell.count} event(s)${cell.topEvent ? " (" + formatLabel(cell.topEvent) + ")" : ""}`}
+                      {`${cell.label} · ${cell.count} event(s)${cell.topEvent ? " (" + formatLabel(cell.topEvent) + ")" : ""}`}
                     </title>
-                  </circle>
+                  </rect>
                 );
               })}
             </svg>
 
-            {(!compact || hoveredCell) && (
+            {hoveredCell && (
               <p className="audit-heat-caption">
-                {hoveredCell
-                  ? `${hoveredCell.roleLabel} · ${hoveredCell.windowLabel} · ${hoveredCell.count} event(s)${hoveredCell.topEvent ? " · Top: " + formatLabel(hoveredCell.topEvent) : ""}`
-                  : "Click a role row or dot to filter the audit trail."}
+                {`${hoveredCell.label} · ${hoveredCell.count} event(s)${hoveredCell.topEvent ? " · Top: " + formatLabel(hoveredCell.topEvent) : ""}`}
               </p>
             )}
           </div>
@@ -869,27 +976,27 @@ export function AuditorGlassSuite({
 
           <div className="audit-heat-summary">
             <div className="audit-heat-stat">
-              <span className="audit-metric-label">Logged events</span>
+              <span className="audit-metric-label">Current streak</span>
               <div className="audit-heat-big-row">
-                <strong>{loading && !logs.length ? "—" : heatmap.totalEvents}</strong>
-                <span>events</span>
+                <strong>{loading && !logs.length ? "—" : streakGrid.streakValue}</strong>
+                <span>{streakGrid.streakUnit}</span>
               </div>
             </div>
 
             <div className="audit-heat-stat">
-              <span className="audit-metric-label">AI decisions</span>
+              <span className="audit-metric-label">Events</span>
               <div className="audit-heat-mid-row">
-                <strong>{heatmap.aiScored}</strong>
+                <strong>{streakGrid.totalEvents}</strong>
                 <span>
-                  scored{heatmap.lowConf > 0 ? ` · ${heatmap.lowConf} low` : ""}
+                  {streakGrid.activeBuckets} {streakGrid.activeBucketsUnit}
                 </span>
               </div>
             </div>
 
             <div className="audit-heat-stat">
               <span className="audit-metric-label">Most active</span>
-              <strong className="audit-heat-role">{heatmap.topRole}</strong>
-              <small className="audit-heat-model">{heatmap.topModel}</small>
+              <strong className="audit-heat-role">{streakGrid.peakLabel}</strong>
+              <small className="audit-heat-model">{streakGrid.peakMeta}</small>
             </div>
           </div>
         </div>
