@@ -418,10 +418,12 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   openAppRef.current = openAppWindow;
   const focusAppRef = useRef(focusApp);
   focusAppRef.current = focusApp;
+  const minimizedAppsRef = useRef(minimizedApps);
+  minimizedAppsRef.current = minimizedApps;
 
   useEffect(() => {
     cuaEngine.bridge = {
-      isAppOpen: app => openAppsRef.current.includes(app),
+      isAppOpen: app => openAppsRef.current.includes(app) && !minimizedAppsRef.current.includes(app),
       getOpenApps: () => [...openAppsRef.current],
       getActiveApp: () => activeAppRef.current,
       openApp: app => openAppRef.current(app),

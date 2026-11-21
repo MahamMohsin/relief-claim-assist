@@ -303,7 +303,7 @@ class CuaEngine {
 
   private async ensureAppOpen(app: MiniApp, gen: number, skipIfOpen = true): Promise<boolean> {
     if (this.isStale(gen) || !this.bridge) return false;
-    if (skipIfOpen && this.bridge.isAppOpen(app)) {
+    if (skipIfOpen && this.bridge.isAppOpen(app) && this.bridge.getActiveApp() === app) {
       this.bridge.focusApp(app);
       return await this.sleep(160, gen);
     }
