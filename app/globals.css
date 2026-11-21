@@ -4928,3 +4928,144 @@ button.persona-card, button.kanban-card { background: var(--surface); }
    exact positions (measured pill widths: 233.45px, or 207.85px at <=510px). */
 .status-spacer { flex: 0 0 auto; width: 233.45px; height: 1px; }
 @media (max-width: 510px) { .status-spacer { width: 207.85px; } }
+
+/* ========================================================
+   OFFICER OVERVIEW LIQUID GLASS CARDS (matches Auditor glass suite)
+   ======================================================== */
+.overview-stats-suite .overview-card,
+.overview-stats-suite button.overview-card,
+.overview-stats-suite .active-cases-card,
+.overview-stats-suite button.active-cases-card {
+  --ink: #ffffff;
+  --soft-ink: rgba(255, 255, 255, 0.72);
+  --muted: rgba(255, 255, 255, 0.62);
+  --color-text-primary: #ffffff;
+  --color-text-secondary: rgba(255, 255, 255, 0.68);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 45%, rgba(255, 255, 255, 0.015) 100%),
+    rgba(14, 15, 19, 0.54);
+  backdrop-filter: blur(34px) saturate(185%);
+  -webkit-backdrop-filter: blur(34px) saturate(185%);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 20px;
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+}
+
+.overview-stats-suite .overview-card:hover,
+.overview-stats-suite button.overview-card:hover,
+.overview-stats-suite .active-cases-card:hover,
+.overview-stats-suite button.active-cases-card:hover {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.08) 45%, rgba(255, 255, 255, 0.025) 100%),
+    rgba(18, 20, 26, 0.62);
+  border-color: rgba(255, 255, 255, 0.34);
+  box-shadow:
+    0 22px 50px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+  transform: translateY(-2px);
+}
+
+.overview-stats-suite .overview-card-title,
+.overview-stats-suite .active-cases-card .overview-card-title {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.overview-stats-suite .overview-live-badge {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: #ffffff;
+}
+
+.overview-stats-suite .live-dot {
+  background: #34d399;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.85);
+}
+
+.overview-stats-suite .overview-big-num,
+.overview-stats-suite .stack-metric-num {
+  color: #ffffff;
+}
+
+.overview-stats-suite .overview-sub-meta,
+.overview-stats-suite .overview-empty,
+.overview-stats-suite .stack-metric-denom,
+.overview-stats-suite .bubbles-legend-footer {
+  color: rgba(255, 255, 255, 0.64);
+}
+
+.overview-stats-suite .bubbles-legend-footer {
+  border-top-color: rgba(255, 255, 255, 0.14);
+}
+
+.overview-stats-suite .cluster-avatar,
+.overview-stats-suite .mini-av {
+  border-color: rgba(255, 255, 255, 0.42);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.overview-stats-suite .cluster-counter {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.36);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.overview-stats-suite .prop-bubble {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.overview-stats-suite .prop-bubble.big {
+  background: radial-gradient(circle at 30% 30%, rgba(52, 211, 153, 0.44), rgba(16, 185, 129, 0.2));
+  border-color: rgba(110, 231, 183, 0.48);
+  color: #ecfdf5;
+}
+
+.overview-stats-suite .prop-bubble.medium {
+  background: radial-gradient(circle at 30% 30%, rgba(129, 140, 248, 0.46), rgba(99, 102, 241, 0.22));
+  border-color: rgba(165, 180, 252, 0.48);
+  color: #eef2ff;
+}
+
+.overview-stats-suite .prop-bubble.small {
+  background: radial-gradient(circle at 30% 30%, rgba(251, 191, 36, 0.44), rgba(217, 119, 6, 0.22));
+  border-color: rgba(253, 224, 71, 0.46);
+  color: #fffbeb;
+}
+
+.overview-stats-suite .prop-bubble.mini {
+  background: radial-gradient(circle at 30% 30%, rgba(244, 63, 94, 0.46), rgba(190, 18, 60, 0.24));
+  border-color: rgba(253, 164, 175, 0.46);
+  color: #fff1f2;
+}
+
+.overview-stats-suite .stack-urgent-badge {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(251, 191, 36, 0.38);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .overview-stats-suite .overview-card,
+  .overview-stats-suite button.overview-card,
+  .overview-stats-suite .active-cases-card,
+  .overview-stats-suite button.active-cases-card {
+    background: rgba(14, 15, 19, 0.92);
+  }
+}
+
+.workspace.lite .overview-stats-suite .overview-card,
+.workspace.lite .overview-stats-suite button.overview-card,
+.workspace.lite .overview-stats-suite .active-cases-card,
+.workspace.lite .overview-stats-suite button.active-cases-card {
+  background: rgba(14, 15, 19, 0.92);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
