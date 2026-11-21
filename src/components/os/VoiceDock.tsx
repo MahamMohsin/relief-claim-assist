@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from "react";
-import { AudioLines, Mic, Send, StopCircle, Volume2 } from "lucide-react";
+import { AudioLines, Mic, Send, Volume2, X } from "lucide-react";
 import type { MiniApp, Profile, UIAction } from "@/src/lib/contracts";
 import { transcribe } from "@/src/lib/client";
 import { useVoiceStream } from "@/src/lib/useVoiceStream";
@@ -60,6 +60,9 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   // Whether the mic should reopen by itself once the assistant has finished
   // speaking, so a spoken conversation can carry on hands-free.
   const autoMicArmed = useRef(false);
+  // The prompt this run was given, so a transcript left in the box can be told
+  // apart from something the person typed afterwards.
+  const sentPromptRef = useRef("");
 
   const dgVoice = useVoiceStream(lang);
   const recording = dgVoice.listening || clipRecording;
@@ -148,6 +151,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
 
   async function command(raw: string, viaVoice = false) {
     const prompt = raw.trim();
+    console.log("[command]", JSON.stringify({ viaVoice, prompt: prompt.slice(0, 24) }));
     if (!prompt) return;
     setExpanded(true);
     setInput("");
@@ -162,6 +166,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     }
 
     setTurns(current => [...current, { id: crypto.randomUUID(), role: "user", text: prompt }]);
+    sentPromptRef.current = prompt;
 
     if (active.current) {
       await fetch("/api/agent/stream", {
@@ -233,7 +238,14 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
           case "ui_action": {
             if (event.action.type === "ask_clarification") {
               setClarify(event.action);
-              void speakText(event.action.question, lang, lite).then(setStage);
+              // Counted like any other spoken segment, so the mic waits for the
+              // question to finish being read out.
+              speechPending.current += 1;
+              void speakText(event.action.question, lang, lite).then(status => {
+                speechPending.current = Math.max(0, speechPending.current - 1);
+                if (status !== "Playback stopped") setStage(status);
+                resumeMic();
+              });
             }
             onAction(event.action);
             break;
@@ -270,11 +282,19 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   // The mic reopens by itself once the assistant has finished speaking, so a
   // spoken conversation carries on without another tap.
   function resumeMic() {
-    console.log("[resumeMic]", { armed: autoMicArmed.current, pending: speechPending.current, recording: recordingRef.current, starting: startingMicRef.current, micStart: Boolean(micStart.current), input: inputRef.current });
+    console.log("[resumeMic]", JSON.stringify({ armed: autoMicArmed.current, pending: speechPending.current, rec: recordingRef.current, start: startingMicRef.current, micStart: Boolean(micStart.current), typed: inputRef.current.trim(), sent: sentPromptRef.current }));
     if (!autoMicArmed.current) return;
     if (speechPending.current > 0) return;
     if (recordingRef.current || startingMicRef.current || micStart.current) return;
-    if (inputRef.current.trim()) return;
+    // The transcript can linger in the box after it was sent. That is not the
+    // person typing something new, so clear it and carry on; a genuinely new
+    // draft means they are writing and the mic should stay shut.
+    const typed = inputRef.current.trim();
+    if (typed && typed !== sentPromptRef.current) return;
+    if (typed) {
+      setInput("");
+      inputRef.current = "";
+    }
     autoMicArmed.current = false;
     setStage("Listening again — speak to continue");
     void startRecording();
@@ -420,6 +440,20 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     stopSpeaking();
   }
 
+  /** Cancel whatever is in flight: the recording, the running request, or the
+   *  draft in the box. */
+  function cancel() {
+    if (recording) void stopRecording(false);
+    if (working) stop();
+    autoMicArmed.current = false;
+    setInput("");
+    inputRef.current = "";
+    liveSpeechRef.current = "";
+    setError("");
+    setClarify(null);
+    setStage("Cancelled");
+  }
+
   function submit(event: FormEvent) { event.preventDefault(); void command(input); }
 
   // The conversation, newest last. Only the last couple of bubbles show until
@@ -489,7 +523,11 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
         <button type="button" className="glass-lang-pill" aria-label="Switch voice language" onClick={() => setLang(value => value === "en" ? "ur" : "en")}>
           {lang === "ur" ? "اردو" : "EN"}
         </button>
-        {working && <button type="button" className="glass-icon-btn stop" aria-label="Stop assistant" onClick={stop}><StopCircle size={18} /></button>}
+        {(working || recording || input.trim()) && (
+          <button type="button" className="glass-icon-btn stop" aria-label="Cancel" title="Cancel" onClick={cancel}>
+            <X size={18} />
+          </button>
+        )}
         {/* Unified Record / Stop-and-Send / Send Action Button */}
         <button
           type={!recording && input.trim() ? "submit" : "button"}

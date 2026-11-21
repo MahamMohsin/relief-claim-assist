@@ -9,3 +9,5 @@ env.download
 skills-lock.json
 supabase/.temp/
 .tmp-tegaki/
+.tmp-chat/
+.tmp-voice/
