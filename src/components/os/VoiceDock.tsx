@@ -61,9 +61,6 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     return () => {
       mounted.current = false;
       active.current?.controller.abort();
-      stream.current?.getTracks().forEach(track => track.stop());
-      try { speechRecognizer.current?.abort(); } catch {}
-      window.clearTimeout(stopAt.current);
       stopSpeaking();
     };
   }, []);
