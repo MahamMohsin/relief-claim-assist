@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { TegakiRenderer } from "tegaki/react";
 import script from "tegaki/fonts/parisienne";
 import s from "./WelcomeOverlay.module.css";
@@ -8,17 +9,30 @@ import s from "./WelcomeOverlay.module.css";
 interface WelcomeOverlayProps {
   name: string;
   onDismiss: () => void;
+  /** `'always'` draws the greeting finished instead of writing it out. */
+  reducedMotion?: "never" | "user" | "always";
 }
 
 /** How long the finished greeting stays on screen before the overlay closes. */
-const HOLD_MS = 1600;
+const HOLD_MS = 1400;
 /** Backstop so a font that never loads can never strand the user here. */
 const MAX_MS = 12000;
 /** Matches the fade-out in the stylesheet. */
 const FADE_MS = 420;
 
-export function WelcomeOverlay({ name, onDismiss }: WelcomeOverlayProps) {
+/** Each letter starts before the previous one has finished, so the greeting
+ *  flows like real handwriting instead of drawing one letter at a time. */
+const TIME = { mode: "uncontrolled", speed: 1.6 } as const;
+const TIMING = {
+  stagger: { advance: "45%" },
+  wordGap: 0.03,
+  lineGap: 0.1,
+  strokeEasing: (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+} as const;
+
+export function WelcomeOverlay({ name, onDismiss, reducedMotion = "user" }: WelcomeOverlayProps) {
   const [leaving, setLeaving] = useState(false);
+  const [host, setHost] = useState<HTMLElement | null>(null);
   const closed = useRef(false);
   const timers = useRef<number[]>([]);
   // The parent re-renders often, so the dismiss callback is read through a ref
@@ -58,7 +72,13 @@ export function WelcomeOverlay({ name, onDismiss }: WelcomeOverlayProps) {
     };
   }, [close, later]);
 
-  return (
+  // The greeting lives outside the blurred workspace, so it is portalled to the
+  // body rather than nested inside the app it covers.
+  useEffect(() => {
+    setHost(document.body);
+  }, []);
+
+  const greeting = (
     <div
       className={leaving ? `${s.overlay} ${s.leaving}` : s.overlay}
       role="dialog"
@@ -71,7 +91,9 @@ export function WelcomeOverlay({ name, onDismiss }: WelcomeOverlayProps) {
           font={script}
           className={s.ink}
           onComplete={handleComplete}
-          reducedMotion="user"
+          reducedMotion={reducedMotion}
+          time={TIME}
+          timing={TIMING}
         >
           {`Welcome ${name}`}
         </TegakiRenderer>
@@ -79,4 +101,6 @@ export function WelcomeOverlay({ name, onDismiss }: WelcomeOverlayProps) {
       </div>
     </div>
   );
+
+  return host ? createPortal(greeting, host) : null;
 }
