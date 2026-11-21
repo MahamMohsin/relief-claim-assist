@@ -335,7 +335,7 @@ th { background: var(--faint); color: var(--forest); }
   gap: 1.6rem;
 }
 
-/* Background canvas: User Apple wallpaper random-bg-1.jpg with subtle Apple depth blur */
+/* Background canvas: User Apple wallpaper random-bg-3.webp with subtle Apple depth blur */
 .workspace {
   position: relative;
   min-height: 100dvh;
@@ -347,7 +347,7 @@ th { background: var(--faint); color: var(--forest); }
   content: "";
   position: fixed;
   inset: -20px;
-  background-image: url("/random-bg-1.jpg");
+  background-image: url("/random-bg-3.webp");
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
