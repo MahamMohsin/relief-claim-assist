@@ -179,133 +179,107 @@ table { width: 100%; border-collapse: collapse; text-align: left; font-size: .88
 th, td { padding: .6rem .52rem; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { background: var(--faint); color: var(--forest); }
 /* ========================================================
-   APPLE LIQUID GLASS THIN NAVBAR
+   APPLE MACOS FLAT GLASS TOP MENU BAR (Edge-to-Edge)
    ======================================================== */
 
-.ios-liquid-navbar {
+.macos-menubar {
   position: sticky;
-  top: 0.75rem;
-  z-index: 30;
-  width: min(1140px, calc(100% - 1.5rem));
-  margin: 0.65rem auto 1.2rem;
-}
-
-.ios-liquid-nav-inner {
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: 28px;
   background: rgba(255, 255, 255, 0.45);
-  backdrop-filter: blur(36px) saturate(220%);
-  -webkit-backdrop-filter: blur(36px) saturate(220%);
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.3) inset;
-  border-radius: 9999px;
-  padding: 0.35rem 0.9rem;
+  backdrop-filter: blur(30px) saturate(200%);
+  -webkit-backdrop-filter: blur(30px) saturate(200%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  padding: 0 1rem;
+  z-index: 50;
+  border-radius: 0;
+  margin: 0;
 }
 
-.ios-nav-left {
+.macos-menu-left {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.2rem;
 }
 
-.ios-nav-logo {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #00715D 0%, #004D3F 100%);
-  color: #fff;
+.macos-apple-logo {
   display: grid;
   place-items: center;
-  box-shadow: 0 2px 6px rgba(0, 113, 93, 0.35);
+  color: #111e1b;
+  padding: 0 0.4rem;
+  opacity: 0.9;
 }
 
-.ios-nav-title {
-  font-size: 0.85rem;
+.macos-app-name {
+  font-size: 0.81rem;
   font-weight: 750;
   color: #111e1b;
-  letter-spacing: -0.02em;
+  padding: 0 0.45rem;
+  letter-spacing: -0.01em;
 }
 
-.ios-nav-chip {
-  font-size: 0.66rem;
-  font-weight: 700;
-  color: #00715D;
-  background: rgba(0, 113, 93, 0.1);
-  padding: 0.15rem 0.45rem;
-  border-radius: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.ios-nav-links {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.ios-nav-link {
+.macos-menu-item {
   border: none;
   background: transparent;
-  color: rgba(17, 30, 27, 0.75);
-  font-size: 0.82rem;
+  color: rgba(17, 30, 27, 0.85);
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.macos-menu-item:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #000;
+}
+
+.macos-menu-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.78rem;
+  color: #111e1b;
+}
+
+.macos-status-pill {
+  font-size: 0.73rem;
   font-weight: 600;
-  padding: 0.3rem 0.75rem;
-  border-radius: 9999px;
-  cursor: pointer;
-  transition: all 0.15s;
+  color: rgba(17, 30, 27, 0.75);
 }
 
-.ios-nav-link:hover {
-  background: rgba(255, 255, 255, 0.55);
+.macos-user-btn {
+  border: none;
+  background: transparent;
   color: #111e1b;
-}
-
-.ios-nav-link.active {
-  background: rgba(255, 255, 255, 0.85);
-  color: #00715D;
-  font-weight: 750;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-.ios-nav-right {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-.ios-nav-status {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.74rem;
-  font-weight: 680;
-  color: rgba(17, 30, 27, 0.8);
-  padding: 0.25rem 0.55rem;
-  background: rgba(255, 255, 255, 0.45);
-  border-radius: 9999px;
-}
-
-.ios-nav-profile-pill {
-  border: 1px solid rgba(255, 255, 255, 0.75);
-  background: rgba(255, 255, 255, 0.85);
-  color: #111e1b;
-  font-size: 0.76rem;
-  font-weight: 750;
-  padding: 0.28rem 0.7rem;
-  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 650;
+  padding: 0.12rem 0.35rem;
+  border-radius: 4px;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-  transition: transform 0.15s;
 }
 
-.ios-nav-profile-pill:hover {
-  transform: scale(1.04);
+.macos-user-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.macos-clock {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(17, 30, 27, 0.85);
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 640px) {
-  .ios-nav-links {
+  .macos-menu-item {
     display: none;
   }
 }

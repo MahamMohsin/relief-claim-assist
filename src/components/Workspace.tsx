@@ -200,35 +200,30 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
 
   return (
     <div className={lite ? "workspace lite" : "workspace"}>
-      {/* Apple Liquid Glass Floating Top Navbar */}
-      <header className="ios-liquid-navbar">
-        <div className="ios-liquid-nav-inner">
-          <div className="ios-nav-left">
-            <span className="ios-nav-logo">
-              <HandHeart size={16} />
-            </span>
-            <span className="ios-nav-title">Relief Claim Assist</span>
-            <span className="ios-nav-chip">Prototype · DPI</span>
-          </div>
+      {/* Apple macOS Full-Width Top Menu Bar */}
+      <header className="macos-menubar">
+        <div className="macos-menu-left">
+          <span className="macos-apple-logo" title="Relief System">
+            <HandHeart size={14} />
+          </span>
+          <span className="macos-app-name">Relief Assist</span>
+          <button className="macos-menu-item" onClick={() => changeApp(null)}>Dashboard</button>
+          <button className="macos-menu-item" onClick={() => changeApp("claim")}>Claims</button>
+          <button className="macos-menu-item" onClick={() => changeApp("policy")}>Rules</button>
+          <button className="macos-menu-item" onClick={() => changeApp("privacy")}>Privacy</button>
+          <button className="macos-menu-item" onClick={() => changeApp("audit")}>Audit</button>
+        </div>
 
-          <nav className="ios-nav-links">
-            <button className="ios-nav-link active" onClick={() => changeApp(null)}>Dashboard</button>
-            <button className="ios-nav-link" onClick={() => changeApp("claim")}>Claims</button>
-            <button className="ios-nav-link" onClick={() => changeApp("policy")}>Rules</button>
-            <button className="ios-nav-link" onClick={() => changeApp("privacy")}>Privacy</button>
-          </nav>
-
-          <div className="ios-nav-right">
-            <div className="ios-nav-status">
-              <span className="status-dot-pulse" />
-              <span>{offline ? "Offline" : "Online"}</span>
-            </div>
-            {profile && (
-              <button className="ios-nav-profile-pill" onClick={() => setChooser(true)}>
-                <span>{profile.full_name.split(" ")[0]}</span>
-              </button>
-            )}
-          </div>
+        <div className="macos-menu-right">
+          <span className="macos-status-pill">{offline ? "Offline" : "Online"}</span>
+          {profile && (
+            <button className="macos-user-btn" onClick={() => setChooser(true)}>
+              {profile.full_name.split(" ")[0]}
+            </button>
+          )}
+          <span className="macos-clock">
+            {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </span>
         </div>
       </header>
 
