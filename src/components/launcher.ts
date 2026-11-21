@@ -9,8 +9,8 @@ export const apps = {
     icon: FileText,
     image: "/icons/apps/claim.jpg",
     color: "ios-green",
-    gradient: "from-[#34C759] to-[#28A745]",
-    bg: "#eafaf1"
+    gradient: "from-[#1B5C51] to-[#134A41]",
+    bg: "#E6F0ED"
   },
   scam: {
     title: "Scam Shield",
@@ -19,8 +19,8 @@ export const apps = {
     icon: ShieldCheck,
     image: "/icons/apps/scam.jpg",
     color: "ios-orange",
-    gradient: "from-[#FF9500] to-[#E08500]",
-    bg: "#fff6eb"
+    gradient: "from-[#C2552D] to-[#A8441F]",
+    bg: "#FBEDE6"
   },
   policy: {
     title: "Policy Ask",
@@ -29,8 +29,8 @@ export const apps = {
     icon: BookOpen,
     image: "/icons/apps/policy.jpg",
     color: "ios-blue",
-    gradient: "from-[#007AFF] to-[#0056B3]",
-    bg: "#ebf5ff"
+    gradient: "from-[#2A7364] to-[#1B5C51]",
+    bg: "#E6F0ED"
   },
   privacy: {
     title: "My Privacy",
@@ -39,8 +39,8 @@ export const apps = {
     icon: Fingerprint,
     image: "/icons/apps/privacy.jpg",
     color: "ios-purple",
-    gradient: "from-[#AF52DE] to-[#8E44AD]",
-    bg: "#f7effc"
+    gradient: "from-[#4F5FC8] to-[#3F4FB8]",
+    bg: "#E7EAFB"
   },
   family: {
     title: "Family Switch",
@@ -49,8 +49,8 @@ export const apps = {
     icon: UsersRound,
     image: "/icons/apps/family.jpg",
     color: "ios-teal",
-    gradient: "from-[#5AC8FA] to-[#00A3D9]",
-    bg: "#edf8fd"
+    gradient: "from-[#2A7364] to-[#134A41]",
+    bg: "#E6F0ED"
   },
   review: {
     title: "Review Desk",
@@ -59,8 +59,8 @@ export const apps = {
     icon: ClipboardCheck,
     image: "/icons/apps/review.jpg",
     color: "ios-indigo",
-    gradient: "from-[#5856D6] to-[#3B38B0]",
-    bg: "#f0f0fd"
+    gradient: "from-[#4F5FC8] to-[#3F4FB8]",
+    bg: "#E7EAFB"
   },
   rules: {
     title: "Rule Studio",
@@ -69,8 +69,8 @@ export const apps = {
     icon: SlidersHorizontal,
     image: "/icons/apps/rules.jpg",
     color: "ios-amber",
-    gradient: "from-[#FFCC00] to-[#D4A600]",
-    bg: "#fef9e8"
+    gradient: "from-[#C2552D] to-[#A8441F]",
+    bg: "#FBEDE6"
   },
   users: {
     title: "Users",
@@ -87,7 +87,7 @@ export const apps = {
     badge: "Compliance",
     icon: Scale,
     color: "ios-rose",
-    gradient: "from-[#FF2D55] to-[#D81B43]",
-    bg: "#fdeef1"
+    gradient: "from-[#134A41] to-[#0E3A33]",
+    bg: "#E6F0ED"
   },
 } satisfies Record<MiniApp, { title: string; note: string; badge?: string; icon: typeof FileText; image?: string; color: string; gradient: string; bg: string }>;

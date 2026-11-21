@@ -325,15 +325,16 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     <div className="voice-glass-main">
       <form className="voice-glass-form" onSubmit={submit}>
         <input
-          className="glass-voice-input"
+          className={"glass-voice-input" + (lang === "ur" ? " is-urdu" : "")}
+          dir={lang === "ur" ? "rtl" : "ltr"}
           aria-label="Type a relief assistant command"
           placeholder={
             recording
               ? lang === "ur"
-                ? "سن رہا ہے… (T چھوڑ کر بند کریں)"
+                ? "سن رہا ہے… (⁦T⁩ چھوڑ کر بند کریں)"
                 : "Listening… (Release T to stop)"
               : lang === "ur"
-                ? "اپنا سوال لکھیں یا مائیک دبائیں (T دبا کر بولیں)…"
+                ? "اپنا سوال لکھیں یا مائیک دبائیں (⁦T⁩ دبا کر بولیں)…"
                 : "Ask anything, press T to talk, or record…"
           }
           value={input}

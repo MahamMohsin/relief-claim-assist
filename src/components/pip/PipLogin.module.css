@@ -1,19 +1,19 @@
 /* Pip Login CSS Modules */
 .pipModalOverlay {
-  --page: #e6e4df;
+  --page: var(--brand-900);
   --stage: 1080px;
-  --stage-glow: radial-gradient(ellipse at 50% 40%, #efeee9 0%, #e3e1db 70%, #dad7d0 100%);
+  --stage-glow: var(--canvas-glow);
   --scene-zoom: translateY(-20px) scale(1.18);
   --pip-font: Geist, -apple-system, BlinkMacSystemFont, sans-serif;
   --pip-mono: "Geist Mono", monospace;
-  --pip-ink: #151515;
-  --pip-muted: #8a877f;
-  --pip-placeholder: #9a978f;
-  --pip-white: #fff;
-  --pip-error: #d93f44;
-  --card: #fbfaf8;
-  --card-rim: rgba(0, 0, 0, 0.06);
-  --card-radius: 32px;
+  --pip-ink: var(--text);
+  --pip-muted: var(--text-muted);
+  --pip-placeholder: var(--text-muted);
+  --pip-white: var(--surface);
+  --pip-error: var(--error-text);
+  --card: var(--surface);
+  --card-rim: var(--border);
+  --card-radius: var(--window-radius);
   --card-pad: 44px;
   --cap-size: 12px;
   --cap-tracking: 1px;
@@ -21,8 +21,8 @@
   --title-weight: 500;
   --title-tracking: -1.2px;
   --field-h: 56px;
-  --field-fill: #f1efeb;
-  --field-rim: rgba(0, 0, 0, 0.08);
+  --field-fill: var(--surface);
+  --field-rim: var(--border-strong);
   --field-size: 17px;
   --label-w: 96px;
   --label-size: 14px;
@@ -30,12 +30,13 @@
   --dots-tracking: 4px;
   --caret-w: 2px;
   --caret-h: 22px;
-  --button: #151515;
-  --pip-green: #8ff0c2;
+  --button: var(--accent-600);
+  --pip-green: var(--success-bar);
   --led-dark: #0a0a0b;
   position: fixed;
   inset: 0;
-  background: var(--stage-glow);
+  background-color: var(--page);
+  background-image: var(--stage-glow);
   z-index: 1000;
   display: flex;
   align-items: center;
@@ -51,8 +52,8 @@
   height: 44px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  color: #151515;
+  border: 1px solid var(--border-soft);
+  color: var(--brand-800);
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -62,7 +63,7 @@
 
 .closeButton:hover {
   transform: scale(1.08);
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .stage {
@@ -131,7 +132,7 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: radial-gradient(circle at 36% 32%, #f2fff9 0 16%, #8ff0c2 52%, #3fbf86 100%);
+  background: radial-gradient(circle at 36% 32%, #E3F3EA 0 16%, #5FC28D 52%, #1F7A4D 100%);
   opacity: 0;
 }
 .halo {
@@ -141,7 +142,7 @@
   width: 54px;
   height: 54px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(143, 240, 194, 0.55), rgba(143, 240, 194, 0) 70%);
+  background: radial-gradient(circle, rgba(95, 194, 141, 0.55), rgba(95, 194, 141, 0) 70%);
   opacity: 0;
 }
 .ear {
@@ -286,6 +287,7 @@
   border-radius: var(--card-radius);
   background: var(--card);
   border: 1px solid var(--card-rim);
+  box-shadow: var(--window-shadow);
   padding: var(--card-pad);
 }
 .cap {
@@ -293,20 +295,21 @@
   font-size: var(--cap-size);
   letter-spacing: var(--cap-tracking);
   text-transform: uppercase;
-  color: var(--pip-muted);
+  color: var(--brand-600);
 }
 .title {
   font-size: var(--title-size);
   font-weight: var(--title-weight);
   letter-spacing: var(--title-tracking);
   margin-top: 12px;
+  color: var(--text);
 }
 .field {
   position: absolute;
   left: var(--card-pad);
   right: var(--card-pad);
   height: var(--field-h);
-  border-radius: calc(var(--field-h) / 2);
+  border-radius: var(--control-radius);
   background: var(--field-fill);
   border: 1px solid var(--field-rim);
   display: flex;
@@ -322,8 +325,9 @@
   top: 212px;
 }
 .field.focused {
-  border-color: var(--pip-ink);
+  border-color: var(--accent-600);
   background: var(--pip-white);
+  box-shadow: 0 0 0 2px var(--accent-500);
 }
 .label {
   width: var(--label-w);
@@ -360,7 +364,7 @@
   right: var(--card-pad);
   top: 288px;
   height: var(--field-h);
-  border-radius: calc(var(--field-h) / 2);
+  border-radius: var(--control-radius);
   background: var(--button);
   color: var(--pip-white);
   font-size: var(--field-size);
@@ -382,8 +386,8 @@
   max-width: 90vw;
   padding: 8px 14px;
   border-radius: 12px;
-  background: #fff5f4;
-  color: #9b2420;
+  background: var(--error-bg);
+  color: var(--error-text);
   font-size: 13px;
   text-align: center;
   z-index: 100;
@@ -397,13 +401,13 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(27, 92, 81, 0.58);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 9999px;
   padding: 6px 14px 6px 16px;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.24);
   z-index: 100;
   max-width: 95vw;
   overflow-x: auto;
@@ -414,7 +418,7 @@
   font-weight: 700;
   letter-spacing: 0.6px;
   text-transform: uppercase;
-  color: var(--pip-muted);
+  color: var(--text-on-dark-muted);
   white-space: nowrap;
   font-family: var(--pip-mono);
 }
@@ -429,9 +433,9 @@
   gap: 6px;
   padding: 6px 12px;
   border-radius: 9999px;
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  color: #151515;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  color: var(--brand-800);
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
@@ -440,9 +444,9 @@
   font-family: inherit;
 }
 .easyProfilePill:hover {
-  background: #151515;
-  color: #ffffff;
-  border-color: #151515;
+  background: var(--brand-100);
+  color: var(--brand-800);
+  border-color: var(--border-soft);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
@@ -452,7 +456,7 @@
 .easyProfileRole {
   font-size: 10.5px;
   font-weight: 500;
-  opacity: 0.65;
+  color: var(--text-muted);
   text-transform: capitalize;
 }
 .cardModeSwitch {
@@ -471,16 +475,16 @@
   background: none;
   border: none;
   padding: 0;
-  color: var(--pip-ink);
+  color: var(--accent-600);
   font-weight: 600;
   cursor: pointer;
-  text-decoration: underline;
+  text-decoration: none;
   text-underline-offset: 3px;
   font-family: inherit;
   font-size: inherit;
 }
 .switchAction:hover {
-  opacity: 0.8;
+  text-decoration: underline;
 }
 
 /* Signup Card Overlay */
@@ -488,7 +492,7 @@
   position: absolute;
   inset: 0;
   border-radius: var(--card-radius);
-  background: #fbfaf8;
+  background: var(--card);
   padding: 32px 38px;
   z-index: 50;
   display: flex;
@@ -521,7 +525,7 @@
 }
 .signupBack:hover {
   color: var(--pip-ink);
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--brand-100);
 }
 .signupForm {
   display: flex;
@@ -536,7 +540,7 @@
 .signupInput {
   width: 100%;
   height: 44px;
-  border-radius: 22px;
+  border-radius: var(--control-radius);
   background: var(--field-fill);
   border: 1px solid var(--field-rim);
   padding: 0 16px;
@@ -547,12 +551,13 @@
 }
 .signupInput:focus {
   background: var(--pip-white);
-  border-color: var(--pip-ink);
+  border-color: var(--accent-600);
+  box-shadow: 0 0 0 2px var(--accent-500);
 }
 .signupSelect {
   width: 100%;
   height: 44px;
-  border-radius: 22px;
+  border-radius: var(--control-radius);
   background: var(--field-fill);
   border: 1px solid var(--field-rim);
   padding: 0 16px;
@@ -564,11 +569,12 @@
 }
 .signupSelect:focus {
   background: var(--pip-white);
-  border-color: var(--pip-ink);
+  border-color: var(--accent-600);
+  box-shadow: 0 0 0 2px var(--accent-500);
 }
 .signupSubmit {
   height: 46px;
-  border-radius: 23px;
+  border-radius: var(--control-radius);
   background: var(--button);
   color: var(--pip-white);
   border: none;
@@ -582,10 +588,10 @@
   margin-top: 4px;
 }
 .signupSubmit:hover:not(:disabled) {
-  opacity: 0.92;
+  background: var(--accent-700);
 }
 .signupSubmit:disabled {
-  opacity: 0.6;
+  opacity: var(--disabled-opacity);
   cursor: not-allowed;
 }
 .signupDemoOption {
@@ -611,7 +617,7 @@
   color: var(--pip-error);
 }
 .signupNotice.success {
-  color: #107c41;
+  color: var(--success-text);
 }
 .buttonLabel {
   position: absolute;

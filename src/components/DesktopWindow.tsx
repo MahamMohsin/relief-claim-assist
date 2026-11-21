@@ -10,6 +10,7 @@ interface DesktopWindowProps {
   appId: string;
   isFocused: boolean;
   isMaximized: boolean;
+  isMinimized?: boolean;
   preset: "compact" | "default" | "wide" | "max";
   zIndex: number;
   initialOffset: number;
@@ -31,6 +32,7 @@ const MIN_HEIGHT = 240;
 export function DesktopWindow({
   isFocused,
   isMaximized,
+  isMinimized = false,
   preset,
   zIndex,
   initialOffset,
@@ -120,9 +122,9 @@ export function DesktopWindow({
     <motion.div
       ref={winRef}
       initial={{ scale: 0.94, opacity: 0, y: 16 }}
-      animate={{ scale: 1, opacity: 1, y: 0 }}
+      animate={isMinimized ? { scale: 0.5, opacity: 0, y: 90 } : { scale: 1, opacity: 1, y: 0 }}
       exit={{ scale: 0.9, opacity: 0 }}
-      transition={{ duration: 0.16, ease: "easeOut" }}
+      transition={{ duration: isMinimized ? 0.22 : 0.16, ease: "easeOut" }}
       style={{
         zIndex,
         top: isMaximized ? "8px" : `${pos.y}px`,
@@ -136,8 +138,11 @@ export function DesktopWindow({
         preset +
         (isMaximized ? " maximized " : " ") +
         (isFocused ? "focused " : "") +
+        (isMinimized ? "minimized " : "") +
         (interacting ? "interacting " : "")
       }
+      aria-hidden={isMinimized || undefined}
+      inert={isMinimized}
       onPointerDown={onFocus}
     >
       <div className="desktop-window-titlebar" onPointerDown={startDrag}>

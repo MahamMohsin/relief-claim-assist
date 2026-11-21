@@ -65,7 +65,8 @@ function Notice({ text, warning = false }: { text: string; warning?: boolean }) 
 }
 function StateTag({ value }: { value: string }) {
   const color = ["approved", "paid", "granted", "genuine", "readable"].includes(value) ? "green"
-    : ["needs_proof", "revoked", "scam", "suspect", "unreadable", "rejected"].includes(value) ? "amber" : "neutral";
+    : ["rejected", "scam", "suspect", "failed"].includes(value) ? "red"
+    : ["needs_proof", "revoked", "unreadable", "pending"].includes(value) ? "amber" : "neutral";
   return <span className={"pill " + color}>{title(value)}</span>;
 }
 function Spinner() {
@@ -258,7 +259,9 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
 
   const badge = (status: string) => ["approved", "paid", "granted", "genuine", "readable"].includes(status)
     ? "success" as const
-    : ["needs_proof", "revoked", "scam", "suspect", "unreadable", "rejected"].includes(status) ? "warning" as const : "neutral" as const;
+    : ["rejected", "scam", "suspect", "failed"].includes(status) ? "error" as const
+    : ["needs_proof", "revoked", "unreadable"].includes(status) ? "warning" as const
+    : ["submitted", "in_review"].includes(status) ? "info" as const : "neutral" as const;
 
   return <div className="view-stack">
     {(error || fault) && <Banner status="error" title="Something went wrong" description={error || fault} />}
@@ -470,18 +473,18 @@ function PrivacyView({ ctx }: { ctx: ViewContext }) {
 const reviewOptions = { assign: "Assign to me", more_proof: "Request more proof", escalate: "Escalate", approve: "Approve", reject: "Reject", close: "Close case" } as const;
 
 const kanbanColumns: { key: string; label: string; dot: string; statuses: Claim["status"][] }[] = [
-  { key: "todo", label: "To do", dot: "#C7C7CC", statuses: ["submitted"] },
-  { key: "proof", label: "Needs proof", dot: "#8E8E93", statuses: ["needs_proof"] },
-  { key: "review", label: "In review", dot: "#48484A", statuses: ["in_review"] },
-  { key: "decided", label: "Decided", dot: "#1C1C1E", statuses: ["approved", "rejected", "closed"] },
+  { key: "todo", label: "To do", dot: "#9AA8A4", statuses: ["submitted"] },
+  { key: "proof", label: "Needs proof", dot: "#A35B12", statuses: ["needs_proof"] },
+  { key: "review", label: "In review", dot: "#3F4FB8", statuses: ["in_review"] },
+  { key: "decided", label: "Decided", dot: "#1F7A4D", statuses: ["approved", "rejected", "closed"] },
 ];
 
 function ConfidenceRing({ value }: { value: number | null }) {
   const size = 34, stroke = 4, radius = (size - stroke) / 2, circumference = 2 * Math.PI * radius;
   const ratio = Math.min(Math.max(value ?? 0, 0), 1);
-  const color = value === null ? "#C7C7CC" : value < 0.5 ? "#1C1C1E" : "#8E8E93";
+  const color = value === null ? "#C9D3D0" : value < 0.5 ? "#3F4FB8" : "#2A7364";
   return <svg className="kanban-ring" width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
-    <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(120,120,128,0.16)" strokeWidth={stroke} />
+    <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(19,74,65,0.14)" strokeWidth={stroke} />
     <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round"
       strokeDasharray={circumference} strokeDashoffset={circumference * (1 - ratio)} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
   </svg>;
@@ -591,7 +594,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                   const urgent = ["submitted", "in_review", "needs_proof"].includes(item.status)
                     && (item.status === "needs_proof" || (item.ai_confidence ?? 1) <= 0.55);
                   const initials = (item.citizen_name ?? "?").split(" ").map(word => word[0]).slice(0, 2).join("");
-                  const confColor = item.ai_confidence === null ? "var(--soft-ink)" : item.ai_confidence < 0.5 ? "#1C1C1E" : "#6E6E73";
+                  const confColor = item.ai_confidence === null ? "var(--soft-ink)" : item.ai_confidence < 0.5 ? "#3F4FB8" : "#5F6B68";
                   return <button type="button" key={item.id} className="kanban-card" onClick={() => pick(item)}>
                     <div className="kanban-card-top">
                       <span className="kanban-tag">{item.rule_version_used ? "Rule v" + item.rule_version_used : "No rule"}</span>

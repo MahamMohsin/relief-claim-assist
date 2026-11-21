@@ -31,11 +31,11 @@ export const RED = {
   glow: "radial-gradient(circle at 36% 32%,#fff1ef 0 16%,#ff7a6e 52%,#e5484d 100%)",
   halo: "radial-gradient(circle,rgba(255,110,100,.55),rgba(255,110,100,0) 70%)",
   ear: "#ff6b61",
-  earGreen: "#8ff0c2",
+  earGreen: "#5FC28D",
 };
-const ERR_BORDER = (er: number) => `rgba(229,72,77,${0.35 + 0.65 * er})`;
-const ERR_FILL = (er: number) => `rgba(255,240,239,${er})`;
-const BTN = { rest: "#151515", hover: "#2b2b2b" };
+const ERR_BORDER = (er: number) => `rgba(180,48,42,${0.35 + 0.65 * er})`;
+const ERR_FILL = (er: number) => `rgba(252,232,230,${er})`;
+const BTN = { rest: "var(--accent-600)", hover: "var(--accent-700)" };
 
 export function createRender(p: Parts) {
   const E1 = TEXT.e1,

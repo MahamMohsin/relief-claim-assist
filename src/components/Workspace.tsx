@@ -19,6 +19,7 @@ import type { UIAction } from "@/src/lib/contracts";
 import { PipLoginModal } from "./pip/PipLoginModal";
 
 const roleEntries = Object.entries(personas) as [Persona, (typeof personas)[Persona]][];
+type WindowPreset = "compact" | "default" | "wide";
 const tools = Object.keys(apps) as MiniApp[];
 
 export function Workspace({ initialProfile, showLogin = false, demoRegistrationEnabled = false }: {
@@ -34,7 +35,16 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   const [openApps, setOpenApps] = useState<MiniApp[]>([]);
   const [zOrder, setZOrder] = useState<MiniApp[]>([]);
   const [activeApp, setActiveApp] = useState<MiniApp | null>(null);
-  const [windowState, setWindowState] = useState<Record<MiniApp, { sizePreset?: "compact" | "default" | "wide" | "max"; maximized?: boolean }>>({} as any);
+  const [minimizedApps, setMinimizedApps] = useState<MiniApp[]>([]);
+  // After a window is minimized (and becomes inert), move keyboard focus to its app tile.
+  const tileFocusRef = useRef<MiniApp | null>(null);
+  useEffect(() => {
+    const appId = tileFocusRef.current;
+    if (!appId || !minimizedApps.includes(appId)) return;
+    tileFocusRef.current = null;
+    document.querySelector<HTMLElement>(`[data-app-tile="${appId}"]`)?.focus();
+  }, [minimizedApps]);
+  const [windowState, setWindowState] = useState<Partial<Record<MiniApp, { sizePreset?: WindowPreset; restorePreset?: WindowPreset }>>>({});
   const [chooser, setChooser] = useState(showLogin);
   const [family, setFamily] = useState<Family | null>(null);
   const [fixtureOnline, setFixtureOnline] = useState(true);
@@ -202,6 +212,12 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
     focusApp(appId);
   }
 
+  // Focus the most recent window that is still visible (open and not minimized).
+  function focusNextVisible(leaving: MiniApp) {
+    const visible = openApps.filter(id => id !== leaving && !minimizedApps.includes(id));
+    setActiveApp(visible.length > 0 ? visible[visible.length - 1] : null);
+  }
+
   function closeAppWindow(appId: MiniApp) {
     setOpenApps(prev => prev.filter(id => id !== appId));
     setZOrder(prev => {
@@ -213,27 +229,30 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
     });
   }
 
-  function setAppSizePreset(appId: MiniApp, preset: "compact" | "default" | "wide" | "max") {
+  // Yellow traffic light: hide the window to its app tile. It stays mounted so unsaved
+  // input survives; clicking the tile (or opening the app any other way) restores it.
+  function minimizeAppWindow(appId: MiniApp) {
+    setMinimizedApps(prev => prev.includes(appId) ? prev : [...prev, appId]);
+    if (activeApp === appId) focusNextVisible(appId);
+    tileFocusRef.current = appId;
+  }
+
+  function setAppSizePreset(appId: MiniApp, preset: WindowPreset) {
     setWindowState(prev => ({
       ...prev,
-      [appId]: {
-        ...prev[appId],
-        sizePreset: preset,
-        maximized: preset === "max"
-      }
+      [appId]: { sizePreset: preset }
     }));
   }
 
-  function toggleMaximize(appId: MiniApp) {
+  // Green traffic light: expand to the largest preset (L) and restore the size used before.
+  function toggleExpand(appId: MiniApp) {
     setWindowState(prev => {
-      const currentlyMax = prev[appId]?.maximized || prev[appId]?.sizePreset === "max";
+      const current = prev[appId]?.sizePreset ?? "default";
       return {
         ...prev,
-        [appId]: {
-          ...prev[appId],
-          maximized: !currentlyMax,
-          sizePreset: currentlyMax ? "default" : "max"
-        }
+        [appId]: current === "wide"
+          ? { sizePreset: prev[appId]?.restorePreset ?? "default" }
+          : { sizePreset: "wide", restorePreset: current },
       };
     });
   }
@@ -260,6 +279,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
     setOfficerQueue([]);
     setPending([]);
     setOpenApps([]);
+    setMinimizedApps([]);
     setActiveApp(null);
   }
 
@@ -531,6 +551,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                                 <span>Sign Out</span>
                               </button>
                             </div>
+                            <p className="liquid-prototype-note">Prototype · simulated data</p>
                           </div>
                         </motion.div>
                       )}
@@ -738,10 +759,13 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                   const item = apps[id];
                   const Icon = item.icon;
                   const isRunning = openApps.includes(id);
+                  const isMinimized = isRunning && minimizedApps.includes(id);
                   return (
                     <motion.button
-                      className={"ios-desktop-app" + (isRunning ? " running" : "")}
+                      className={"ios-desktop-app" + (isRunning ? " running" : "") + (isMinimized ? " minimized" : "")}
                       key={id}
+                      data-app-tile={id}
+                      aria-label={isMinimized ? item.title + " (minimized, click to restore)" : undefined}
                       onClick={() => openAppWindow(id)}
                       whileHover={motionDisabled ? undefined : { y: -6, scale: 1.05 }}
                       whileTap={motionDisabled ? undefined : { scale: 0.94 }}
@@ -765,10 +789,11 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
               <div className="desktop-window-layer" ref={desktopBoundsRef}>
                 {openApps.map((appId, index) => {
                   const appMeta = apps[appId];
-                  const isFocused = activeApp === appId;
+                  const isMinimized = minimizedApps.includes(appId);
+                  const isFocused = activeApp === appId && !isMinimized;
                   const state = windowState[appId] || {};
                   const preset = state.sizePreset || "default";
-                  const isMaximized = Boolean(state.maximized || preset === "max");
+                  const isExpanded = preset === "wide";
                   const Icon = appMeta.icon;
 
                   // Stagger initial positions for overlapping feel
@@ -781,7 +806,8 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                       key={appId}
                       appId={appId}
                       isFocused={isFocused}
-                      isMaximized={isMaximized}
+                      isMaximized={false}
+                      isMinimized={isMinimized}
                       preset={preset}
                       zIndex={zIndex}
                       initialOffset={offset}
@@ -794,24 +820,28 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                             className="traffic-light close"
                             onClick={e => { e.stopPropagation(); closeAppWindow(appId); }}
                             title="Close window"
+                            aria-label="Close window"
                           >
-                            <X size={8} strokeWidth={3} />
+                            <X size={8} strokeWidth={3} aria-hidden="true" />
                           </button>
                           <button
                             type="button"
                             className="traffic-light minimize"
-                            onClick={e => { e.stopPropagation(); setActiveApp(null); }}
-                            title="Minimize"
+                            onClick={e => { e.stopPropagation(); minimizeAppWindow(appId); }}
+                            title="Minimize window"
+                            aria-label="Minimize window"
                           >
-                            <Minus size={8} strokeWidth={3} />
+                            <Minus size={8} strokeWidth={3} aria-hidden="true" />
                           </button>
                           <button
                             type="button"
                             className="traffic-light maximize"
-                            onClick={e => { e.stopPropagation(); toggleMaximize(appId); }}
-                            title={isMaximized ? "Restore window" : "Maximize window"}
+                            onClick={e => { e.stopPropagation(); toggleExpand(appId); }}
+                            title={isExpanded ? "Restore window" : "Expand window"}
+                            aria-label={isExpanded ? "Restore window" : "Expand window"}
+                            aria-pressed={isExpanded}
                           >
-                            {isMaximized ? <Minimize2 size={8} strokeWidth={3} /> : <Maximize2 size={8} strokeWidth={3} />}
+                            {isExpanded ? <Minimize2 size={8} strokeWidth={3} aria-hidden="true" /> : <Maximize2 size={8} strokeWidth={3} aria-hidden="true" />}
                           </button>
                         </div>
 
@@ -850,16 +880,6 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                               L
                             </button>
                           </div>
-
-                          <button
-                            type="button"
-                            className="window-close-action-btn"
-                            onClick={e => { e.stopPropagation(); closeAppWindow(appId); }}
-                            title="Close app"
-                            aria-label="Close app"
-                          >
-                            <X size={14} />
-                          </button>
                         </div>
                         </>
                       }
@@ -881,6 +901,23 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
       </main>
 
       {!profile && <footer className="site-footer"><span><HandHeart size={17} /> Relief Claim Assist</span><Link href="/docs">API documentation <ArrowUpRight size={15} /></Link></footer>}
+      {/* Minimized windows tray: one chip per minimized window; clicking restores it. */}
+      {profile && minimizedApps.some(id => openApps.includes(id)) && (
+        <nav className="minimized-tray" aria-label="Minimized windows">
+          {openApps.filter(id => minimizedApps.includes(id)).map(appId => {
+            const meta = apps[appId];
+            const TrayIcon = meta.icon;
+            return (
+              <button key={appId} type="button" className="minimized-chip" aria-label={"Restore " + meta.title + " window"}
+                onClick={() => openAppWindow(appId)}>
+                <span className={"window-mini-icon " + meta.color} aria-hidden="true"><TrayIcon size={14} /></span>
+                <span className="minimized-chip-label">{meta.title}</span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
+
       {profile && <div className="bottom-shell">
         <VoiceDock key={profile.id + reset} profile={profile} citizenId={citizen} offline={offline} lite={lite} transcript={transcript} onAction={dispatch}
           onQueueAudio={(audio, locale) => enqueue("transcribe", { locale }, { audio })} />
