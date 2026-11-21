@@ -49,8 +49,11 @@ export const actions = {
   consent: z.object({ citizenId: uuid, helperId: uuid, key: testKey, consent: z.enum(["granted", "revoked"]) }),
   correction: z.object({ citizenId: person, key: testKey, field: z.enum(["full_name", "phone", "village_area", "household_size", "monthly_income_mock"]),
     value: z.string().trim().min(1).max(160) }),
-  check: z.object({ message: z.string().trim().max(1500), reference: z.string().trim().max(80).default("") })
-    .refine(data => data.message.length > 0 || data.reference.length > 0, "Enter a message or a reference."),
+  check: z.object({
+    message: z.string().trim().max(1500).default(""),
+    reference: z.string().trim().max(80).default(""),
+    image: z.string().max(2800000).regex(/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/).optional(),
+  }).refine(data => data.message.length > 0 || data.reference.length > 0 || Boolean(data.image), "Enter a message, payment reference, or attach a screenshot."),
   report: z.object({ reference: z.string().trim().min(1).max(80), message: z.string().trim().max(1200).default(""), key: testKey }),
   policy: z.object({ question: z.string().trim().min(3).max(500) }),
   rules: z.object({}),
@@ -81,8 +84,11 @@ export type Audit = { id: number; actor_role: string; event_type: string; entity
 export type Family = { id: string; full_name: string; village_area: string; consent: string };
 export type Correction = { id: string; field_name: string; proposed_value: string; status: string };
 export type Privacy = { helpers: { id: string; name: string; status: string }[]; officers: string[]; corrections: Correction[] };
+export type ScamToolTrace = { name: string; target: string; status: "complete" | "error"; detail?: string };
 export type ScamResult = { id: string; claim_id: string | null; jev_label: string; jev_confidence: number; jev_route: string;
-  rail_match_status: string; payment: Payment | null; model: string };
+  rail_match_status: string; payment: Payment | null; model: string;
+  explanation?: string; red_flags?: string[]; extracted_text?: string; detected_reference?: string;
+  citations?: Policy[]; tools_used?: ScamToolTrace[] };
 
 export const appRoles = {
   claim: ["citizen", "helper"],
@@ -92,6 +98,7 @@ export const appRoles = {
   family: ["helper"],
   review: ["officer"],
   rules: ["admin"],
+  users: ["admin"],
   audit: ["admin", "auditor"],
 } satisfies Record<string, Role[]>;
 export type MiniApp = keyof typeof appRoles;

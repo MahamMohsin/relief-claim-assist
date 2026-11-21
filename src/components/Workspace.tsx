@@ -5,12 +5,14 @@ import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Award, CheckCircle2, ChevronDown, Clock, Cloud, CloudOff, Fingerprint, HandHeart, House,
   LoaderCircle, LogOut, Maximize2, Minimize2, Minus, Radio, ShieldCheck, Trophy, UserPlus, UserRound, Users, Wifi, X } from "lucide-react";
-import { canOpen, personas, type Claim, type Family, type MiniApp, type Persona, type Profile } from "@/src/lib/contracts";
+import { canOpen, personas, type Audit, type Claim, type Family, type MiniApp, type Persona, type Profile } from "@/src/lib/contracts";
 import { api, jsonRequest } from "@/src/lib/client";
 import { queued, pushMutation, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
 import { syncQueue } from "@/src/lib/offline/syncEngine";
 import { apps } from "./launcher";
 import { MiniApps, type ViewContext } from "./MiniApps";
+import { AuditorGlassSuite, type SafetyMetric } from "./AuditVaultView";
+import { DesktopWindow } from "./DesktopWindow";
 import { VoiceDock } from "./os/VoiceDock";
 import type { UIAction } from "@/src/lib/contracts";
 
@@ -26,6 +28,7 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
   const isLocked = !profile;
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [openApps, setOpenApps] = useState<MiniApp[]>([]);
+  const [zOrder, setZOrder] = useState<MiniApp[]>([]);
   const [activeApp, setActiveApp] = useState<MiniApp | null>(null);
   const [windowState, setWindowState] = useState<Record<MiniApp, { sizePreset?: "compact" | "default" | "wide" | "max"; maximized?: boolean }>>({} as any);
   const [chooser, setChooser] = useState(showLogin);
@@ -46,6 +49,9 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
   const [pastClaims, setPastClaims] = useState<Claim[]>([]);
   const [claimsLoading, setClaimsLoading] = useState(false);
   const [officerQueue, setOfficerQueue] = useState<Claim[]>([]);
+  const [auditLogs, setAuditLogs] = useState<Audit[]>([]);
+  const [auditSafety, setAuditSafety] = useState<SafetyMetric[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
   const activeCall = useRef<AbortController | null>(null);
   const desktopBoundsRef = useRef<HTMLDivElement>(null);
   const motionDisabled = useReducedMotion() || lite;
@@ -117,12 +123,39 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
   }, [profile, citizen, offline, version]);
 
   useEffect(() => {
-    if (!profile || offline || !["officer", "admin", "auditor"].includes(profile.role)) return;
+    if (!profile || offline || profile.role !== "officer") return;
     const controller = new AbortController();
     api<Claim[]>("queue", {}, controller.signal)
       .then(res => { if (!controller.signal.aborted && Array.isArray(res)) setOfficerQueue(res); })
       .catch(() => {});
     return () => controller.abort();
+  }, [profile, offline, version]);
+
+  useEffect(() => {
+    if (!profile || offline || profile.role !== "auditor") return;
+    let activeController: AbortController | null = null;
+    const loadAudit = (initial: boolean) => {
+      activeController?.abort();
+      const controller = new AbortController();
+      activeController = controller;
+      if (initial) setAuditLoading(true);
+      Promise.all([
+        api<Audit[]>("audit", {}, controller.signal).catch(() => null),
+        api<SafetyMetric[]>("safety", {}, controller.signal).catch(() => null),
+      ]).then(([logsRes, safetyRes]) => {
+        if (controller.signal.aborted) return;
+        if (Array.isArray(logsRes)) setAuditLogs(logsRes);
+        if (Array.isArray(safetyRes)) setAuditSafety(safetyRes);
+      }).finally(() => {
+        if (initial && !controller.signal.aborted) setAuditLoading(false);
+      });
+    };
+    loadAudit(true);
+    const interval = window.setInterval(() => loadAudit(false), 10000);
+    return () => {
+      window.clearInterval(interval);
+      activeController?.abort();
+    };
   }, [profile, offline, version]);
 
   const enqueue: ViewContext["enqueue"] = async (action, body, opts = {}) => {
@@ -133,19 +166,27 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
     return id;
   };
 
+  function focusApp(appId: MiniApp) {
+    setActiveApp(appId);
+    setZOrder(prev => [...prev.filter(id => id !== appId), appId]);
+  }
+
   function openAppWindow(appId: MiniApp) {
     if (!profile || !canOpen(profile.role, appId)) return;
     setAlert("");
     setOpenApps(prev => prev.includes(appId) ? prev : [...prev, appId]);
-    setActiveApp(appId);
+    focusApp(appId);
   }
 
   function closeAppWindow(appId: MiniApp) {
     setOpenApps(prev => prev.filter(id => id !== appId));
-    if (activeApp === appId) {
-      const remaining = openApps.filter(id => id !== appId);
-      setActiveApp(remaining.length > 0 ? remaining[remaining.length - 1] : null);
-    }
+    setZOrder(prev => {
+      const next = prev.filter(id => id !== appId);
+      if (activeApp === appId) {
+        setActiveApp(next.length > 0 ? next[next.length - 1] : null);
+      }
+      return next;
+    });
   }
 
   function setAppSizePreset(appId: MiniApp, preset: "compact" | "default" | "wide" | "max") {
@@ -369,7 +410,7 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                     <div className="liquid-user-header">
                       <div>
                         <h1>{profile ? profile.full_name : "Fatima Bibi"}</h1>
-                        <p>{profile?.role === "helper" ? "Community Health Worker" : profile?.role === "officer" ? "Department Review Officer" : "Emergency Cash Assistance"}</p>
+                        <p>{profile?.role === "helper" ? "Community Health Worker" : profile?.role === "officer" ? "Department Review Officer" : profile?.role === "auditor" ? "Read-Only Compliance Auditor" : profile?.role === "admin" ? "Scheme Administrator" : "Emergency Cash Assistance"}</p>
                       </div>
                       <span className={"liquid-chevron" + (userDropdownOpen ? " rotated" : "")}>
                         <ChevronDown size={22} strokeWidth={2.4} />
@@ -390,7 +431,6 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                           <div className="liquid-menu-divider" />
                           <div className="liquid-menu-body">
                             <div className="liquid-user-meta">
-                              <span className="liquid-role-badge">{profile?.role || "citizen"}</span>
                               <small>{profile?.full_name ? profile.full_name.toLowerCase().replace(/\s+/g, ".") + "@relief-demo.example" : "fatima@relief-demo.example"}</small>
                             </div>
 
@@ -438,8 +478,19 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                   </div>
                 </div>
 
+                {/* Auditor Liquid Glass Cards (side-by-side with profile pill on the same row) */}
+                {profile.role === "auditor" && (
+                  <AuditorGlassSuite
+                    logs={auditLogs}
+                    safety={auditSafety}
+                    loading={auditLoading}
+                    compact
+                    onOpenVault={() => openAppWindow("audit")}
+                  />
+                )}
+
                 {/* Admin / Officer Stat Suite (From Overview Design: Active cases bubble cloud, breakdown bubbles, pending/review metrics) */}
-                {["officer", "admin", "auditor"].includes(profile.role) && (
+                {["officer", "admin"].includes(profile.role) && (
                   <div className="overview-stats-suite">
                     {/* Card 1: Active Cases / Users with Bubble Cluster */}
                     <div
@@ -709,7 +760,11 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                       transition={{ type: "spring", stiffness: 260, damping: 20, mass: 0.8 }}
                     >
                       <div className={"ios-desktop-icon " + item.color}>
-                        <Icon size={34} strokeWidth={2.1} />
+                        {item.image ? (
+                          <img src={item.image} alt={item.title} className="ios-desktop-icon-img" />
+                        ) : (
+                          <Icon size={34} strokeWidth={2.1} />
+                        )}
                       </div>
                       <span className="ios-desktop-label">{item.title}</span>
                       {isRunning && <span className="ios-app-running-dot" />}
@@ -730,27 +785,21 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
 
                   // Stagger initial positions for overlapping feel
                   const offset = (index % 5) * 28;
+                  const zPos = zOrder.indexOf(appId);
+                  const zIndex = 20 + (zPos >= 0 ? zPos : index);
 
                   return (
-                    <motion.div
+                    <DesktopWindow
                       key={appId}
-                      drag={!isMaximized}
-                      dragConstraints={desktopBoundsRef}
-                      dragElastic={0.05}
-                      dragMomentum={false}
-                      initial={{ scale: 0.92, opacity: 0, y: 20 }}
-                      animate={{ scale: 1, opacity: 1, y: 0 }}
-                      exit={{ scale: 0.88, opacity: 0 }}
-                      style={{
-                        zIndex: isFocused ? 20 : 10 + index,
-                        top: isMaximized ? "8px" : `calc(20px + ${offset}px)`,
-                        left: isMaximized ? "8px" : `calc(max(20px, 50% - 440px) + ${offset}px)`,
-                      }}
-                      className={"desktop-window preset-" + preset + (isMaximized ? " maximized " : " ") + (isFocused ? "focused " : "")}
-                      onPointerDown={() => setActiveApp(appId)}
-                    >
-                      {/* Window Title Bar */}
-                      <div className="desktop-window-titlebar">
+                      appId={appId}
+                      isFocused={isFocused}
+                      isMaximized={isMaximized}
+                      preset={preset}
+                      zIndex={zIndex}
+                      initialOffset={offset}
+                      onFocus={() => focusApp(appId)}
+                      titlebar={
+                        <>
                         <div className="window-traffic-lights">
                           <button
                             type="button"
@@ -824,16 +873,17 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                             <X size={14} />
                           </button>
                         </div>
-                      </div>
-
+                        </>
+                      }
+                    >
                       {/* Window Body with isolated white background & its own scrollbar */}
-                      <div className="desktop-window-body">
+                      <div className={"desktop-window-body" + (appId === "policy" || appId === "scam" ? " desktop-window-body--flush" : "")}>
                         {alert && activeApp === appId && (
                           <div className="notice warning" role="alert">{alert}</div>
                         )}
                         {context && <MiniApps app={appId} ctx={context} />}
                       </div>
-                    </motion.div>
+                    </DesktopWindow>
                   );
                 })}
               </div>
@@ -889,7 +939,9 @@ function PersonaList({ onSelect, busy, offline }: { onSelect: (id: Persona) => v
   return <div className="persona-grid">{roleEntries.map(([id, details], index) => {
     const initials = details.name.split(" ").map(word => word[0]).slice(0, 2).join("");
     return <button key={id} className="persona-card" onClick={() => onSelect(id)} disabled={Boolean(busy) || offline}>
-      <span className={"avatar " + colors[index]}>{initials}</span>
+      <span className={"avatar " + colors[index]}>
+        <img src={`/avatars/${id}.jpg`} alt={details.name} className="avatar-img" />
+      </span>
       <span className="persona-copy"><span>{details.role}</span><strong>{details.name}</strong><small>{details.description}</small></span>
       {busy === id ? <LoaderCircle className="spin" size={19} /> : <ArrowUpRight size={18} />}
     </button>;

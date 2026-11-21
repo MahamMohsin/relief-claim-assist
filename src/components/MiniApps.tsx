@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { AlertCircle, ArrowLeft, AudioLines, BookOpen, CalendarDays, Check, ChevronRight, CircleDollarSign, FileUp, Flag, LoaderCircle, LockKeyhole, MessageSquare, Paperclip, Plus, Search, ShieldCheck, UsersRound } from "lucide-react";
+import { AlertCircle, ArrowLeft, AudioLines, CalendarDays, Check, ChevronRight, CircleDollarSign, Flag, LoaderCircle, LockKeyhole, MessageSquare, Paperclip, Plus, Search, UsersRound } from "lucide-react";
 import { api, HttpError } from "@/src/lib/client";
 import { getDraft, resolveDraft, saveDraft, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
-import type { Action, Audit, Claim, Family, MiniApp, Payload, PolicyAnswer, Privacy, Profile, Rule, RuleConfig, ScamResult, UIAction } from "@/src/lib/contracts";
+import type { Action, Audit, Claim, Family, MiniApp, Payload, Privacy, Profile, Rule, RuleConfig, UIAction } from "@/src/lib/contracts";
 import { speakText } from "./os/speech";
+import { PolicyChatView } from "./PolicyChatView";
+import { ScamChatView } from "./ScamChatView";
+import { AuditVaultView, type SafetyMetric } from "./AuditVaultView";
 import { Button } from "@astryxdesign/core/Button";
 import { Card } from "@astryxdesign/core/Card";
 import { Badge } from "@astryxdesign/core/Badge";
@@ -36,12 +39,13 @@ export type ViewContext = {
 export function MiniApps({ app, ctx }: { app: MiniApp; ctx: ViewContext }) {
   switch (app) {
     case "claim": return <ClaimView ctx={ctx} />;
-    case "scam": return <ScamView ctx={ctx} />;
-    case "policy": return <PolicyView ctx={ctx} />;
+    case "scam": return <ScamChatView ctx={ctx} />;
+    case "policy": return <PolicyChatView ctx={ctx} />;
     case "privacy": return <PrivacyView ctx={ctx} />;
     case "family": return <FamilyView ctx={ctx} />;
     case "review": return <ReviewView ctx={ctx} />;
     case "rules": return <RuleView ctx={ctx} />;
+    case "users": return <UsersView />;
     case "audit": return <AuditView ctx={ctx} />;
   }
 }
@@ -339,98 +343,6 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
             </VStack>
           </Card>)}
         </VStack>}
-    </Card>}
-  </div>;
-}
-
-function ScamView({ ctx }: { ctx: ViewContext }) {
-  const [message, setMessage] = useState("");
-  const [reference, setReference] = useState("");
-  const [result, setResult] = useState<ScamResult>();
-  const [notice, setNotice] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function check(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true); setError(""); setNotice(""); setResult(undefined);
-    try { setResult(await api<ScamResult>("check", { message, reference })); }
-    catch (error) { setError(getMessage(error)); }
-    finally { setBusy(false); }
-  }
-  async function report() {
-    setBusy(true); setError(""); setNotice("");
-    try {
-      if (ctx.offline) {
-        await ctx.enqueue("report", { reference, message });
-        setNotice("Report queued for the officer desk.");
-      } else {
-        await api("report", { reference, message, key: crypto.randomUUID() });
-        setNotice("Missing payment report filed.");
-      }
-    } catch (error) { setError(getMessage(error)); }
-    finally { setBusy(false); }
-  }
-  return <div className="view-stack">
-    <Card padding={6}>
-      <VStack gap={1}><h2>Verify a relief message</h2><p>Use a synthetic message or payment reference. Never share real credentials.</p></VStack>
-      <form onSubmit={check}>
-        <VStack gap={3} paddingBlockStart={3}>
-          <TextArea label="SMS or WhatsApp message" value={message} onChange={setMessage} placeholder="Paste the synthetic message here" isOptional />
-          <TextInput label="Claim ID or mock payout reference" value={reference} onChange={setReference} placeholder="Example: SIM-FATIMA1" isOptional />
-          <HStack gap={2} wrap="wrap">
-            <Button type="submit" variant="primary" label="Check message" icon={<ShieldCheck size={16} />} isDisabled={busy || ctx.offline || !(message.trim() || reference.trim())} />
-            <Button type="button" variant="secondary" label="Use sample alert" onClick={() => { setMessage("Raast credited your simulated relief payment."); setReference("SIM-FATIMA1"); }} />
-            <Button type="button" variant="ghost" label="Report missing payment" isDisabled={busy || !reference.trim()} onClick={() => void report()} />
-          </HStack>
-        </VStack>
-      </form>
-      {error && <Banner status="error" title={error} />}
-      {notice && <Banner status="success" title={notice} />}
-    </Card>
-    {result && <Card padding={6}>
-      <HStack justify="between" hAlign="start" gap={2} wrap="wrap"><h2>Verification result</h2><Badge label={title(result.jev_label)} variant={["genuine", "legitimate"].includes(result.jev_label) ? "success" : "warning"} /></HStack>
-      <HStack gap={2} wrap="wrap" paddingBlockStart={3}>
-        <Card variant="muted" padding={3}><VStack gap={0.5}><small>Message assessment</small><strong>{title(result.jev_label)} · {pc(result.jev_confidence)}</strong><small>{result.model}</small></VStack></Card>
-        <Card variant="muted" padding={3}><VStack gap={0.5}><small>Simulated payment rail</small><strong>{result.payment ? title(result.payment.status) + " · " + currency(result.payment.amount_pkr) : "No matching receipt"}</strong><small>{result.payment?.raast_ref || "Check the reference independently"}</small></VStack></Card>
-      </HStack>
-    </Card>}
-  </div>;
-}
-
-function PolicyView({ ctx }: { ctx: ViewContext }) {
-  const [question, setQuestion] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [answer, setAnswer] = useState<PolicyAnswer>();
-  const [error, setError] = useState("");
-  async function ask(event: FormEvent) {
-    event.preventDefault(); setError(""); setBusy(true); setAnswer(undefined);
-    try { setAnswer(await api<PolicyAnswer>("policy", { question })); }
-    catch (error) { setError(getMessage(error)); }
-    finally { setBusy(false); }
-  }
-  return <div className="view-stack">
-    <Card padding={6}>
-      <VStack gap={1}><h2>Ask the scheme registry</h2><p>Answers quote the current fictional policy and include the section used.</p></VStack>
-      <form onSubmit={ask}>
-        <VStack gap={2} paddingBlockStart={3}>
-          <TextInput label="Policy question" value={question} onChange={setQuestion} placeholder="How do I report a missing payment?" isRequired />
-          <HStack><Button type="submit" variant="primary" label={busy ? "Searching…" : "Find answer"} icon={<BookOpen size={16} />} isDisabled={busy || ctx.offline || question.trim().length < 3} /></HStack>
-        </VStack>
-      </form>
-      {error && <Banner status="error" title={error} />}
-    </Card>
-    {answer && <Card padding={6}>
-      <HStack justify="between" hAlign="start" gap={2} wrap="wrap">
-        <h2>Registry answer</h2>
-        <Badge label={"Policy v" + answer.policy_version + (answer.effective_date ? " · " + answer.effective_date : "")} />
-      </HStack>
-      <VStack gap={2} paddingBlockStart={3}>
-        <p className="large-copy">{answer.answer}</p>
-        {answer.citations.map(section => <Card key={section.id} variant="muted" padding={3}>
-          <details><summary>§ {section.section_code} · {section.title}</summary><p>{section.content}</p></details>
-        </Card>)}
-      </VStack>
     </Card>}
   </div>;
 }
@@ -738,37 +650,106 @@ function RuleView({ ctx }: { ctx: ViewContext }) {
   </div>;
 }
 
-type Metric = { threshold: number; smsCount: number; docCount: number; [key: string]: number };
-const metrics = {
-  bad_approvals: "Bad automatic approvals", genuine_reviewed: "Genuine cases below threshold", officer_review_rate: "Officer review rate",
-  below_threshold_rate: "Cases below threshold", scam_false_alarms: "Scam false alarms", scam_misses: "Scam misses",
-  forgery_false_alarms: "Forgery false alarms", forgery_misses: "Forgery misses",
-};
 function AuditView({ ctx }: { ctx: ViewContext }) {
-  const [tab, setTab] = useState<"events" | "eval">("events");
-  const [filter, setFilter] = useState("");
-  const [selection, setSelection] = useState<Audit>();
   const logs = useActionList<Audit[]>("audit", ctx);
-  const safety = useActionList<Metric[]>("safety", ctx);
-  return <div className="view-stack">
-    <div className="tabs"><button aria-pressed={tab === "events"} onClick={() => setTab("events")}>Audit events</button><button aria-pressed={tab === "eval"} onClick={() => setTab("eval")}>Decision Safety Eval</button></div>
-    {tab === "events" ? <Panel><div className="panel-head"><div><h2>Append-only audit trail</h2><p>Read-only view of the most recent events.</p></div><LockKeyhole size={22} /></div>
-      <label>Filter events<input value={filter} onChange={event => setFilter(event.target.value)} placeholder="Role, event, outcome, or entity" /></label>
-      <Notice text={logs.error} warning />
-      {logs.loading && !logs.data ? <Spinner /> : <div className="table-scroll"><table><thead><tr><th>Event</th><th>Actor</th><th>Outcome</th><th>Rule · Model</th><th>Time</th></tr></thead>
-        <tbody>{logs.data?.filter(row => [row.actor_role, row.event_type, row.outcome, row.entity_id].join(" ").toLowerCase().includes(filter.toLowerCase())).map(row =>
-          <tr key={row.id}><td><button className="text-link" onClick={() => setSelection(row)}>{title(row.event_type)}</button></td><td>{title(row.actor_role)}</td><td>{title(row.outcome)}</td>
-            <td>{row.rule_version ? "v" + row.rule_version + " · " : ""}{row.model_version}</td><td>{new Date(row.created_at).toLocaleString()}</td></tr>)}</tbody>
-      </table></div>}
-      {selection && <details className="citation" open><summary>Event {selection.id} · {title(selection.event_type)}</summary>
-        <p className="breakable">{selection.entity_type} {selection.entity_id}{selection.confidence !== null ? " · " + pc(selection.confidence) : ""}</p>
-        <pre>{JSON.stringify(selection.metadata_json, null, 2)}</pre>
-      </details>}
-    </Panel> : <Panel><div className="panel-head"><div><h2>Threshold comparison</h2><p>Synthetic evaluation of {safety.data?.[0]?.smsCount ?? 0} messages and {safety.data?.[0]?.docCount ?? 0} document cases.</p></div></div>
-      <Notice text={safety.error} warning />
-      {safety.loading && !safety.data ? <Spinner /> : <div className="table-scroll"><table><thead><tr><th>Outcome</th>{safety.data?.map(row => <th key={row.threshold}>{row.threshold === 0.9 ? "Strict" : "Relaxed"} · {row.threshold.toFixed(2)}</th>)}</tr></thead>
-        <tbody>{Object.entries(metrics).map(([key, label]) => <tr key={key}><td>{label}</td>{safety.data?.map(row => <td key={row.threshold}>{key.endsWith("_rate") ? pc(row[key]) : row[key]}</td>)}</tr>)}</tbody>
-      </table></div>}
-    </Panel>}
-  </div>;
+  const safety = useActionList<SafetyMetric[]>("safety", ctx);
+  return <AuditVaultView ctx={ctx} logs={logs} safety={safety} />;
+}
+
+const REGISTERED_USERS = [
+  { id: "USR-048920", name: "Fatima Bibi", role: "Citizen", avatar: "/avatars/fatima.jpg", code: "CNIC · 31303-***-4212", linkedTitle: "Household · 4 members", linkedSub: "Rahim Yar Khan · CLM-2026-01" },
+  { id: "USR-048783", name: "Zainab Health Worker", role: "Helper", avatar: "/avatars/zainab.jpg", code: "BHU · LHW-1142", linkedTitle: "Basic Health Unit 12", linkedSub: "32 assisted claims" },
+  { id: "USR-048646", name: "Tariq Karyana Store", role: "Shopkeeper", avatar: "/avatars/tariq.jpg", code: "RAAST · M-8821", linkedTitle: "Karyana Store #18", linkedSub: "Multan · Verified Merchant" },
+  { id: "USR-048509", name: "Officer Bilal", role: "Officer", avatar: "/avatars/bilal.jpg", code: "DESK · OFF-309", linkedTitle: "District Review Desk", linkedSub: "148 claims reviewed" },
+  { id: "USR-048372", name: "Admin Sana", role: "Admin", avatar: "/avatars/sana.jpg", code: "HQ · ADM-004", linkedTitle: "Scheme Rule Studio", linkedSub: "Policy v2026.1" },
+  { id: "USR-048235", name: "Auditor Kamran", role: "Auditor", avatar: "/avatars/kamran.jpg", code: "COMP · AUD-019", linkedTitle: "Audit Vault & Safety", linkedSub: "Read-only · All regions" },
+];
+
+function UsersView() {
+  const [selected, setSelected] = useState<string[]>([]);
+  const [query, setQuery] = useState("");
+  const filtered = REGISTERED_USERS.filter(u =>
+    [u.name, u.role, u.id, u.code, u.linkedTitle, u.linkedSub].join(" ").toLowerCase().includes(query.toLowerCase())
+  );
+  const allChecked = filtered.length > 0 && filtered.every(u => selected.includes(u.id));
+
+  return <Panel>
+    <div className="panel-head">
+      <div><h2>Registered users</h2><p>{filtered.length} synthetic accounts across all roles.</p></div>
+      <input
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        placeholder="Search name, role, or ID…"
+        style={{ maxWidth: 220 }}
+      />
+    </div>
+    <div className="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th style={{ width: 32 }}>
+              <input
+                type="checkbox"
+                aria-label="Select all users"
+                checked={allChecked}
+                onChange={() => setSelected(allChecked ? [] : filtered.map(u => u.id))}
+              />
+            </th>
+            <th>USER</th>
+            <th>TYPE</th>
+            <th>LINKED TO</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.map(user => {
+            const isChecked = selected.includes(user.id);
+            return <tr
+              key={user.id}
+              onClick={() => setSelected(prev => isChecked ? prev.filter(id => id !== user.id) : [...prev, user.id])}
+              style={{ cursor: "pointer" }}
+            >
+              <td onClick={e => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  aria-label={`Select ${user.name}`}
+                  checked={isChecked}
+                  onChange={() => setSelected(prev => isChecked ? prev.filter(id => id !== user.id) : [...prev, user.id])}
+                />
+              </td>
+              <td>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  <img
+                    src={user.avatar}
+                    alt={user.name}
+                    style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }}
+                  />
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{user.name}</div>
+                    <div style={{ fontSize: "0.75rem", opacity: 0.65 }}>{user.code} · {user.id}</div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span style={{
+                  display: "inline-block",
+                  padding: "0.2rem 0.65rem",
+                  borderRadius: 999,
+                  border: "1px solid currentColor",
+                  fontSize: "0.75rem",
+                  fontWeight: 500,
+                  opacity: 0.85,
+                }}>
+                  {user.role}
+                </span>
+              </td>
+              <td>
+                <div style={{ fontWeight: 500 }}>{user.linkedTitle}</div>
+                <div style={{ fontSize: "0.75rem", opacity: 0.65 }}>{user.linkedSub}</div>
+              </td>
+            </tr>;
+          })}
+        </tbody>
+      </table>
+    </div>
+  </Panel>;
 }

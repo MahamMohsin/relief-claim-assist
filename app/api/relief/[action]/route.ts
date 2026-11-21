@@ -2,7 +2,7 @@ import { actions, type Action } from "@/src/lib/contracts";
 import { apiError, ApiError, gateway, readJson } from "@/src/lib/server";
 import { answerPolicy } from "@/src/lib/ai/rag";
 import { inspectEvidence } from "@/src/lib/ai/ocr";
-import { classifyScam } from "@/src/lib/ai/jev";
+import { analyzeScamCheck } from "@/src/lib/ai/scamCheck";
 import { runSafetyEval } from "@/src/lib/fixtures/safety";
 
 const reviewUrdu = {
@@ -19,7 +19,7 @@ export async function POST(request: Request, context: RouteContext<"/api/relief/
     const { action } = await context.params;
     if (!Object.hasOwn(actions, action)) throw new ApiError(404, "Unknown relief operation.");
     const operation = action as Action;
-    const body = await readJson(request, operation === "evidence" ? 3000000 : 20000);
+    const body = await readJson(request, operation === "evidence" || operation === "check" ? 3000000 : 20000);
     const checked = actions[operation].safeParse(body);
     if (!checked.success) throw new ApiError(400, checked.error.issues[0]?.message ?? "Invalid fields.");
 
@@ -39,9 +39,9 @@ export async function POST(request: Request, context: RouteContext<"/api/relief/
         break;
       }
       case "check": {
-        await gateway("raast", { reference: actions.check.parse(body).reference });
         const args = actions.check.parse(body);
-        result = await gateway(operation, { ...args, classification: await classifyScam(args.message, args.reference) });
+        if (args.image) validateImage(args.image);
+        result = await analyzeScamCheck(args);
         break;
       }
       case "review": {
