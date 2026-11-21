@@ -74,6 +74,7 @@ export type ScreenContext = {
   privacy?: {
     field: string;
     value: string;
+    helpers?: { id: string; name: string; status: string }[];
   };
 };
 
