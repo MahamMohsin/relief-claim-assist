@@ -55,8 +55,8 @@ values(1,'Emergency Cash Assistance','{"income_cap":30000,"minimum_household":2,
 on conflict(version) do nothing;
 
 insert into public.policy_sections(policy_version,section_code,title,effective_date,content,keywords) values
-('2026.1','A1','Who can apply','2026-01-01','Synthetic households in an affected demo area may apply. Submit one claim per household. An officer reviews each decision.',
-  array['eligible','eligibility','qualify','apply','household','اہلیت','درخواست']),
+('2026.1','A1','Who can apply','2026-01-01','Synthetic households in an affected demo area may apply. There is no limit on claims — a household may file as many claims as it needs, and each claim is reviewed independently by an officer.',
+  array['eligible','eligibility','qualify','apply','household','claim','claims','multiple','unlimited','again','second','اہلیت','درخواست']),
 ('2026.1','A2','Household income cap','2026-01-01','Use the current scheme income cap and minimum household size shown in the registry. Compare the complete monthly household income in PKR against that cap.',
   array['income','earnings','salary','cap','آمدنی','تنخواہ']),
 ('2026.1','A3','Widow and urgent cases','2026-01-01','Widowed applicants can ask an officer to prioritize a hardship review. The same eligibility and evidence rules still apply.',
