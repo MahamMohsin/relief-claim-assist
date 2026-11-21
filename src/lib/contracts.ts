@@ -93,7 +93,8 @@ export type Payment = { id: string; raast_ref: string; amount_pkr: number; statu
 export type Overview = { active: number; review: number; proof: number; approved: number; rejected: number;
   closed: number; paid: number; new_this_month: number; priority: number };
 export type Evidence = { id: string; doc_type: string; file_url: string | null; tamper_flag: boolean; tamper_reason: string | null;
-  blur_score: number | null; verified_status: string; ocr_json: { summary?: string; fields?: Record<string, string> } };
+  blur_score: number | null; verified_status: string; ocr_json: { summary?: string; fields?: Record<string, string>; fixture?: string };
+  fixture?: string | null };
 export type Claim = { id: string; citizen_id: string; citizen_name?: string; status: ClaimStatus; payment_status: Payment["status"];
   amount_pkr: number; payload_json: Partial<Payload>; citizen_reason_en: string | null; citizen_reason_ur: string | null;
   rule_version_used: number | null; ai_confidence: number | null; ai_route: string | null; handoff_notes: string | null;

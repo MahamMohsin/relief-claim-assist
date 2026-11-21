@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { AlertCircle, ArrowLeft, ArrowUpDown, AudioLines, CalendarDays, Check, CheckCircle2, ChevronRight, CircleDollarSign, FileCheck, LoaderCircle, LockKeyhole, MessageSquare, Paperclip, Plus, Search, ShieldAlert, Sparkles, UsersRound, XCircle } from "lucide-react";
+import { AlertCircle, ArrowLeft, ArrowUpDown, AudioLines, CalendarDays, Check, CheckCircle2, ChevronRight, CircleDollarSign, FileCheck, FileText, LoaderCircle, LockKeyhole, MessageSquare, Paperclip, Plus, Search, ShieldAlert, Sparkles, UsersRound, XCircle } from "lucide-react";
 import { api, HttpError } from "@/src/lib/client";
 import { getDraft, resolveDraft, saveDraft, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
 import type { Action, Audit, Claim, ClaimSummaryResult, Family, MiniApp, Payload, Privacy, Profile, Rule, RuleConfig, UIAction } from "@/src/lib/contracts";
@@ -578,7 +578,11 @@ function PrivacyView({ ctx }: { ctx: ViewContext }) {
   </div>;
 }
 
-const reviewOptions = { assign: "Assign to me", more_proof: "Request more proof", escalate: "Escalate", approve: "Approve", reject: "Reject", close: "Close case" } as const;
+const reviewOptions = {
+  approve: "Accept",
+  reject: "Reject",
+  more_proof: "Request more proof",
+} as const;
 
 const kanbanColumns: { key: string; label: string; dot: string; statuses: Claim["status"][] }[] = [
   { key: "todo", label: "To do", dot: "#a3a3a3", statuses: ["submitted"] },
@@ -608,7 +612,7 @@ function kanbanSummary(claim: Claim) {
 function ReviewView({ ctx }: { ctx: ViewContext }) {
   const { data, error, loading } = useActionList<Claim[]>("queue", ctx);
   const [selected, setSelected] = useState("");
-  const [decision, setDecision] = useState<keyof typeof reviewOptions>("assign");
+  const [decision, setDecision] = useState<keyof typeof reviewOptions>("approve");
   const [reason, setReason] = useState("");
   const [reasonUr, setReasonUr] = useState("");
   const [notice, setNotice] = useState("");
@@ -649,7 +653,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
       const updated = await api<Claim>(action, action === "review"
         ? { claimId: claim.id, decision, reason, reasonUr, aiSummary: aiSummary?.summary || claim.ai_summary }
         : { claimId: claim.id, outcome });
-      setDecision(["approved", "rejected"].includes(updated.status) ? "close" : "assign");
+      setDecision(updated.status === "needs_proof" ? "more_proof" : "approve");
       setNotice(action === "review" ? "Officer decision recorded and sent to applicant." : outcome === "paid" ? "Simulated payment issued." : "Simulated payment failed. The officer can retry it.");
       setReason(""); setReasonUr(""); ctx.refresh();
     } catch (error) { setProblem(getMessage(error)); }
@@ -665,7 +669,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
       setAiSummary(result);
       if (["submitted", "in_review", "needs_proof"].includes(claim.status)) {
         if (result.recommendation === "approve") {
-          setDecision(claim.status === "needs_proof" ? "assign" : "approve");
+          setDecision(claim.status === "needs_proof" ? "more_proof" : "approve");
         } else if (result.recommendation === "reject") {
           setDecision("reject");
         } else if (result.recommendation === "more_proof") {
@@ -710,7 +714,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
         aiSummary: finalSummary,
       });
 
-      setDecision(["approved", "rejected"].includes(updated.status) ? "close" : "assign");
+      setDecision(updated.status === "needs_proof" ? "more_proof" : "approve");
       setNotice(`Decision recorded as ${chosenDecision === "approve" ? "APPROVED" : "REJECTED"} with AI summary sent to applicant.`);
       ctx.refresh();
     } catch (error) {
@@ -740,7 +744,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
 
   function pick(item: Claim) {
     setSelected(item.id);
-    setDecision(["approved", "rejected"].includes(item.status) ? "close" : "assign");
+    setDecision(item.status === "needs_proof" ? "more_proof" : "approve");
     setNotice("");
     setProblem("");
     setReason(item.citizen_reason_en || "");
@@ -765,26 +769,8 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
           <h2>{claim.citizen_name}</h2>
           <p className="breakable">{claim.id}</p>
         </div>
-        <div className="detail-head-actions">
-          <StateTag value={claim.status} />
-          <button
-            type="button"
-            className="ai-summary-produce-btn"
-            disabled={aiSummaryLoading || busy || ctx.offline}
-            onClick={() => void produceSummary()}
-            title="Produce comprehensive AI summary taking profile, documents, and rules into account"
-          >
-            {aiSummaryLoading ? <LoaderCircle size={14} className="spin" /> : <Sparkles size={14} />}
-            <span>Produce AI Summary</span>
-          </button>
-        </div>
       </div>
 
-      <div className="facts two">
-        <div><small>Rule version</small><strong>v{claim.rule_version_used ?? "–"}</strong></div>
-        <div><small>Payment</small><strong>{title(claim.payment_status)}</strong></div>
-      </div>
-      <p>{claim.handoff_notes}</p>
       {Boolean(claim.reports) && <Notice text={String(claim.reports) + " missing payment report(s) on this case."} warning />}
 
       {/* AI Summary Assessment Card */}
@@ -798,7 +784,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
             <div className="ai-summary-meta-row">
               <span className={`ai-summary-rec-badge ${aiSummary.recommendation}`}>
                 {aiSummary.recommendation === "approve" ? <CheckCircle2 size={13} /> : aiSummary.recommendation === "reject" ? <XCircle size={13} /> : <AlertCircle size={13} />}
-                Recommended: {aiSummary.recommendation.replace("_", " ")}
+                Recommended: {aiSummary.recommendation === "approve" ? "Accept" : aiSummary.recommendation === "reject" ? "Reject" : "Request proof"}
               </span>
               <span className="ai-summary-confidence-tag">
                 Reliability: {Math.round(aiSummary.confidence * 100)}%
@@ -878,14 +864,23 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
 
       <Notice text={problem} warning /><Notice text={notice} />
 
-      {/* Record Decision on Top */}
+      {/* Applicant Profile with Photos & VLM Details */}
+      <ApplicantProfilePanel
+        citizenId={claim.citizen_id}
+        claimIncome={claim.payload_json.monthly_income}
+        claimHousehold={claim.payload_json.household_size}
+        offline={ctx.offline}
+        version={ctx.version}
+      />
+
+      {/* Record Decision */}
       {claim.status !== "closed" && (
         <div className="record-decision-top-card">
           <div className="record-decision-top-card-head">
             <h3>Officer Decision</h3>
             {aiSummary && (
               <span className={`ai-summary-rec-badge ${aiSummary.recommendation}`}>
-                Rec: {aiSummary.recommendation}
+                Rec: {aiSummary.recommendation === "approve" ? "Accept" : aiSummary.recommendation === "reject" ? "Reject" : "Request proof"}
               </span>
             )}
           </div>
@@ -894,7 +889,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
               Officer action
               <select value={decision} onChange={event => setDecision(event.target.value as keyof typeof reviewOptions)}>
                 {(Object.entries(reviewOptions) as [keyof typeof reviewOptions, string][])
-                  .filter(([key]) => ["approved", "rejected"].includes(claim.status) ? key === "close" : key !== "close" && !(key === "approve" && claim.status === "needs_proof"))
+                  .filter(([key]) => !(key === "approve" && claim.status === "needs_proof"))
                   .map(([key, label]) => <option value={key} key={key}>{label}</option>)}
               </select>
             </label>
@@ -931,7 +926,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                     onClick={() => void quickDecide("approve")}
                     title="Accept case with AI summary generated & sent to applicant"
                   >
-                    <CheckCircle2 size={14} /> Accept with AI Summary
+                    <CheckCircle2 size={14} /> Accept
                   </button>
                   <button
                     type="button"
@@ -940,7 +935,16 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                     onClick={() => void quickDecide("reject")}
                     title="Reject case with AI summary generated & sent to applicant"
                   >
-                    <XCircle size={14} /> Reject with AI Summary
+                    <XCircle size={14} /> Reject
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-quick-proof"
+                    disabled={busy || ctx.offline}
+                    onClick={() => setDecision("more_proof")}
+                    title="Request more proof from applicant"
+                  >
+                    <AlertCircle size={14} /> Request more proof
                   </button>
                 </>
               )}
@@ -961,29 +965,66 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
 
       {claim.payment && <p className="receipt">{claim.payment.raast_ref} · {currency(claim.payment.amount_pkr)} · {title(claim.payment.status)}</p>}
 
-      {/* Applicant Profile with Photos & VLM Details */}
-      <ApplicantProfilePanel
-        citizenId={claim.citizen_id}
-        claimIncome={claim.payload_json.monthly_income}
-        claimHousehold={claim.payload_json.household_size}
-        offline={ctx.offline}
-        version={ctx.version}
-      />
-
-      <div className="rows">
-        {claim.documents?.map(doc => (
-          <div className="list-row static" key={doc.id}>
-            <div>
-              <strong>{title(doc.doc_type)}</strong>
-              <small>{doc.tamper_reason ?? doc.ocr_json.summary ?? "No model report"}</small>
-              {doc.blur_score !== null && <small>Blur score {pc(doc.blur_score)}</small>}
-              {doc.ocr_json.fields && <small>{Object.entries(doc.ocr_json.fields).map(([field, value]) => title(field) + ": " + value).join(" · ")}</small>}
-              {doc.file_url && <a className="text-link" href={doc.file_url} target="_blank" rel="noreferrer">Open synthetic image</a>}
-            </div>
-            <StateTag value={doc.verified_status} />
+      {/* Attached Evidence */}
+      {claim.documents && claim.documents.length > 0 && (
+        <div className="claim-evidence-section">
+          <div className="claim-evidence-head">
+            <h4><FileText size={16} /> Attached Evidence</h4>
           </div>
-        ))}
-      </div>
+          {claim.documents.map(doc => {
+            const isSuspect = doc.verified_status === "suspect" || Boolean(doc.tamper_reason);
+            const fixtureName = doc.fixture || doc.ocr_json?.fixture || (doc.ocr_json?.fields as Record<string, string> | undefined)?.fixture || (["genuine", "readable"].includes(doc.verified_status) ? "clear" : undefined);
+            return (
+              <div className="claim-evidence-card" key={doc.id}>
+                <div className="claim-evidence-card-top">
+                  <div className="claim-evidence-card-title">
+                    <FileText size={15} color="#475569" />
+                    <span>{title(doc.doc_type)}</span>
+                  </div>
+                  <div className="claim-evidence-meta-chips">
+                    {doc.blur_score !== null && (
+                      <span className="claim-evidence-chip blur">
+                        Blur score {pc(doc.blur_score)}
+                      </span>
+                    )}
+                    {fixtureName && (
+                      <span className="claim-evidence-chip">
+                        Fixture: {fixtureName}
+                      </span>
+                    )}
+                    {isSuspect && (
+                      <span className="claim-evidence-chip suspect">
+                        Suspect
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {(doc.tamper_reason || doc.ocr_json?.summary) && (
+                  <p className="claim-evidence-desc">
+                    {doc.tamper_reason ?? doc.ocr_json.summary}
+                  </p>
+                )}
+                {doc.ocr_json?.fields && Object.keys(doc.ocr_json.fields).length > 0 && (
+                  <div className="claim-evidence-fields">
+                    {Object.entries(doc.ocr_json.fields).map(([field, value]) => (
+                      <span key={field} className="claim-evidence-field-tag">
+                        <span>{title(field)}:</span> <strong>{String(value)}</strong>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {doc.file_url && (
+                  <div>
+                    <a className="text-link" href={doc.file_url} target="_blank" rel="noreferrer" style={{ fontSize: "0.78rem" }}>
+                      Open synthetic image
+                    </a>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </Panel>
   </div>;
 
@@ -1117,14 +1158,14 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                             e.preventDefault();
                             void handleQuickCardReview(item, "approve");
                           }}
-                          title="Accept with AI Summary: analyzes profile, documents, and rules, then accepts and sends summary to applicant"
+                          title="Directly accept claim with AI summary & reasoning sent to applicant"
                         >
                           {quickBusy[item.id] === "approve" ? (
                             <LoaderCircle size={12} className="spin" />
                           ) : (
                             <CheckCircle2 size={12} />
                           )}
-                          <span>Accept w/ AI</span>
+                          <span>Accept</span>
                         </button>
                         <button
                           type="button"
@@ -1135,14 +1176,14 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                             e.preventDefault();
                             void handleQuickCardReview(item, "reject");
                           }}
-                          title="Reject with AI Summary: analyzes profile, documents, and rules, then rejects and sends summary to applicant"
+                          title="Directly reject claim with AI summary & reasoning sent to applicant"
                         >
                           {quickBusy[item.id] === "reject" ? (
                             <LoaderCircle size={12} className="spin" />
                           ) : (
                             <XCircle size={12} />
                           )}
-                          <span>Reject w/ AI</span>
+                          <span>Reject</span>
                         </button>
                       </div>
                     )}
