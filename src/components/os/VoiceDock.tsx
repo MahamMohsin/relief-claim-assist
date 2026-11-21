@@ -63,6 +63,10 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   // The prompt this run was given, so a transcript left in the box can be told
   // apart from something the person typed afterwards.
   const sentPromptRef = useRef("");
+  // Whether the draft in the box came from speech. The mic reopens after a
+  // spoken exchange however the message was sent — by the mic button, by
+  // pressing T, or by submitting the transcript that was left in the box.
+  const draftFromVoice = useRef(false);
 
   const dgVoice = useVoiceStream(lang);
   const recording = dgVoice.listening || clipRecording;
@@ -106,6 +110,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
       const live = [dgVoice.utterance, dgVoice.partial].filter(Boolean).join(" ").trim();
       if (live) {
         liveSpeechRef.current = live;
+        draftFromVoice.current = true;
         setInput(live);
       }
     }
@@ -115,6 +120,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   useEffect(() => {
     if (dgVoice.lastUtterance) {
       liveSpeechRef.current = dgVoice.lastUtterance;
+      draftFromVoice.current = true;
       setInput(dgVoice.lastUtterance);
     }
   }, [dgVoice.utteranceId, dgVoice.lastUtterance]);
@@ -180,7 +186,8 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     }
     stopSpeaking();
     speechPending.current = 0;
-    autoMicArmed.current = viaVoice;
+    autoMicArmed.current = viaVoice || draftFromVoice.current;
+    draftFromVoice.current = false;
     assistantTurnId.current = crypto.randomUUID();
     cuaEngine.cancel();
     setClarify(null);
@@ -506,7 +513,10 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
           }
           value={input}
           maxLength={1000}
-          onChange={event => setInput(event.target.value)}
+          onChange={event => {
+            draftFromVoice.current = false;
+            setInput(event.target.value);
+          }}
           onKeyDown={event => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
