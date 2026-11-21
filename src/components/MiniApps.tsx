@@ -430,16 +430,16 @@ function PrivacyView({ ctx }: { ctx: ViewContext }) {
 const reviewOptions = { assign: "Assign to me", more_proof: "Request more proof", escalate: "Escalate", approve: "Approve", reject: "Reject", close: "Close case" } as const;
 
 const kanbanColumns: { key: string; label: string; dot: string; statuses: Claim["status"][] }[] = [
-  { key: "todo", label: "To do", dot: "#0A84FF", statuses: ["submitted"] },
-  { key: "proof", label: "Needs proof", dot: "#FF9F0A", statuses: ["needs_proof"] },
-  { key: "review", label: "In review", dot: "#5856D6", statuses: ["in_review"] },
-  { key: "decided", label: "Decided", dot: "#34C759", statuses: ["approved", "rejected", "closed"] },
+  { key: "todo", label: "To do", dot: "#C7C7CC", statuses: ["submitted"] },
+  { key: "proof", label: "Needs proof", dot: "#8E8E93", statuses: ["needs_proof"] },
+  { key: "review", label: "In review", dot: "#48484A", statuses: ["in_review"] },
+  { key: "decided", label: "Decided", dot: "#1C1C1E", statuses: ["approved", "rejected", "closed"] },
 ];
 
 function ConfidenceRing({ value }: { value: number | null }) {
   const size = 34, stroke = 4, radius = (size - stroke) / 2, circumference = 2 * Math.PI * radius;
   const ratio = Math.min(Math.max(value ?? 0, 0), 1);
-  const color = value === null ? "#C7C7CC" : value >= 0.8 ? "#34C759" : value >= 0.5 ? "#FF9F0A" : "#FF3B30";
+  const color = value === null ? "#C7C7CC" : value < 0.5 ? "#1C1C1E" : "#8E8E93";
   return <svg className="kanban-ring" width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
     <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(120,120,128,0.16)" strokeWidth={stroke} />
     <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round"
@@ -544,7 +544,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                   const verified = docs.filter(doc => ["genuine", "readable"].includes(doc.verified_status)).length;
                   const urgent = item.status === "needs_proof" || (item.ai_confidence !== null && item.ai_confidence < 0.5);
                   const initials = (item.citizen_name ?? "?").split(" ").map(word => word[0]).slice(0, 2).join("");
-                  const confColor = item.ai_confidence === null ? "var(--soft-ink)" : item.ai_confidence >= 0.8 ? "#1d8f43" : item.ai_confidence >= 0.5 ? "#b26a00" : "#d70015";
+                  const confColor = item.ai_confidence === null ? "var(--soft-ink)" : item.ai_confidence < 0.5 ? "#1C1C1E" : "#6E6E73";
                   return <button type="button" key={item.id} className="kanban-card" onClick={() => pick(item)}>
                     <div className="kanban-card-top">
                       <span className="kanban-tag">{item.rule_version_used ? "Rule v" + item.rule_version_used : "No rule"}</span>

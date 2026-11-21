@@ -73,7 +73,7 @@ export type Evidence = { id: string; doc_type: string; file_url: string | null; 
 export type Claim = { id: string; citizen_id: string; citizen_name?: string; status: ClaimStatus; payment_status: Payment["status"];
   amount_pkr: number; payload_json: Partial<Payload>; citizen_reason_en: string | null; citizen_reason_ur: string | null;
   rule_version_used: number | null; ai_confidence: number | null; ai_route: string | null; handoff_notes: string | null;
-  assigned_officer_id: string | null; updated_at: string; reports?: number; payment?: Payment | null; documents?: Evidence[] };
+  assigned_officer_id: string | null; updated_at: string; created_at?: string; reports?: number; payment?: Payment | null; documents?: Evidence[] };
 export type Policy = { id: string; policy_version: string; section_code: string; title: string; effective_date: string; content: string; keywords: string[] };
 export type PolicyAnswer = { answer: string; citations: Policy[]; policy_version: string; effective_date: string | null };
 export type Audit = { id: number; actor_role: string; event_type: string; entity_type: string; entity_id: string | null;

@@ -257,6 +257,35 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
     }
   }
 
+  const monthStart = (() => { const start = new Date(); start.setDate(1); start.setHours(0, 0, 0, 0); return start; })();
+  const queueAccess = profile?.role === "officer";
+  const queueDocs = officerQueue.flatMap(claim => claim.documents ?? []);
+  const verifiedDocs = queueDocs.filter(doc => ["genuine", "readable", "verified"].includes(doc.verified_status)).length;
+  const newThisMonth = officerQueue.filter(claim => claim.created_at ? new Date(claim.created_at) >= monthStart : false);
+  const countByStatus = (statuses: Claim["status"][]) => officerQueue.filter(claim => statuses.includes(claim.status)).length;
+  const queueStats = {
+    total: officerQueue.length,
+    submitted: countByStatus(["submitted"]),
+    inReview: countByStatus(["in_review"]),
+    needsProof: countByStatus(["needs_proof"]),
+    approved: countByStatus(["approved"]),
+    pending: countByStatus(["submitted", "in_review"]),
+    urgent: officerQueue.filter(claim => claim.status === "needs_proof" || (claim.ai_confidence !== null && claim.ai_confidence < 0.5)).length,
+    newThisMonth: newThisMonth.length,
+    verifiedPct: queueDocs.length ? Math.round((verifiedDocs / queueDocs.length) * 100) : 0,
+  };
+  const queueShare = (count: number) => queueStats.total ? Math.round((count / queueStats.total) * 100) : 0;
+  const uniqueCitizens = (claims: Claim[]) => {
+    const seen = new Set<string>();
+    return claims.filter(claim => seen.has(claim.citizen_id) ? false : (seen.add(claim.citizen_id), true));
+  };
+  const initialsFor = (claims: Claim[], limit = 6) => claims.slice(0, limit).map(claim =>
+    (claim.citizen_name ?? "?").split(" ").filter(Boolean).map(word => word[0]).slice(0, 2).join(""));
+  const statValue = (value: number) => queueAccess ? value.toLocaleString() : "\u2014";
+  const queueCitizens = uniqueCitizens(officerQueue);
+  const newCitizens = uniqueCitizens(newThisMonth);
+  const clusterPeople = queueCitizens.slice(0, 6).map(claim => ({ initials: initialsFor([claim])[0], name: claim.citizen_name ?? "Open case" }));
+
   const status = offline ? "Offline" : "Online";
   const failed = pending.find(item => item.failure);
   const context: ViewContext | null = profile ? {
@@ -420,31 +449,28 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                       tabIndex={0}
                     >
                       <div className="overview-card-header">
-                        <span className="overview-card-title">Active cases this month</span>
+                        <span className="overview-card-title">Active cases</span>
                         <span className="overview-live-badge">
                           <span className="live-dot" />
-                          {officerQueue.length + 8} in review
+                          {statValue(queueStats.inReview)} in review
                         </span>
                       </div>
 
                       <div className="overview-cluster-wrap">
                         <div className="bubble-cluster">
-                          <div className="cluster-avatar a1" title="Fatima Bibi (Citizen)">FB</div>
-                          <div className="cluster-avatar a2" title="Mohammad Ali (Applicant)">MA</div>
-                          <div className="cluster-avatar a3" title="Nusrat Begum (Applicant)">NB</div>
-                          <div className="cluster-avatar a4" title="Tariq Store (Merchant)">TK</div>
-                          <div className="cluster-avatar a5" title="Ayesha Rani (Applicant)">AR</div>
-                          <div className="cluster-avatar a6" title="Zainab Worker (Helper)">ZW</div>
-                          <div className="cluster-counter" title="Registered Citizens">+40</div>
+                          {clusterPeople.length === 0 ?
+                            <p className="overview-empty">{queueAccess ? "No open cases right now." : "Officer queue only."}</p> :
+                            clusterPeople.map((person, index) =>
+                              <div className={`cluster-avatar a${index + 1}`} key={person.name + index} title={person.name}>{person.initials}</div>)}
+                          {queueCitizens.length > 6 &&
+                            <div className="cluster-counter" title="More applicants">+{queueCitizens.length - 6}</div>}
                         </div>
                       </div>
 
                       <div className="overview-card-footer">
-                        <strong className="overview-big-num">
-                          {officerQueue.length > 0 ? (officerQueue.length * 12 + 184).toLocaleString() : "2,184"}
-                        </strong>
+                        <strong className="overview-big-num">{statValue(queueStats.total)}</strong>
                         <span className="overview-sub-meta">
-                          +6.2% vs last month · 77% verified
+                          {queueAccess ? `${queueStats.newThisMonth} new this month · ${queueStats.verifiedPct}% docs verified` : "Live queue is available to officers"}
                         </span>
                       </div>
                     </div>
@@ -461,39 +487,34 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                       </div>
 
                       <div className="proportional-bubbles-stage">
-                        {(() => {
-                          const inRev = officerQueue.filter(c => ["submitted", "in_review"].includes(c.status)).length || 14;
-                          const needsPrf = officerQueue.filter(c => c.status === "needs_proof").length || 8;
-                          const apprv = officerQueue.filter(c => ["approved", "paid"].includes(c.status)).length || 46;
-                          return (
-                            <>
-                              <div className="prop-bubble big" title="Approved & Disbursed">
-                                <strong>{apprv * 30 + 12}</strong>
-                                <small>Approved</small>
-                              </div>
-                              <div className="prop-bubble medium" title="In Review">
-                                <strong>{inRev * 15 + 6}</strong>
-                                <small>In Review</small>
-                              </div>
-                              <div className="prop-bubble small" title="Needs Proof">
-                                <strong>{needsPrf * 8 + 2}</strong>
-                                <small>Proof</small>
-                              </div>
-                              <div className="prop-bubble mini" title="Rejected">
-                                <strong>14</strong>
-                                <small>Rejected</small>
-                              </div>
-                            </>
-                          );
-                        })()}
+                        <div className="prop-bubble big" title="Approved">
+                          <strong>{statValue(queueStats.approved)}</strong>
+                          <small>Approved</small>
+                        </div>
+                        <div className="prop-bubble medium" title="In review">
+                          <strong>{statValue(queueStats.inReview)}</strong>
+                          <small>In review</small>
+                        </div>
+                        <div className="prop-bubble small" title="Needs proof">
+                          <strong>{statValue(queueStats.needsProof)}</strong>
+                          <small>Proof</small>
+                        </div>
+                        <div className="prop-bubble mini" title="Submitted">
+                          <strong>{statValue(queueStats.submitted)}</strong>
+                          <small>New</small>
+                        </div>
                       </div>
 
                       <div className="bubbles-legend-footer">
-                        <span>71% Approved</span>
-                        <span>·</span>
-                        <span>22% In Review</span>
-                        <span>·</span>
-                        <span>7% Flagged</span>
+                        {queueAccess ?
+                          <>
+                            <span>{queueShare(queueStats.approved)}% approved</span>
+                            <span>·</span>
+                            <span>{queueShare(queueStats.inReview)}% in review</span>
+                            <span>·</span>
+                            <span>{queueShare(queueStats.needsProof)}% needs proof</span>
+                          </> :
+                          <span>Officer queue only</span>}
                       </div>
                     </div>
 
@@ -507,12 +528,12 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                       >
                         <span className="overview-card-title">New this month</span>
                         <div className="stack-metric-row">
-                          <strong className="stack-metric-num">186</strong>
+                          <strong className="stack-metric-num">{statValue(queueStats.newThisMonth)}</strong>
                           <div className="stack-mini-avatars">
-                            <span className="mini-av av-1">F</span>
-                            <span className="mini-av av-2">M</span>
-                            <span className="mini-av av-3">A</span>
-                            <span className="mini-av av-4">+12</span>
+                            {initialsFor(newCitizens, 3).map((initials, index) =>
+                              <span className={`mini-av av-${index + 1}`} key={initials + index}>{initials}</span>)}
+                            {newCitizens.length > 3 &&
+                              <span className="mini-av av-4">+{newCitizens.length - 3}</span>}
                           </div>
                         </div>
                       </div>
@@ -526,10 +547,12 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                         <span className="overview-card-title">Pending review</span>
                         <div className="stack-metric-row">
                           <strong className="stack-metric-num">
-                            {officerQueue.length > 0 ? officerQueue.length : 23}
-                            <span className="stack-metric-denom"> / 100</span>
+                            {statValue(queueStats.pending)}
+                            <span className="stack-metric-denom">{queueAccess ? ` of ${queueStats.total} open` : ""}</span>
                           </strong>
-                          <span className="stack-urgent-badge">5 urgent cases</span>
+                          <span className="stack-urgent-badge">
+                            {queueAccess ? `${queueStats.urgent} urgent` : "No access"}
+                          </span>
                         </div>
                       </div>
                     </div>
