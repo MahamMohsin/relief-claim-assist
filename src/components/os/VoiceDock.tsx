@@ -9,6 +9,7 @@ import { apps } from "../launcher";
 import { receiveActions } from "./UIActionBus";
 import { queueSpeakSegment, speakText, stopSpeaking } from "./speech";
 import { cuaEngine } from "./cuaEngine";
+import { BotAvatar } from "./BotAvatar";
 
 type VoiceProps = {
   profile: Profile;
@@ -495,6 +496,15 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     </div>}
     <div className="voice-glass-main">
       <form className={"voice-glass-form" + (isMultiline ? " multiline" : "")} onSubmit={submit}>
+        <BotAvatar
+          state={working ? "working" : recording || startingMic ? "thinking" : "idle"}
+          mood={clarify ? "neutral" : turns.length > 0 && !working ? "happy" : "neutral"}
+          size={38}
+          className="voice-dock-bot-avatar"
+          onClick={() => {
+            textareaRef.current?.focus();
+          }}
+        />
         <textarea
           ref={textareaRef}
           rows={1}
@@ -506,8 +516,8 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
                 ? "سن رہا ہے… (بھیجنے کے لیے مائیک دبائیں یا T چھوڑیں)"
                 : "Listening… (Tap mic or release T to send)"
               : lang === "ur"
-                ? "اپنا سوال لکھیں یا مائیک دبائیں (T دبا کر بولیں)…"
-                : "Ask anything, hold T to talk, or tap mic…"
+                ? "اپنے بوٹ سے کچھ بھی کہیں، یا بولنے کے لیے T دبائیں..."
+                : "Ask your bot anything to do, or hold T to talk..."
           }
           value={input}
           maxLength={1000}
