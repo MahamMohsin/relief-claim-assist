@@ -7,7 +7,7 @@ import { transcribe } from "@/src/lib/client";
 import { useVoiceStream } from "@/src/lib/useVoiceStream";
 import { apps } from "../launcher";
 import { receiveActions } from "./UIActionBus";
-import { speakText, stopSpeaking } from "./speech";
+import { queueSpeakSegment, speakText, stopSpeaking } from "./speech";
 
 type VoiceProps = {
   profile: Profile;
@@ -99,6 +99,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     setWorking(true);
     setStage("Routing your request");
     let accumulatedAnswer = "";
+    let spokenLength = 0;
     const run = { id: crypto.randomUUID(), controller: new AbortController() };
     active.current = run;
     try {
@@ -118,13 +119,24 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
           case "message_update": {
             accumulatedAnswer += event.text;
             setAnswer(accumulatedAnswer);
+
+            // Stream TTS immediately: As soon as a complete sentence or clause arrives, start speaking!
+            const unhandled = accumulatedAnswer.slice(spokenLength);
+            const sentenceMatch = unhandled.match(/^(.*?[.!?۔\n]+)\s*/);
+            if (sentenceMatch && sentenceMatch[1].trim().length > 3) {
+              const sentence = sentenceMatch[1].trim();
+              spokenLength += sentenceMatch[0].length;
+              void queueSpeakSegment(sentence, lang, lite || offline).then(() => setStage("Speaking · Cartesia"));
+            }
             break;
           }
           case "error": setError(event.message); break;
           case "agent_settled": {
             setStage(event.model === "local-guidance" ? "Local guidance fallback" : "Ready · " + event.model);
-            if (accumulatedAnswer.trim()) {
-              void speakText(accumulatedAnswer.slice(0, 1400), lang, lite || offline).then(setStage);
+            // Speak any trailing text that didn't end in punctuation
+            const remaining = accumulatedAnswer.slice(spokenLength).trim();
+            if (remaining.length > 0) {
+              void queueSpeakSegment(remaining, lang, lite || offline).then(() => setStage("Speaking · Cartesia"));
             }
             break;
           }
