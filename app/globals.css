@@ -207,6 +207,15 @@ th { background: var(--faint); color: var(--forest); }
   display: flex;
   align-items: center;
   gap: 0.2rem;
+  flex: 1;
+}
+
+.macos-menu-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  flex: 1;
 }
 
 .macos-apple-logo {
@@ -245,9 +254,11 @@ th { background: var(--faint); color: var(--forest); }
 .macos-menu-right {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.75rem;
   font-size: 0.78rem;
   color: #111e1b;
+  flex: 1;
 }
 
 .macos-status-pill {

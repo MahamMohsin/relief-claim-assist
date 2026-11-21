@@ -207,12 +207,15 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
             <HandHeart size={14} />
           </span>
           <span className="macos-app-name">Relief Assist</span>
+        </div>
+
+        <nav className="macos-menu-center">
           <button className="macos-menu-item" onClick={() => changeApp(null)}>Dashboard</button>
           <button className="macos-menu-item" onClick={() => changeApp("claim")}>Claims</button>
           <button className="macos-menu-item" onClick={() => changeApp("policy")}>Rules</button>
           <button className="macos-menu-item" onClick={() => changeApp("privacy")}>Privacy</button>
           <button className="macos-menu-item" onClick={() => changeApp("audit")}>Audit</button>
-        </div>
+        </nav>
 
         <div className="macos-menu-right">
           <span className="macos-status-pill">{offline ? "Offline" : "Online"}</span>
