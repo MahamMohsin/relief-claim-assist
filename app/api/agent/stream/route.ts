@@ -55,10 +55,21 @@ export async function POST(request: Request) {
             gateway<FileEntry[]>("agent_load", { citizenId }),
           ]);
           if (cancelled) return;
-          // Bypass Jev gatekeeping: Always proceed to MiMo LLM with full context
-          confidence = 0.99;
+          confidence = decision.confidence;
           const threshold = scheme.config.confidence_threshold;
           target = decision.app && canOpen(profile.role, decision.app) ? decision.app : null;
+          const accepted = Boolean(target) && confidence >= threshold;
+          emitAction({ type: "show_jev_badge", label: decision.label, confidence, route: accepted && target ? target : "clarification", model: decision.model });
+          await gateway("agent_trace", { citizenId, event: "jev_route", model: decision.model, confidence,
+            outcome: accepted ? target : "clarification", detail: { route: decision.label, threshold, runId } });
+          if (!accepted) {
+            const options = (Object.keys(appRoles) as MiniApp[]).filter(app => canOpen(profile.role, app)).slice(0, 3);
+            emitAction({ type: "ask_clarification", question: locale === "ur"
+              ? "مجھے یقین نہیں کہ آپ کون سی خدمت چاہتے ہیں۔ براہ کرم ایک سروس منتخب کریں۔"
+              : "I’m not sure which service you mean. Which mini-app would you like to open?", options });
+            emit({ type: "agent_settled", model: decision.model });
+            return;
+          }
           if (target) emitAction({ type: "open_mini_app", app: target });
           emit({ type: "phase", message: "Pi · MiMo Flash" });
           const restored = JSON.stringify(entries).length < 90000 ? entries : [];
@@ -66,6 +77,11 @@ export async function POST(request: Request) {
           session = runtime.session;
           if (cancelled) return;
           run.steer = async text => {
+            const next = await routeIntent(text);
+            if (!next.app || !canOpen(profile.role, next.app) || next.confidence < threshold) {
+              await gateway("agent_trace", { citizenId, event: "jev_steer", model: next.model, confidence: next.confidence, outcome: "blocked" });
+              throw new ApiError(409, "Please clarify the new request before continuing.");
+            }
             await session?.steer(text);
           };
           let answer = "";

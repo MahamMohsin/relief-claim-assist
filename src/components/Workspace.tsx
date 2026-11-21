@@ -5,7 +5,7 @@ import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Award, CheckCircle2, ChevronDown, Clock, Cloud, CloudOff, Fingerprint, HandHeart, House,
   LoaderCircle, LogOut, Maximize2, Minimize2, Minus, Radio, ShieldCheck, Trophy, UserPlus, UserRound, Users, Wifi, X } from "lucide-react";
-import { canOpen, personas, type Claim, type Family, type MiniApp, type Persona, type Profile } from "@/src/lib/contracts";
+import { canOpen, personas, type Claim, type Family, type MiniApp, type Overview, type Persona, type Profile } from "@/src/lib/contracts";
 import { api, jsonRequest } from "@/src/lib/client";
 import { queued, pushMutation, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
 import { syncQueue } from "@/src/lib/offline/syncEngine";
@@ -19,7 +19,11 @@ import { PipLoginModal } from "./pip/PipLoginModal";
 const roleEntries = Object.entries(personas) as [Persona, (typeof personas)[Persona]][];
 const tools = Object.keys(apps) as MiniApp[];
 
-export function Workspace({ initialProfile, showLogin = false }: { initialProfile: Profile | null; showLogin?: boolean }) {
+export function Workspace({ initialProfile, showLogin = false, demoRegistrationEnabled = false }: {
+  initialProfile: Profile | null;
+  showLogin?: boolean;
+  demoRegistrationEnabled?: boolean;
+}) {
   const [profile, setProfile] = useState(initialProfile);
   const [showAuthModal, setShowAuthModal] = useState(showLogin || !initialProfile);
   // When not logged in, the login screen is the only gateway: background is blurred and clicking out is impossible
@@ -45,7 +49,9 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
   const [alert, setAlert] = useState("");
   const [pastClaims, setPastClaims] = useState<Claim[]>([]);
   const [claimsLoading, setClaimsLoading] = useState(false);
+  const [overview, setOverview] = useState<Overview | null>(null);
   const [officerQueue, setOfficerQueue] = useState<Claim[]>([]);
+  const [clock, setClock] = useState("");
   const activeCall = useRef<AbortController | null>(null);
   const desktopBoundsRef = useRef<HTMLDivElement>(null);
   const motionDisabled = useReducedMotion() || lite;
@@ -119,11 +125,29 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
   useEffect(() => {
     if (!profile || offline || !["officer", "admin", "auditor"].includes(profile.role)) return;
     const controller = new AbortController();
-    api<Claim[]>("queue", {}, controller.signal)
-      .then(res => { if (!controller.signal.aborted && Array.isArray(res)) setOfficerQueue(res); })
+    api<Overview>("overview", {}, controller.signal)
+      .then(res => { if (!controller.signal.aborted) setOverview(res); })
       .catch(() => {});
+    if (profile.role === "officer") {
+      api<Claim[]>("queue", {}, controller.signal)
+        .then(cases => { if (!controller.signal.aborted) setOfficerQueue(cases); })
+        .catch(() => {});
+    }
     return () => controller.abort();
   }, [profile, offline, version]);
+
+  useEffect(() => {
+    const update = () => setClock(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+    update();
+    const timer = window.setInterval(update, 15000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator && window.isSecureContext) {
+      void navigator.serviceWorker.register("/relief-offline-worker.js").catch(() => {});
+    }
+  }, []);
 
   const enqueue: ViewContext["enqueue"] = async (action, body, opts = {}) => {
     if (!owner) throw new Error("Sign in before queuing changes.");
@@ -189,6 +213,10 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
     setTranscript("");
     setAlert("");
     setPrefill(null);
+    setStepNav(null);
+    setPastClaims([]);
+    setOverview(null);
+    setOfficerQueue([]);
     setPending([]);
     setOpenApps([]);
     setActiveApp(null);
@@ -199,8 +227,9 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
     setBusy(persona);
     setHeadMessage("");
     try {
-      await jsonRequest("/api/auth/demo", { persona });
-      const next = await api<Profile>("profile");
+      const timeout = AbortSignal.timeout(18000);
+      await jsonRequest("/api/auth/demo", { persona }, timeout);
+      const next = await api<Profile>("profile", {}, timeout);
       await clearContext();
       setProfile(next);
       setOpenApps([]);
@@ -208,7 +237,9 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
       setChooser(false);
       setShowAuthModal(false);
     } catch (error) {
-      setHeadMessage(error instanceof Error ? error.message : "Could not sign in.");
+      setHeadMessage(error instanceof Error && error.name === "TimeoutError"
+        ? "Demo sign-in took too long. Please try again."
+        : error instanceof Error ? error.message : "Could not sign in.");
     } finally { setBusy(null); }
   }
 
@@ -258,31 +289,17 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
   }
 
   const monthStart = (() => { const start = new Date(); start.setDate(1); start.setHours(0, 0, 0, 0); return start; })();
-  const queueAccess = profile?.role === "officer";
   const queueDocs = officerQueue.flatMap(claim => claim.documents ?? []);
   const verifiedDocs = queueDocs.filter(doc => ["genuine", "readable", "verified"].includes(doc.verified_status)).length;
   const newThisMonth = officerQueue.filter(claim => claim.created_at ? new Date(claim.created_at) >= monthStart : false);
-  const countByStatus = (statuses: Claim["status"][]) => officerQueue.filter(claim => statuses.includes(claim.status)).length;
-  const queueStats = {
-    total: officerQueue.length,
-    submitted: countByStatus(["submitted"]),
-    inReview: countByStatus(["in_review"]),
-    needsProof: countByStatus(["needs_proof"]),
-    approved: countByStatus(["approved"]),
-    pending: countByStatus(["submitted", "in_review"]),
-    urgent: officerQueue.filter(claim => claim.status === "needs_proof" || (claim.ai_confidence !== null && claim.ai_confidence < 0.5)).length,
-    newThisMonth: newThisMonth.length,
-    verifiedPct: queueDocs.length ? Math.round((verifiedDocs / queueDocs.length) * 100) : 0,
-  };
-  const queueShare = (count: number) => queueStats.total ? Math.round((count / queueStats.total) * 100) : 0;
+  const verifiedPct = queueDocs.length ? Math.round((verifiedDocs / queueDocs.length) * 100) : 0;
   const uniqueCitizens = (claims: Claim[]) => {
     const seen = new Set<string>();
     return claims.filter(claim => seen.has(claim.citizen_id) ? false : (seen.add(claim.citizen_id), true));
   };
   const initialsFor = (claims: Claim[], limit = 6) => claims.slice(0, limit).map(claim =>
     (claim.citizen_name ?? "?").split(" ").filter(Boolean).map(word => word[0]).slice(0, 2).join(""));
-  const statValue = (value: number) => queueAccess ? value.toLocaleString() : "\u2014";
-  const queueCitizens = uniqueCitizens(officerQueue);
+  const queueCitizens = uniqueCitizens(officerQueue.filter(claim => ["submitted", "in_review", "needs_proof"].includes(claim.status)));
   const newCitizens = uniqueCitizens(newThisMonth);
   const clusterPeople = queueCitizens.slice(0, 6).map(claim => ({ initials: initialsFor([claim])[0], name: claim.citizen_name ?? "Open case" }));
 
@@ -311,10 +328,11 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
 
         <nav className="macos-menu-center">
           <button className="macos-menu-item" onClick={() => changeApp(null)}>Dashboard</button>
-          <button className="macos-menu-item" onClick={() => changeApp("claim")}>Claims</button>
-          <button className="macos-menu-item" onClick={() => changeApp("policy")}>Rules</button>
-          <button className="macos-menu-item" onClick={() => changeApp("privacy")}>Privacy</button>
-          <button className="macos-menu-item" onClick={() => changeApp("audit")}>Audit</button>
+          {available.includes("claim") && <button className="macos-menu-item" onClick={() => changeApp("claim")}>Claims</button>}
+          {available.includes("review") && <button className="macos-menu-item" onClick={() => changeApp("review")}>Review</button>}
+          {available.includes("policy") && <button className="macos-menu-item" onClick={() => changeApp("policy")}>Policy</button>}
+          {available.includes("privacy") && <button className="macos-menu-item" onClick={() => changeApp("privacy")}>Privacy</button>}
+          {available.includes("audit") && <button className="macos-menu-item" onClick={() => changeApp("audit")}>Audit</button>}
         </nav>
 
         <div className="macos-menu-right">
@@ -329,10 +347,20 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
             </button>
           )}
           <span className="macos-clock">
-            {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            {clock}
           </span>
         </div>
       </header>
+
+      <div className="relief-status-controls">
+        <span className="disclosure"><ShieldCheck size={14} /> PROTOTYPE · SIMULATED DPI DATA</span>
+        {profile && <>
+          <button className="control" aria-pressed={!fixtureOnline} onClick={() => setFixtureOnline(value => !value)}><Radio size={15} /> Simulate network drop</button>
+          <button className="control" aria-pressed={lite} onClick={() => setLite(value => !value)}>2G Lite mode</button>
+          <span className="net" role="status">{offline ? "Offline" : "Online"}{pending.length > 0 ? " · " + pending.length + " queued" : ""}</span>
+          <button className="control" disabled={offline || syncing || !pending.length} onClick={() => void synchronize(true)}><Cloud size={15} /> {syncing ? "Syncing…" : "Sync now"}</button>
+        </>}
+      </div>
 
       {(headMessage || failed) && <div className="top-notice"><p role="status">{headMessage || failed?.failure}</p><button onClick={() => setHeadMessage("")} aria-label="Dismiss update"><X size={17} /></button></div>}
 
@@ -359,39 +387,34 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
               {/* Top Row: Fatima Bibi + Compact Preview Tile side-by-side */}
               <div className="ios-top-hero-row">
                 <div className="ios-hero-name">
-                  <div
-                    className={"liquid-user-pill" + (userDropdownOpen ? " expanded" : "")}
-                    onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                    role="button"
-                    tabIndex={0}
-                    title="Click to expand account menu"
-                  >
+                  <div className={"liquid-user-pill" + (userDropdownOpen ? " expanded" : "")}>
                     <div className="liquid-user-header">
                       <div>
                         <h1>{profile ? profile.full_name : "Fatima Bibi"}</h1>
                         <p>{profile?.role === "helper" ? "Community Health Worker" : profile?.role === "officer" ? "Department Review Officer" : "Emergency Cash Assistance"}</p>
                       </div>
-                      <span className={"liquid-chevron" + (userDropdownOpen ? " rotated" : "")}>
+                      <button type="button" className={"liquid-chevron" + (userDropdownOpen ? " rotated" : "")}
+                        aria-label="Account menu" aria-expanded={userDropdownOpen} aria-controls="account-menu"
+                        onClick={() => setUserDropdownOpen(open => !open)}>
                         <ChevronDown size={22} strokeWidth={2.4} />
-                      </span>
+                      </button>
                     </div>
 
                     {/* Liquid Glass Dropdown Menu */}
                     <AnimatePresence>
                       {userDropdownOpen && (
                         <motion.div
+                          id="account-menu"
                           className="liquid-glass-menu"
                           initial={{ opacity: 0, height: 0, scale: 0.96 }}
                           animate={{ opacity: 1, height: "auto", scale: 1 }}
                           exit={{ opacity: 0, height: 0, scale: 0.96 }}
                           transition={{ type: "spring", stiffness: 380, damping: 28 }}
-                          onClick={e => e.stopPropagation()}
                         >
                           <div className="liquid-menu-divider" />
                           <div className="liquid-menu-body">
                             <div className="liquid-user-meta">
-                              <span className="liquid-role-badge">{profile?.role || "citizen"}</span>
-                              <small>{profile?.full_name ? profile.full_name.toLowerCase().replace(/\s+/g, ".") + "@relief-demo.example" : "fatima@relief-demo.example"}</small>
+                              <span className="liquid-role-badge">{profile.role}</span>
                             </div>
 
                             <div className="liquid-action-buttons">
@@ -438,125 +461,54 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                   </div>
                 </div>
 
-                {/* Admin / Officer Stat Suite (From Overview Design: Active cases bubble cloud, breakdown bubbles, pending/review metrics) */}
+
                 {["officer", "admin", "auditor"].includes(profile.role) && (
-                  <div className="overview-stats-suite">
-                    {/* Card 1: Active Cases / Users with Bubble Cluster */}
-                    <div
-                      className="overview-card active-cases-card"
-                      onClick={() => openAppWindow(profile.role === "officer" ? "review" : "audit")}
-                      role="button"
-                      tabIndex={0}
-                    >
+                  overview ? <div className="overview-stats-suite">
+                    <button type="button" className="overview-card active-cases-card"
+                      onClick={() => openAppWindow(profile.role === "officer" ? "review" : "audit")}>
                       <div className="overview-card-header">
                         <span className="overview-card-title">Active cases</span>
-                        <span className="overview-live-badge">
-                          <span className="live-dot" />
-                          {statValue(queueStats.inReview)} in review
-                        </span>
+                        <span className="overview-live-badge"><span className="live-dot" />{overview.review} in review</span>
                       </div>
-
-                      <div className="overview-cluster-wrap">
-                        <div className="bubble-cluster">
-                          {clusterPeople.length === 0 ?
-                            <p className="overview-empty">{queueAccess ? "No open cases right now." : "Officer queue only."}</p> :
-                            clusterPeople.map((person, index) =>
-                              <div className={`cluster-avatar a${index + 1}`} key={person.name + index} title={person.name}>{person.initials}</div>)}
-                          {queueCitizens.length > 6 &&
-                            <div className="cluster-counter" title="More applicants">+{queueCitizens.length - 6}</div>}
-                        </div>
-                      </div>
-
+                      {clusterPeople.length > 0 && <div className="overview-cluster-wrap"><div className="bubble-cluster">
+                        {clusterPeople.map((person, index) =>
+                          <div className={`cluster-avatar a${index + 1}`} key={person.name + index} title={person.name}>{person.initials}</div>)}
+                        {queueCitizens.length > 6 && <div className="cluster-counter" title="More applicants">+{queueCitizens.length - 6}</div>}
+                      </div></div>}
                       <div className="overview-card-footer">
-                        <strong className="overview-big-num">{statValue(queueStats.total)}</strong>
-                        <span className="overview-sub-meta">
-                          {queueAccess ? `${queueStats.newThisMonth} new this month · ${queueStats.verifiedPct}% docs verified` : "Live queue is available to officers"}
-                        </span>
+                        <strong className="overview-big-num">{overview.active.toLocaleString()}</strong>
+                        <span className="overview-sub-meta">{overview.proof} awaiting evidence{queueDocs.length > 0 && ` · ${verifiedPct}% docs verified`}</span>
                       </div>
-                    </div>
-
-                    {/* Card 2: Claims by Status / Plan - Proportional Bubbles */}
-                    <div
-                      className="overview-card bubbles-breakdown-card"
-                      onClick={() => openAppWindow(profile.role === "officer" ? "review" : "rules")}
-                      role="button"
-                      tabIndex={0}
-                    >
-                      <div className="overview-card-header">
-                        <span className="overview-card-title">Claims by status</span>
-                      </div>
-
+                    </button>
+                    <button type="button" className="overview-card bubbles-breakdown-card"
+                      onClick={() => openAppWindow(profile.role === "officer" ? "review" : "audit")}>
+                      <span className="overview-card-title">Claims by status</span>
                       <div className="proportional-bubbles-stage">
-                        <div className="prop-bubble big" title="Approved">
-                          <strong>{statValue(queueStats.approved)}</strong>
-                          <small>Approved</small>
-                        </div>
-                        <div className="prop-bubble medium" title="In review">
-                          <strong>{statValue(queueStats.inReview)}</strong>
-                          <small>In review</small>
-                        </div>
-                        <div className="prop-bubble small" title="Needs proof">
-                          <strong>{statValue(queueStats.needsProof)}</strong>
-                          <small>Proof</small>
-                        </div>
-                        <div className="prop-bubble mini" title="Submitted">
-                          <strong>{statValue(queueStats.submitted)}</strong>
-                          <small>New</small>
-                        </div>
+                        {([["Approved", overview.approved, "big"], ["In review", overview.review, "medium"],
+                          ["Needs proof", overview.proof, "small"], ["Rejected", overview.rejected, "mini"]] as const).map(([label, count, size]) => (
+                          <div className={"prop-bubble " + size} key={label}><strong>{count}</strong><small>{label}</small></div>
+                        ))}
                       </div>
-
-                      <div className="bubbles-legend-footer">
-                        {queueAccess ?
-                          <>
-                            <span>{queueShare(queueStats.approved)}% approved</span>
-                            <span>·</span>
-                            <span>{queueShare(queueStats.inReview)}% in review</span>
-                            <span>·</span>
-                            <span>{queueShare(queueStats.needsProof)}% needs proof</span>
-                          </> :
-                          <span>Officer queue only</span>}
-                      </div>
-                    </div>
-
-                    {/* Card 3: Dual Stack Metrics (New Claims + Pending Actions) */}
+                      <div className="bubbles-legend-footer">{overview.paid} paid · {overview.closed} closed</div>
+                    </button>
                     <div className="overview-stack-col">
-                      <div
-                        className="overview-card stack-metric-card"
-                        onClick={() => openAppWindow("review")}
-                        role="button"
-                        tabIndex={0}
-                      >
+                      <div className="overview-card stack-metric-card">
                         <span className="overview-card-title">New this month</span>
                         <div className="stack-metric-row">
-                          <strong className="stack-metric-num">{statValue(queueStats.newThisMonth)}</strong>
-                          <div className="stack-mini-avatars">
+                          <strong className="stack-metric-num">{overview.new_this_month}</strong>
+                          {newCitizens.length > 0 && <div className="stack-mini-avatars" aria-hidden="true">
                             {initialsFor(newCitizens, 3).map((initials, index) =>
                               <span className={`mini-av av-${index + 1}`} key={initials + index}>{initials}</span>)}
-                            {newCitizens.length > 3 &&
-                              <span className="mini-av av-4">+{newCitizens.length - 3}</span>}
-                          </div>
+                            {newCitizens.length > 3 && <span className="mini-av av-4">+{newCitizens.length - 3}</span>}
+                          </div>}
                         </div>
                       </div>
-
-                      <div
-                        className="overview-card stack-metric-card"
-                        onClick={() => openAppWindow(profile.role === "officer" ? "review" : "rules")}
-                        role="button"
-                        tabIndex={0}
-                      >
-                        <span className="overview-card-title">Pending review</span>
-                        <div className="stack-metric-row">
-                          <strong className="stack-metric-num">
-                            {statValue(queueStats.pending)}
-                            <span className="stack-metric-denom">{queueAccess ? ` of ${queueStats.total} open` : ""}</span>
-                          </strong>
-                          <span className="stack-urgent-badge">
-                            {queueAccess ? `${queueStats.urgent} urgent` : "No access"}
-                          </span>
-                        </div>
+                      <div className="overview-card stack-metric-card">
+                        <span className="overview-card-title">Priority review</span>
+                        <strong className="stack-metric-num">{overview.priority}</strong>
                       </div>
                     </div>
-                  </div>
+                  </div> : <p role="status">{offline ? "Overview reconnects when you are online." : "Loading claim overview…"}</p>
                 )}
 
                 {/* Right Side Widgets: Status Progress Card + Recent Claim Preview Card (for Citizens and Helpers) */}
@@ -708,9 +660,9 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                       whileTap={motionDisabled ? undefined : { scale: 0.94 }}
                       transition={{ type: "spring", stiffness: 260, damping: 20, mass: 0.8 }}
                     >
-                      <div className={"ios-desktop-icon " + item.color}>
+                      <motion.div layoutId={motionDisabled ? undefined : "launch-icon-" + id} className={"ios-desktop-icon " + item.color}>
                         <Icon size={34} strokeWidth={2.1} />
-                      </div>
+                      </motion.div>
                       <span className="ios-desktop-label">{item.title}</span>
                       {isRunning && <span className="ios-app-running-dot" />}
                     </motion.button>
@@ -738,7 +690,7 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                       dragConstraints={desktopBoundsRef}
                       dragElastic={0.05}
                       dragMomentum={false}
-                      initial={{ scale: 0.92, opacity: 0, y: 20 }}
+                      initial={motionDisabled ? false : { scale: 0.92, opacity: 0, y: 20 }}
                       animate={{ scale: 1, opacity: 1, y: 0 }}
                       exit={{ scale: 0.88, opacity: 0 }}
                       style={{
@@ -779,9 +731,9 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                         </div>
 
                         <div className="window-title-group">
-                          <span className={"window-mini-icon " + appMeta.color}>
+                          <motion.span layoutId={motionDisabled ? undefined : "launch-icon-" + appId} className={"window-mini-icon " + appMeta.color}>
                             <Icon size={14} />
-                          </span>
+                          </motion.span>
                           <span className="window-title-text">{appMeta.title}</span>
                         </div>
 
@@ -878,6 +830,8 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
         }}
         busy={busy}
         offline={offline}
+        demoFeedback={headMessage}
+        demoRegistrationEnabled={demoRegistrationEnabled}
         canDismiss={!isLocked}
       />
     </div>

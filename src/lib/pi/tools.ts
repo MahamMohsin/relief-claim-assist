@@ -34,11 +34,10 @@ export function resolveApp(value: unknown): (typeof appKeys)[number] | null {
   return alias ? appAliases[alias] : null;
 }
 
-export function resolveStep(value: unknown): "evidence" | "review" | "submit" | null {
+export function resolveStep(value: unknown): "evidence" | "review" | null {
   const norm = String(value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
   if (norm.includes("evidence") || norm.includes("attach") || norm.includes("document")) return "evidence";
-  if (norm.includes("submit") || norm.includes("finish")) return "submit";
-  if (norm.includes("review")) return "review";
+  if (norm.includes("review") || norm.includes("submit") || norm.includes("finish")) return "review";
   return null;
 }
 
@@ -94,11 +93,11 @@ export function registerTools(pi: ExtensionAPI, context: PiContext) {
     },
   });
   pi.registerTool({
-    name: "claim_step_navigate", label: "Advance claim step", description: "Advance the claim creation screen when user says they have done evidence, want to review, or want to submit the claim.",
-    parameters: Type.Object({ step: Type.String({ maxLength: 30, description: "evidence | review | submit" }) }),
+    name: "claim_step_navigate", label: "Advance claim step", description: "Open evidence or the review screen. The user confirms submission.",
+    parameters: Type.Object({ step: Type.String({ maxLength: 30, description: "evidence or review" }) }),
     async execute(_id, input) {
       const step = resolveStep(input.step);
-      if (!step) throw new ApiError(400, `Unknown step "${input.step}". Use: evidence, review, or submit.`);
+      if (!step) throw new ApiError(400, "Choose evidence or review.");
       emit({ type: "open_mini_app", app: "claim" });
       emit({ type: "advance_claim_step", step });
       return textResult({ navigatedToStep: step });

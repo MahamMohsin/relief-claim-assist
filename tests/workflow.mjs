@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { chromium, request } from "playwright";
 
 const contexts = [];
@@ -69,6 +70,9 @@ async function testApi() {
   );
   const guest = await request.newContext({ baseURL: base });
   contexts.push(guest);
+  const noVerifier = await guest.get("/auth/callback?code=" + randomUUID(), { maxRedirects: 0 });
+  assert.equal(noVerifier.status(), 307);
+  assert.equal(noVerifier.headers().location, new URL("/login?confirmation=signin", base).href);
   await call(guest, "profile", {}, 401);
   const profile = await call(citizen, "profile");
   assert.equal(profile.role, "citizen");
@@ -92,10 +96,21 @@ async function testApi() {
   const approved = await call(officer, "review", { claimId: claim.id, decision: "approve", reason: "Verified synthetic evidence against the active rules." });
   assert.equal(approved.status, "approved");
   assert.equal(approved.payment_status, "pending");
+  const failedPayment = await call(officer, "disburse", { claimId: claim.id, outcome: "failed" });
+  assert.equal(failedPayment.payment_status, "failed");
+  await call(citizen, "disburse", { claimId: claim.id }, 403);
   const paid = await call(officer, "disburse", { claimId: claim.id });
   assert.equal(paid.payment_status, "paid");
+  await call(officer, "disburse", { claimId: claim.id }, 409);
   const receipt = (await call(citizen, "claims")).find(item => item.id === claim.id).payment;
   assert(receipt.raast_ref.startsWith("SIM-"));
+  await call(citizen, "overview", {}, 403);
+  for (const staff of [officer, admin, auditor]) {
+    const overview = await call(staff, "overview");
+    assert(overview.paid > 0 && Number.isInteger(overview.active));
+  }
+  await call(admin, "staff_queue");
+  await call(auditor, "staff_queue", {}, 403);
 
   const verdict = await call(shop, "check", { message: "Raast credited the simulated payment.", reference: receipt.raast_ref });
   assert.equal(verdict.rail_match_status, "paid");
@@ -143,6 +158,13 @@ async function testApi() {
 
   const directory = await call(helper, "families");
   assert.equal(directory.length, 40);
+  const aliasFamily = directory.find(item => item.full_name === "Muhammad Ali");
+  assert(aliasFamily);
+  const aliasDraft = await call(helper, "draft", { key: randomUUID(), citizenId: aliasFamily.id, payload: contents });
+  await call(helper, "evidence", { key: randomUUID(), citizenId: aliasFamily.id, claimId: aliasDraft.id, docType: "identity", fixture: "clear" });
+  const duplicateIdentity = await call(helper, "submit", { key: randomUUID(), citizenId: aliasFamily.id, claimId: aliasDraft.id, payload: contents });
+  assert.equal(duplicateIdentity.status, "in_review");
+  assert.match(duplicateIdentity.handoff_notes, /another family/i);
   const helperId = (await call(helper, "profile")).id;
   const grant = (consent) => call(citizen, "consent", { key: randomUUID(), citizenId: synthetic, helperId, consent });
   const initiallyGranted = directory.find(item => item.id === synthetic).consent === "granted";
@@ -162,6 +184,8 @@ async function testApi() {
   const cited = await call(citizen, "policy", { question: "What is the household income cap?" });
   assert(cited.citations.some(section => section.section_code === "A2"));
   assert.equal(cited.policy_version, "2026.1");
+  const urduPolicy = await call(citizen, "policy", { question: "بیواؤں کے لیے امداد کی پالیسی کیا ہے؟" });
+  assert(urduPolicy.citations.some(section => section.section_code === "A3"));
   const blank = await call(citizen, "policy", { question: "Can I finance a telescope on Jupiter?" });
   assert.equal(blank.answer, "The official policy does not cover this.");
   assert.equal(blank.citations.length, 0);
@@ -216,7 +240,9 @@ async function testApi() {
   assert(events.some(event => event.type === "agent_settled" && event.model === process.env.ANTHROPIC_MODEL), JSON.stringify(events));
   assert.match(events.filter(event => event.type === "message_update").map(event => event.text).join(""), /A3|widow/i);
   const clarification = await citizen.post("/api/agent/stream", { data: { prompt: "Hmm perhaps", locale: "en", runId: randomUUID() } });
-  assert.match(await clarification.text(), /ask_clarification/);
+  const clarificationText = await clarification.text();
+  assert.match(clarificationText, /ask_clarification/);
+  assert.doesNotMatch(clarificationText, /tool_execution_start/);
   console.log("PASS live Pi/MiMo tool execution, SSE, policy navigation, and low-confidence clarification");
 
   const audio = await readFile(process.env.RELIEF_TEST_AUDIO ?? new URL("./fixtures/synthetic-english.wav", import.meta.url));
@@ -238,9 +264,12 @@ async function testApi() {
 }
 
 async function testBrowser() {
-  browser = await chromium.launch({ channel: process.env.RELIEF_BROWSER_CHANNEL || "chrome", headless: true });
+  browser = await chromium.launch({
+    channel: process.env.RELIEF_BROWSER_CHANNEL || "chrome", headless: true,
+    args: ["--use-fake-device-for-media-stream", "--use-file-for-fake-audio-capture=" + fileURLToPath(new URL("./fixtures/synthetic-english.wav", import.meta.url))],
+  });
   const desktop = await browser.newPage({ viewport: { width: 1440, height: 980 } });
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce", permissions: ["microphone"] });
   const runtimeErrors = [];
   for (const tab of [desktop, page]) {
     tab.on("pageerror", error => runtimeErrors.push(error.message));
@@ -248,13 +277,42 @@ async function testBrowser() {
     await tab.getByRole("heading", { name: "Enter the demo" }).waitFor();
     assert(await tab.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "Unexpected horizontal page overflow");
   }
-  await desktop.getByRole("link", { name: "API documentation" }).click();
+  await desktop.goto(base + "/docs");
   await desktop.getByRole("button", { name: "Authorize" }).first().waitFor();
   await page.keyboard.press("Tab");
   assert(await page.evaluate(() => Boolean(document.activeElement?.matches(":focus-visible"))));
-  await page.getByRole("button", { name: /Fatima Bibi/ }).click();
-  await page.getByRole("heading", { name: /Welcome, Fatima/ }).waitFor();
-  await page.getByRole("button", { name: "Open Relief Claim" }).click();
+  const fatima = page.getByTitle("Log in instantly as Fatima Bibi (citizen)", { exact: true });
+  await fatima.click();
+  await fatima.waitFor({ state: "hidden" });
+  const accountMenu = page.getByRole("button", { name: "Account menu" });
+  await accountMenu.focus();
+  await page.keyboard.press("Enter");
+  assert.equal(await accountMenu.getAttribute("aria-expanded"), "true");
+  await page.keyboard.press("Enter");
+  const mainNav = page.locator(".macos-menu-center");
+  assert.equal(await mainNav.getByRole("button", { name: "Audit", includeHidden: true }).count(), 0);
+  const language = page.getByRole("button", { name: "Switch voice language" });
+  if ((await language.textContent())?.trim() !== "EN") await language.click();
+  await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
+  const started = page.waitForResponse(response => response.url().endsWith("/api/voice/relay") && response.request().method() === "POST");
+  await page.keyboard.down("t");
+  const live = await started;
+  assert.equal(live.status(), 201, "The live Deepgram relay did not start");
+  await page.getByText("Listening · Deepgram", { exact: true }).waitFor();
+  await page.waitForFunction(() => /relief|claim|payment/i.test(document.querySelector(".glass-voice-input")?.value ?? ""),
+    undefined, { timeout: 20000 });
+  await page.keyboard.up("t");
+  await page.getByRole("button", { name: "Stop recording" }).waitFor({ state: "hidden" });
+  await page.getByRole("textbox", { name: "Type a relief assistant command" }).fill("");
+  await page.getByRole("button", { name: "2G Lite mode" }).click();
+  await page.getByRole("button", { name: "Record voice (or press T to talk)", exact: true }).click();
+  const stopMic = page.getByRole("button", { name: "Stop recording", exact: true });
+  await stopMic.waitFor();
+  await new Promise(resolve => setTimeout(resolve, 3200));
+  await stopMic.click();
+  await page.waitForFunction(() => /relief|claim|payment/i.test(document.querySelector(".glass-voice-input")?.value ?? ""),
+    undefined, { timeout: 30000 });
+  await page.getByRole("button", { name: "Relief Claim", exact: true }).click();
   await page.getByRole("button", { name: "New claim" }).click();
   await page.getByRole("button", { name: /Simulate network drop/ }).click();
   await page.getByLabel("Additional details").fill(testLabel + " offline");
@@ -267,21 +325,29 @@ async function testBrowser() {
   await page.getByRole("button", { name: "Queue claim" }).click();
   await page.getByText("Claim queued. It will be sent when you reconnect.").waitFor();
   await page.getByRole("button", { name: /Simulate network drop/ }).click();
-  await page.waitForFunction(() => !document.querySelector(".net")?.textContent.includes("queued"), { timeout: 30000 });
+  await page.waitForFunction(() => document.querySelector(".relief-status-controls .net")?.textContent === "Online", undefined, { timeout: 30000 });
   const records = await page.request.post(base + "/api/relief/claims", { data: {} });
   const offlineClaim = (await records.json()).find(item => item.payload_json.notes === testLabel + " offline");
   assert.equal(offlineClaim?.status, "submitted");
   assert.equal(offlineClaim.documents.length, 1);
 
-  await page.getByRole("button", { name: "Fatima Bibi", exact: true }).click();
+  await page.getByRole("button", { name: "Fatima", exact: true }).click();
   await page.getByRole("button", { name: /Auditor Kamran/ }).click();
-  await page.getByRole("heading", { name: /Welcome, Auditor/ }).waitFor();
+  await page.getByRole("heading", { name: "Auditor Kamran", exact: true }).waitFor();
   await page.getByRole("button", { name: "Audit Vault", exact: true }).click();
   await page.getByRole("button", { name: "Decision Safety Eval" }).click();
   await page.getByText("Forgery misses", { exact: true }).waitFor();
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "Audit page overflow");
+  await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
+  await page.context().setOffline(true);
+  await page.reload();
+  await page.getByRole("heading", { name: "You are offline" }).waitFor();
+  assert.equal(await page.getByText("Auditor Kamran", { exact: true }).count(), 0);
+  await page.context().setOffline(false);
+  await page.getByRole("link", { name: "Reconnect to your workspace" }).click();
+  await page.getByRole("heading", { name: "Auditor Kamran", exact: true }).waitFor();
   assert.deepEqual(runtimeErrors, []);
-  console.log("PASS 390 px and 1440 px browser layout, focus, offline draft/evidence/submit synchronization, persona switching, and audit UI");
+  console.log("PASS browser layout, keyboard focus, live and 2G microphone capture, offline queue and cold start, persona switching, and audit UI");
 }
 
 try {

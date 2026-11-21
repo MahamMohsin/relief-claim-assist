@@ -95,6 +95,18 @@ function useActionList<T>(action: Action, ctx: ViewContext, withFamily = false) 
 
 const clean: Payload = { monthly_income: 14500, household_size: 3, notes: "" };
 const progressSteps = ["Household", "Evidence", "Review & submit"];
+const claimStepHelp = {
+  en: [
+    "Enter your total monthly household income and the number of people in your household. Then continue to evidence.",
+    "Attach a readable synthetic document. You can pick a sample or upload an image. Then select Review claim.",
+    "Check the details and evidence. Select Submit claim when you are ready. An officer will review it.",
+  ],
+  ur: [
+    "گھر کی کل ماہانہ آمدنی اور گھر کے افراد کی تعداد درج کریں۔ پھر ثبوت کے مرحلے پر جائیں۔",
+    "واضح فرضی دستاویز منسلک کریں۔ آپ نمونہ منتخب کر سکتے ہیں یا تصویر لگا سکتے ہیں۔ پھر درخواست کا جائزہ لیں۔",
+    "تفصیلات اور ثبوت دیکھ لیں، پھر درخواست جمع کریں۔ ایک افسر اس کا جائزہ لے گا۔",
+  ],
+};
 
 function ClaimView({ ctx }: { ctx: ViewContext }) {
   const { data: claims, error, loading } = useActionList<Claim[]>("claims", ctx, true);
@@ -150,7 +162,7 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
     } else if (ctx.stepNav === "submit") {
       setEditing(true);
       setStep(2);
-      void run("submit");
+      setMessage("Review the claim and select Submit claim when you are ready.");
     }
   }, [ctx.stepNav]);
 
@@ -260,6 +272,11 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
           <Badge key={label} label={index + 1 + ". " + label} variant={step === index ? "info" : "neutral"} />
         ))}
       </HStack>
+      <VStack gap={2} paddingBlockStart={3}>
+        <p lang={ctx.voiceLang} dir={ctx.voiceLang === "ur" ? "rtl" : "ltr"}>{claimStepHelp[ctx.voiceLang][step]}</p>
+        <Button variant="secondary" label="Listen to this step" icon={<AudioLines size={16} />} onClick={() =>
+          void speakText(claimStepHelp[ctx.voiceLang][step], ctx.voiceLang, ctx.lite || ctx.offline).then(setMessage)} />
+      </VStack>
       {step === 0 && <form onSubmit={event => { event.preventDefault(); setStep(1); }}>
         <VStack gap={3} paddingBlockStart={3}>
           <HStack gap={3} wrap="wrap">
@@ -577,13 +594,13 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
   const [query, setQuery] = useState("");
   const claim = data?.find(item => item.id === selected);
 
-  async function update(action: "review" | "disburse") {
+  async function update(action: "review" | "disburse", outcome: "paid" | "failed" = "paid") {
     if (!claim) return;
     setBusy(true); setProblem(""); setNotice("");
     try {
-      const updated = await api<Claim>(action, action === "review" ? { claimId: claim.id, decision, reason, reasonUr } : { claimId: claim.id });
+      const updated = await api<Claim>(action, action === "review" ? { claimId: claim.id, decision, reason, reasonUr } : { claimId: claim.id, outcome });
       setDecision(["approved", "rejected"].includes(updated.status) ? "close" : "assign");
-      setNotice(action === "review" ? "Officer decision recorded." : "Simulated payment issued.");
+      setNotice(action === "review" ? "Officer decision recorded." : outcome === "paid" ? "Simulated payment issued." : "Simulated payment failed. The officer can retry it.");
       setReason(""); setReasonUr(""); ctx.refresh();
     } catch (error) { setProblem(getMessage(error)); }
     finally { setBusy(false); }
@@ -619,7 +636,13 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
         <label>Plain-language reason<textarea required minLength={5} maxLength={600} value={reason} onChange={event => setReason(event.target.value)} /></label>
         <label>Urdu reason <small>(optional)</small><textarea lang="ur" dir="rtl" maxLength={600} value={reasonUr} onChange={event => setReasonUr(event.target.value)} /></label>
         <div className="actions"><button className="primary" disabled={busy || ctx.offline}>Record decision</button>
-          {claim.status === "approved" && claim.payment_status === "pending" && <button className="secondary" type="button" disabled={busy || ctx.offline} onClick={() => void update("disburse")}>Issue simulated payment</button>}</div>
+          {claim.status === "approved" && claim.payment_status !== "paid" && <>
+            <button className="secondary" type="button" disabled={busy || ctx.offline} onClick={() => void update("disburse")}>
+              {claim.payment_status === "failed" ? "Retry simulated payment" : "Issue simulated payment"}
+            </button>
+            {claim.payment_status === "pending" && <button className="secondary" type="button" disabled={busy || ctx.offline}
+              onClick={() => void update("disburse", "failed")}>Simulate payment failure</button>}
+          </>}</div>
       </form>}
       {claim.payment && <p className="receipt">{claim.payment.raast_ref} · {currency(claim.payment.amount_pkr)} · {title(claim.payment.status)}</p>}
     </Panel>
@@ -653,7 +676,8 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                 items.map(item => {
                   const docs = item.documents ?? [];
                   const verified = docs.filter(doc => ["genuine", "readable"].includes(doc.verified_status)).length;
-                  const urgent = item.status === "needs_proof" || (item.ai_confidence !== null && item.ai_confidence < 0.5);
+                  const urgent = ["submitted", "in_review", "needs_proof"].includes(item.status)
+                    && (item.status === "needs_proof" || (item.ai_confidence ?? 1) <= 0.55);
                   const initials = (item.citizen_name ?? "?").split(" ").map(word => word[0]).slice(0, 2).join("");
                   const confColor = item.ai_confidence === null ? "var(--soft-ink)" : item.ai_confidence < 0.5 ? "#1C1C1E" : "#6E6E73";
                   return <button type="button" key={item.id} className="kanban-card" onClick={() => pick(item)}>
@@ -735,7 +759,37 @@ function RuleView({ ctx }: { ctx: ViewContext }) {
     <Panel><h2>Version history</h2><div className="rows">{data?.map(rule => <div className="list-row static" key={rule.id}>
       <div><strong>v{rule.version} · {rule.name}</strong><small>{currency(rule.config_json.income_cap)} income cap</small></div><StateTag value={rule.is_active ? "active" : "historical"} />
     </div>)}</div></Panel>
+    <StaffApprovals ctx={ctx} />
   </div>;
+}
+
+function StaffApprovals({ ctx }: { ctx: ViewContext }) {
+  const { data, error, loading } = useActionList<Array<Pick<Profile, "id" | "full_name" | "role">>>("staff_queue", ctx);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [problem, setProblem] = useState("");
+  async function decide(userId: string, decision: "active" | "rejected") {
+    setBusy(true);
+    setNotice("");
+    setProblem("");
+    try {
+      await api("decide_staff", { userId, decision });
+      setNotice(decision === "active" ? "Staff access approved." : "Staff access rejected.");
+      ctx.refresh();
+    } catch (error) { setProblem(getMessage(error)); }
+    finally { setBusy(false); }
+  }
+  return <Panel>
+    <h2>Staff access requests</h2>
+    <Notice text={error || problem} warning />
+    <Notice text={notice} />
+    {loading && !data ? <Spinner /> : data?.length === 0 ? <p>No staff requests are pending.</p> : null}
+    {data?.map(item => <div className="list-row static" key={item.id}>
+      <div><strong>{item.full_name}</strong><small>{title(item.role)}</small></div>
+      <button className="secondary" disabled={busy || ctx.offline} onClick={() => void decide(item.id, "active")}>Approve staff access</button>
+      <button className="quiet" disabled={busy || ctx.offline} onClick={() => void decide(item.id, "rejected")}>Reject</button>
+    </div>)}
+  </Panel>;
 }
 
 type Metric = { threshold: number; smsCount: number; docCount: number; [key: string]: number };

@@ -1,98 +1,83 @@
+
 let playbackVersion = 0;
-const audioQueue: HTMLAudioElement[] = [];
+let scheduled = Promise.resolve("Ready");
+let cancelPlayback: (() => void) | undefined;
 
 export function stopSpeaking() {
   playbackVersion += 1;
-  while (audioQueue.length > 0) {
-    const item = audioQueue.shift();
-    if (item) {
-      item.pause();
-      URL.revokeObjectURL(item.src);
-    }
-  }
+  cancelPlayback?.();
+  cancelPlayback = undefined;
+  scheduled = Promise.resolve("Ready");
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
 }
 
-/**
- * Remove UUIDs and ugly identifiers from speech before sending to Cartesia/TTS
- */
 export function sanitizeSpeechText(text: string): string {
   return text
-    // Remove UUID patterns (e.g., 3a97da52-0cf7-4645-b3df-22e990785f36)
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "")
-    // Remove "ID:" or "ID" prefixes left behind
     .replace(/\bID:?\s*/gi, "")
-    // Clean up empty parentheses or awkward leftover punctuation
     .replace(/\(\s*\)/g, "")
     .replace(/\s{2,}/g, " ")
     .trim();
 }
 
-/**
- * Queue a speech segment to play sequentially as sentences stream in.
- * Cartesia is exclusively used for speech. Fallback to browser SpeechSynthesis is disabled
- * so no random robot voices speak over Cartesia.
- */
-export async function queueSpeakSegment(text: string, locale: "en" | "ur", localOnly: boolean): Promise<void> {
-  const clean = sanitizeSpeechText(text);
-  if (!clean || clean.length < 2) return;
-
+export function queueSpeakSegment(text: string, locale: "en" | "ur", localOnly: boolean): Promise<string> {
+  const clean = sanitizeSpeechText(text).slice(0, 1400);
+  if (clean.length < 2) return Promise.resolve("Ready");
   const version = playbackVersion;
-  if (!localOnly) {
-    try {
-      const response = await fetch("/api/voice/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: clean, locale }),
-      });
-      if (version !== playbackVersion) return;
-      if (response.ok) {
-        const audio = await response.blob();
-        if (version !== playbackVersion) return;
-        const url = URL.createObjectURL(audio);
-        const player = new Audio(url);
-
-        await new Promise<void>(resolve => {
-          player.onended = () => {
-            URL.revokeObjectURL(url);
-            resolve();
-          };
-          player.onerror = () => {
-            URL.revokeObjectURL(url);
-            resolve();
-          };
-
-          if (audioQueue.length === 0) {
-            audioQueue.push(player);
-            player.play().catch(resolve);
-          } else {
-            audioQueue.push(player);
-            const check = setInterval(() => {
-              if (version !== playbackVersion) {
-                clearInterval(check);
-                resolve();
-                return;
-              }
-              if (audioQueue[0] === player) {
-                clearInterval(check);
-                player.play().catch(resolve);
-              }
-            }, 50);
-          }
+  scheduled = scheduled.then(async () => {
+    if (version !== playbackVersion) return "Playback stopped";
+    if (!localOnly) {
+      try {
+        const response = await fetch("/api/voice/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: clean, locale }),
+          signal: AbortSignal.timeout(14000),
         });
-
-        const idx = audioQueue.indexOf(player);
-        if (idx !== -1) audioQueue.splice(idx, 1);
-        return;
-      }
-    } catch {
-      /* Do not fall back to browser robot voice */
+        if (response.ok && response.headers.get("content-type")?.startsWith("audio/")) {
+          const audio = await response.blob();
+          if (version !== playbackVersion) return "Playback stopped";
+          const url = URL.createObjectURL(audio);
+          const player = new Audio(url);
+          const played = await new Promise<boolean>(resolve => {
+            const finish = (ok: boolean) => {
+              player.pause();
+              URL.revokeObjectURL(url);
+              cancelPlayback = undefined;
+              resolve(ok);
+            };
+            cancelPlayback = () => finish(false);
+            player.onended = () => finish(true);
+            player.onerror = () => finish(false);
+            void player.play().catch(() => finish(false));
+          });
+          if (played) return "Spoken with Cartesia";
+        }
+      } catch { /* Browser speech handles unavailable upstream audio. */ }
     }
-  }
+    if (version !== playbackVersion) return "Playback stopped";
+    if (!("speechSynthesis" in window)) return "Speech playback is unavailable";
+    const voice = window.speechSynthesis.getVoices().find(item => item.lang.toLowerCase().startsWith(locale));
+    if (!voice && locale === "ur") return "Urdu speech is unavailable on this device";
+    const utterance = new SpeechSynthesisUtterance(clean);
+    utterance.lang = voice?.lang ?? "en";
+    if (voice) utterance.voice = voice;
+    const spoken = await new Promise<boolean>(resolve => {
+      const finish = (ok: boolean) => {
+        if (version === playbackVersion) cancelPlayback = undefined;
+        resolve(ok);
+      };
+      cancelPlayback = () => finish(false);
+      utterance.onend = () => finish(true);
+      utterance.onerror = () => finish(false);
+      window.speechSynthesis.speak(utterance);
+    });
+    return version !== playbackVersion ? "Playback stopped" : spoken ? "Spoken with browser voice" : "Speech playback is unavailable";
+  }).catch(() => "Speech playback is unavailable");
+  return scheduled;
 }
 
-export async function speakText(text: string, locale: "en" | "ur", localOnly: boolean) {
+export function speakText(text: string, locale: "en" | "ur", localOnly: boolean) {
   stopSpeaking();
-  await queueSpeakSegment(text, locale, localOnly);
-  return "Speaking · Cartesia";
+  return queueSpeakSegment(text, locale, localOnly);
 }

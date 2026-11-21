@@ -20,7 +20,9 @@ insert into auth.users(instance_id,id,aud,role,email,encrypted_password,email_co
     raw_app_meta_data,raw_user_meta_data,created_at,updated_at,confirmation_token,recovery_token,email_change_token_new,email_change)
 select '00000000-0000-0000-0000-000000000000',id,'authenticated','authenticated',persona||'@relief-demo.example',
   current_setting('relief.demo_password_hash'), now(),
-  '{"provider":"email","providers":["email"]}',jsonb_build_object('full_name',full_name),now(),now(),'','','',''
+  jsonb_build_object('provider','email','providers',jsonb_build_array('email'),'relief_role',role),
+  jsonb_build_object('full_name',full_name,'locale',case when persona='fatima' then 'ur' else 'en' end),
+  now(),now(),'','','',''
 from relief_demo_people
 on conflict (id) do update set encrypted_password=excluded.encrypted_password,updated_at=now();
 

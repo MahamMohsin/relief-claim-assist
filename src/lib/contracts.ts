@@ -40,9 +40,12 @@ export const actions = {
     image: z.string().max(2800000).regex(/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/).optional(),
   }).refine(data => Boolean(data.fixture) !== Boolean(data.image), "Choose one synthetic document source."),
   queue: z.object({}),
+  overview: z.object({}),
+  staff_queue: z.object({}),
+  decide_staff: z.object({ userId: uuid, decision: z.enum(["active", "rejected"]) }),
   review: z.object({ claimId: uuid, decision: z.enum(["assign", "more_proof", "escalate", "approve", "reject", "close"]),
     reason: z.string().trim().min(5).max(600), reasonUr: z.string().trim().max(600).optional() }),
-  disburse: z.object({ claimId: uuid }),
+  disburse: z.object({ claimId: uuid, outcome: z.enum(["paid", "failed"]).default("paid") }),
   families: z.object({}),
   switch_family: z.object({ citizenId: uuid }),
   privacy: z.object({ citizenId: person }),
@@ -68,6 +71,8 @@ export type RuleConfig = z.infer<typeof ruleSchema>;
 export type Rule = { id: string; version: number; name: string; config_json: RuleConfig; is_active: boolean; created_at: string };
 export type ClaimStatus = "draft" | "submitted" | "needs_proof" | "in_review" | "approved" | "rejected" | "closed";
 export type Payment = { id: string; raast_ref: string; amount_pkr: number; status: "pending" | "paid" | "failed"; disbursed_at: string | null };
+export type Overview = { active: number; review: number; proof: number; approved: number; rejected: number;
+  closed: number; paid: number; new_this_month: number; priority: number };
 export type Evidence = { id: string; doc_type: string; file_url: string | null; tamper_flag: boolean; tamper_reason: string | null;
   blur_score: number | null; verified_status: string; ocr_json: { summary?: string; fields?: Record<string, string> } };
 export type Claim = { id: string; citizen_id: string; citizen_name?: string; status: ClaimStatus; payment_status: Payment["status"];
@@ -104,6 +109,6 @@ export function canOpen(role: Role, app: MiniApp) {
 export type UIAction = { type: "open_mini_app"; app: MiniApp }
   | { type: "prefill_fields"; fields: Partial<Payload>; claimId?: string }
   | { type: "advance_claim_step"; step: "evidence" | "review" | "submit" }
-  | { type: "show_jev_badge"; label: string; confidence: number; route: string; model: string }
+  | { type: "show_jev_badge"; label: string; confidence: number; route: MiniApp | "clarification"; model: string }
   | { type: "ask_clarification"; question: string; options: MiniApp[] }
   | { type: "highlight_alert"; severity: "warning" | "info"; message: string };
