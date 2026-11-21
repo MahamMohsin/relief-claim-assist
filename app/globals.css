@@ -400,10 +400,13 @@ th { background: var(--faint); color: var(--forest); }
   }
 }
 
+/* The dashboard is two columns: one column of widgets on the left, and the
+   mini app icons in their own rail on the right, both starting from the top. */
 .dashboard-canvas {
-  display: flex;
-  flex-direction: column;
-  gap: 1.6rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  align-items: start;
+  gap: 1.8rem;
 }
 
 /* Background canvas: User Apple wallpaper random-bg-5.jpg, sharp and untinted */
@@ -717,21 +720,50 @@ th { background: var(--faint); color: var(--forest); }
 }
 
 /* Top Hero Row: Fatima Bibi title and Compact Tile top-aligned, starting naturally together */
+/* The widget column: the name card first, then the rest, all stacked. */
 .ios-top-hero-row {
+  grid-column: 1;
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 1.8rem;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: 1rem;
   padding: 0.5rem 0.2rem;
-  flex-wrap: wrap;
+  justify-self: start;
+  width: 100%;
+  max-width: 720px;
+  min-width: 0;
+}
+
+/* The app icons take the right-hand rail. */
+.dashboard-canvas > .ios-desktop-grid {
+  grid-column: 2;
+  justify-self: end;
+}
+
+@media (max-width: 900px) {
+  .dashboard-canvas {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ios-top-hero-row {
+    justify-self: stretch;
+    max-width: none;
+  }
+
+  .dashboard-canvas > .ios-desktop-grid {
+    grid-column: 1;
+    justify-self: start;
+  }
 }
 
 .ios-top-widgets-group {
   display: flex;
+  flex-direction: column;
   align-items: stretch;
-  gap: 1.2rem;
-  flex-wrap: wrap;
-  max-width: 680px;
+  gap: 1rem;
+  max-width: none;
 }
 
 .ios-hero-name {
@@ -946,7 +978,7 @@ th { background: var(--faint); color: var(--forest); }
 @media (max-width: 768px) {
   .ios-top-hero-row {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     gap: 1.2rem;
   }
   .ios-history-widget.compact {
@@ -960,10 +992,10 @@ th { background: var(--faint); color: var(--forest); }
    ======================================================== */
 .overview-stats-suite {
   display: grid;
-  grid-template-columns: 1.15fr 1fr 0.9fr;
+  grid-template-columns: minmax(0, 1fr);
   align-items: stretch;
-  gap: 1.1rem;
-  max-width: 980px;
+  gap: 1rem;
+  max-width: none;
 }
 
 .overview-card {
@@ -1289,12 +1321,13 @@ th { background: var(--faint); color: var(--forest); }
 }
 
 /* Card 3: Stack Column (tabular pair filling the tall cards' height) */
+/* The two small metric cards sit two in a row under the big ones. */
 .overview-stack-col {
   display: grid;
-  grid-template-rows: 1fr 1fr;
-  gap: 1.1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: auto;
+  gap: 1rem;
   min-width: 0;
-  height: 100%;
 }
 
 .stack-metric-card {
@@ -1361,8 +1394,8 @@ th { background: var(--faint); color: var(--forest); }
 .overview-stats-suite .proportional-bubbles-stage { flex: 1; }
 
 @media (max-width: 1180px) {
-  .overview-stats-suite { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: none; }
-  .overview-stack-col { grid-column: 1 / -1; grid-template-rows: none; grid-template-columns: repeat(2, minmax(0, 1fr)); height: auto; }
+  .overview-stats-suite { grid-template-columns: minmax(0, 1fr); max-width: none; }
+  .overview-stack-col { grid-column: auto; grid-template-rows: none; grid-template-columns: repeat(2, minmax(0, 1fr)); height: auto; }
 }
 @media (max-width: 760px) {
   .overview-stats-suite { grid-template-columns: minmax(0, 1fr); }
@@ -2644,11 +2677,11 @@ html, body {
 }
 
 .audit-glass-suite.is-compact {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.85rem;
-  flex: 1 1 560px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  flex: none;
   max-width: none;
-  width: auto;
+  width: 100%;
   min-width: 0;
 }
 
@@ -5946,4 +5979,71 @@ body:has(.persona-dock-workspace-blurred) {
     font-size: 0.58rem;
     max-width: 70px;
   }
+}
+
+/* ========================================================
+   ONE WIDGET SURFACE, ONE SIZE.
+   Every dashboard widget - the name card, the audit cards, the officer's
+   overview cards, the stats card and the Recent Claim card - shares the
+   audit cards' transparent dark glass, its 20px corners and its padding,
+   so the column reads as one stack of the same thing. The two small
+   metric cards still sit two in a row.
+   ======================================================== */
+:root {
+  --widget-surface:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 45%, rgba(255, 255, 255, 0.015) 100%),
+    rgba(14, 15, 19, 0.54);
+  --widget-surface-hover:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0.09) 45%, rgba(255, 255, 255, 0.03) 100%),
+    rgba(14, 15, 19, 0.62);
+  --widget-blur: blur(34px) saturate(185%);
+  --widget-border: 1px solid rgba(255, 255, 255, 0.22);
+  --widget-radius: 20px;
+  --widget-pad: 0.9rem 1.05rem;
+  --widget-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.liquid-user-pill,
+.liquid-user-pill.expanded,
+.relief-stats-widget,
+.ios-history-widget.compact,
+.overview-card,
+.audit-glass-suite.is-compact .audit-glass-card {
+  background: var(--widget-surface);
+  -webkit-backdrop-filter: var(--widget-blur);
+  backdrop-filter: var(--widget-blur);
+  border: var(--widget-border);
+  border-radius: var(--widget-radius);
+  box-shadow: var(--widget-shadow);
+  padding: var(--widget-pad);
+}
+
+/* The stats and Recent Claim cards fill the column instead of hugging 330px. */
+.relief-stats-widget,
+.ios-history-widget.compact {
+  max-width: none;
+  width: 100%;
+}
+
+/* Hover keeps the same material, just lifted. */
+.liquid-user-pill:hover,
+.relief-stats-widget:hover,
+.ios-history-widget.compact:hover,
+.overview-card:hover {
+  background: var(--widget-surface-hover);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+/* 2G Lite mode: no blur, solid fallback for every widget alike. */
+.workspace.lite .liquid-user-pill,
+.workspace.lite .relief-stats-widget,
+.workspace.lite .ios-history-widget.compact,
+.workspace.lite .overview-card,
+.workspace.lite .audit-glass-card {
+  background: var(--glass-solid);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
