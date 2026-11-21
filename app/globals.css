@@ -4661,6 +4661,54 @@ html, body {
   text-overflow: ellipsis;
 }
 
+/* Detail view top visual metrics bar */
+.claim-detail-metrics-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+  margin: 0.85rem 0 1rem 0;
+}
+.claim-metric-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+.claim-metric-icon-box {
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.claim-metric-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.claim-metric-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.claim-metric-val {
+  font-size: 0.95rem;
+  font-weight: 750;
+  color: #0f172a;
+  white-space: nowrap;
+}
+
 /* Better UI for attached claim evidence */
 .claim-evidence-section {
   margin-top: 1rem;
