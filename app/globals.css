@@ -840,6 +840,10 @@ th { background: var(--faint); color: var(--forest); }
   padding: 0;
   width: 90px;
   outline: none;
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
 .ios-desktop-icon {

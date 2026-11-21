@@ -461,9 +461,9 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                       className={"ios-desktop-app" + (isRunning ? " running" : "")}
                       key={id}
                       onClick={() => openAppWindow(id)}
-                      whileHover={motionDisabled ? undefined : { y: -4, scale: 1.05 }}
-                      whileTap={motionDisabled ? undefined : { scale: 0.95 }}
-                      transition={{ type: "spring", stiffness: 450, damping: 25 }}
+                      whileHover={motionDisabled ? undefined : { y: -6, scale: 1.05 }}
+                      whileTap={motionDisabled ? undefined : { scale: 0.94 }}
+                      transition={{ type: "spring", stiffness: 260, damping: 20, mass: 0.8 }}
                     >
                       <div className={"ios-desktop-icon " + item.color}>
                         <Icon size={34} strokeWidth={2.1} />
