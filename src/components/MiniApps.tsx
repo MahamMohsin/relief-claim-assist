@@ -32,7 +32,7 @@ export type ViewContext = {
   enqueue: (action: Mutation["action"], body: Record<string, unknown>, options?: { key?: string; dependsOn?: string; audio?: Blob }) => Promise<string>;
   selectFamily: (family: Family) => Promise<void>;
   prefill: Extract<UIAction, { type: "prefill_fields" }> | null;
-  stepNav: "evidence" | "review" | "submit" | null;
+  stepNav: "evidence" | "review" | "submit" | "list" | null;
   voiceLang: "en" | "ur";
   go: (app: MiniApp | null) => void;
   refresh: () => void;
@@ -170,6 +170,9 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
       getStep: () => stepRef.current,
       getSnapshot: () => ({ ...snapshotRef.current }),
       startNew: () => startRef.current(),
+      backToList: () => {
+        setEditing(false);
+      },
       setField: (field, value) => {
         setDetails(current => ({ ...current, [field]: value }));
       },
@@ -226,7 +229,9 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
 
   useEffect(() => {
     if (!ctx.stepNav) return;
-    if (ctx.stepNav === "evidence") {
+    if (ctx.stepNav === "list") {
+      setEditing(false);
+    } else if (ctx.stepNav === "evidence") {
       setEditing(true);
       setStep(1);
     } else if (ctx.stepNav === "review") {
@@ -343,7 +348,9 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
           <h2>{draft?.status === "needs_proof" ? "Replace evidence" : "Prepare a claim"}</h2>
           <p>Use synthetic details and pretend documents only.</p>
         </VStack>
-        <Button variant="secondary" label="Back to claims" onClick={() => setEditing(false)} />
+        <span data-cua="claim-back-btn" style={{ display: "inline-flex" }}>
+          <Button variant="secondary" label="Back to claims" onClick={() => setEditing(false)} />
+        </span>
       </HStack>
       <HStack gap={1} wrap="wrap" paddingBlockStart={3}>
         {progressSteps.map((label, index) => (

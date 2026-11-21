@@ -20,16 +20,28 @@ type VoiceProps = {
   onQueueAudio: (audio: Blob, locale: "en" | "ur") => Promise<string>;
 };
 
+/** One line of the conversation: what the person said, or what the assistant said back. */
+type ChatTurn = {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+};
+
+/** How many bubbles the reply shows before "view more" is needed. */
+const VISIBLE_TURNS = 2;
+
 export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAction, onQueueAudio }: VoiceProps) {
   const [lang, setLang] = useState(profile.locale);
   const [input, setInput] = useState("");
   const [working, setWorking] = useState(false);
   const [stage, setStage] = useState("Relief assistant");
-  const [answer, setAnswer] = useState("");
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [clarify, setClarify] = useState<Extract<UIAction, { type: "ask_clarification" }> | null>(null);
-  const [decision, setDecision] = useState<Extract<UIAction, { type: "show_jev_badge" }> | null>(null);
+  // The whole conversation, so the reply can read as a chat rather than one
+  // answer that replaces the last.
+  const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const [hasEngagedVoice, setHasEngagedVoice] = useState(false);
   const [clipRecording, setClipRecording] = useState(false);
@@ -41,9 +53,22 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   const autoSendClipRef = useRef(true);
   const inputRef = useRef("");
   const liveSpeechRef = useRef("");
+  // The assistant turn this run streams into.
+  const assistantTurnId = useRef<string | null>(null);
+  // How many spoken segments are still playing.
+  const speechPending = useRef(0);
+  // Whether the mic should reopen by itself once the assistant has finished
+  // speaking, so a spoken conversation can carry on hands-free.
+  const autoMicArmed = useRef(false);
 
   const dgVoice = useVoiceStream(lang);
   const recording = dgVoice.listening || clipRecording;
+  // Mirrors of the live state, so the mic can be reopened from a callback that
+  // runs long after the render that scheduled it.
+  const recordingRef = useRef(false);
+  recordingRef.current = recording;
+  const startingMicRef = useRef(false);
+  startingMicRef.current = startingMic;
   const recordingStage = clipRecording
     ? "Recording · tap mic to send"
     : dgVoice.status === "listening"
@@ -121,7 +146,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     }
   }, [dgVoice.error, startingMic, clipRecording]);
 
-  async function command(raw: string) {
+  async function command(raw: string, viaVoice = false) {
     const prompt = raw.trim();
     if (!prompt) return;
     setExpanded(true);
@@ -136,6 +161,8 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
       return;
     }
 
+    setTurns(current => [...current, { id: crypto.randomUUID(), role: "user", text: prompt }]);
+
     if (active.current) {
       await fetch("/api/agent/stream", {
         method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -147,10 +174,11 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
       return;
     }
     stopSpeaking();
+    speechPending.current = 0;
+    autoMicArmed.current = viaVoice;
+    assistantTurnId.current = crypto.randomUUID();
     cuaEngine.cancel();
-    setAnswer("");
     setClarify(null);
-    setDecision(null);
     setWorking(true);
     setStage("Routing your request");
     let accumulatedAnswer = "";
@@ -174,7 +202,14 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
           case "tool_execution_end": setStage("Pi · guiding on screen"); break;
           case "message_update": {
             accumulatedAnswer += event.text;
-            setAnswer(accumulatedAnswer);
+
+            // The answer streams into its own bubble as it arrives.
+            const turnId = assistantTurnId.current;
+            if (turnId) {
+              setTurns(current => current.some(turn => turn.id === turnId)
+                ? current.map(turn => turn.id === turnId ? { ...turn, text: accumulatedAnswer } : turn)
+                : [...current, { id: turnId, role: "assistant", text: accumulatedAnswer }]);
+            }
 
             // Stream TTS immediately: As soon as a complete sentence or clause arrives, start speaking!
             const unhandled = accumulatedAnswer.slice(spokenLength);
@@ -182,9 +217,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
             if (sentenceMatch && sentenceMatch[1].trim().length > 3) {
               const sentence = sentenceMatch[1].trim();
               spokenLength += sentenceMatch[0].length;
-              void queueSpeakSegment(sentence, lang, lite || offline).then(status => {
-                if (status !== "Playback stopped") setStage(status);
-              });
+              speak(sentence);
             }
             break;
           }
@@ -193,15 +226,11 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
             setStage(event.model === "local-guidance" ? "Guided action ready" : "Ready · " + event.model);
             // Speak any trailing text that didn't end in punctuation
             const remaining = accumulatedAnswer.slice(spokenLength).trim();
-            if (remaining.length > 0) {
-              void queueSpeakSegment(remaining, lang, lite || offline).then(status => {
-                if (status !== "Playback stopped") setStage(status);
-              });
-            }
+            if (remaining.length > 0) speak(remaining);
+            resumeMic();
             break;
           }
           case "ui_action": {
-            if (event.action.type === "show_jev_badge") setDecision(event.action);
             if (event.action.type === "ask_clarification") {
               setClarify(event.action);
               void speakText(event.action.question, lang, lite).then(setStage);
@@ -221,6 +250,36 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     }
   }
 
+  // Speak a chunk of the answer, keeping count of what is still playing so the
+  // mic only reopens once the assistant has finished talking.
+  function speak(text: string) {
+    speechPending.current += 1;
+    let settled = false;
+    const done = (status: string) => {
+      if (settled) return;
+      settled = true;
+      speechPending.current = Math.max(0, speechPending.current - 1);
+      if (status !== "Playback stopped") setStage(status);
+      resumeMic();
+    };
+    void queueSpeakSegment(text, lang, lite || offline).then(done);
+    // A speech engine that never reports back must not hold the mic shut.
+    window.setTimeout(() => done("Playback unavailable"), Math.max(10000, text.length * 250));
+  }
+
+  // The mic reopens by itself once the assistant has finished speaking, so a
+  // spoken conversation carries on without another tap.
+  function resumeMic() {
+    console.log("[resumeMic]", { armed: autoMicArmed.current, pending: speechPending.current, recording: recordingRef.current, starting: startingMicRef.current, micStart: Boolean(micStart.current), input: inputRef.current });
+    if (!autoMicArmed.current) return;
+    if (speechPending.current > 0) return;
+    if (recordingRef.current || startingMicRef.current || micStart.current) return;
+    if (inputRef.current.trim()) return;
+    autoMicArmed.current = false;
+    setStage("Listening again — speak to continue");
+    void startRecording();
+  }
+
   async function stopRecording(autoSend = true) {
     micStart.current?.abort();
     if (clip.current?.recorder.state === "recording") {
@@ -231,7 +290,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     const flushed = await dgVoice.stopAndFlush();
     const textToSend = (flushed || liveSpeechRef.current || inputRef.current).trim();
     if (autoSend && textToSend && mounted.current) {
-      void command(textToSend);
+      void command(textToSend, true);
     }
   }
 
@@ -273,7 +332,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
             if (!text) throw new Error("No speech detected. Try a short recording or type instead.");
             setInput(text);
             if (shouldSend) {
-              void command(text);
+              void command(text, true);
             } else {
               setStage("Transcript ready");
             }
@@ -346,6 +405,8 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
     run?.controller.abort();
     stopSpeaking();
     cuaEngine.cancel();
+    // An explicit stop ends the exchange: the mic stays where the person left it.
+    autoMicArmed.current = false;
     setWorking(false);
     setStage("Assistant stopped");
     if (run) void fetch("/api/agent/stream", {
@@ -361,14 +422,37 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
 
   function submit(event: FormEvent) { event.preventDefault(); void command(input); }
 
+  // The conversation, newest last. Only the last couple of bubbles show until
+  // "view more" opens the rest.
+  const filledTurns = turns.filter(turn => turn.text.trim());
+  const visibleTurns = historyOpen ? filledTurns : filledTurns.slice(-VISIBLE_TURNS);
+  const hiddenCount = Math.max(0, filledTurns.length - VISIBLE_TURNS);
+  const lastAssistantId = [...filledTurns].reverse().find(turn => turn.role === "assistant")?.id;
+
   return <section className={"voice-dock-glass" + (hasEngagedVoice ? " voice-revealed" : "") + (recording ? " is-recording" : "") + (working ? " is-working" : "") + (clarify ? " clarifying" : "")} aria-label="Relief voice assistant">
-    {expanded && (answer || error || clarify || (working && decision)) && <div className="voice-reply-glass">
+    {expanded && (filledTurns.length > 0 || error || clarify) && <div className="voice-reply-glass">
+      {hiddenCount > 0 && (
+        <button type="button" className="voice-history-toggle" onClick={() => setHistoryOpen(open => !open)}>
+          {historyOpen ? "Hide earlier messages" : `View ${hiddenCount} earlier message${hiddenCount === 1 ? "" : "s"}`}
+        </button>
+      )}
+      <div className="voice-chat">
+        {visibleTurns.map(turn => (
+          <div key={turn.id} className={"voice-chat-turn " + turn.role}>
+            <div className="voice-chat-body">
+              <span className="voice-chat-role">{turn.role === "user" ? "You" : "Assistant"}</span>
+              <p>{turn.text}</p>
+            </div>
+            {turn.role === "assistant" && turn.id === lastAssistantId && (
+              <button type="button" className="glass-icon-btn" onClick={() => void speakText(turn.text.slice(0, 1400), lang, lite || offline).then(setStage)} aria-label="Play assistant response">
+                <Volume2 size={16} />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
       {clarify && <div><p className="clarify-title">{clarify.question}</p><div className="voice-options">{clarify.options.map(app => <button type="button" key={app} onClick={() => choose(app)}>{apps[app].title}</button>)}</div></div>}
-      {answer && <div className="voice-answer"><p>{answer}</p><button className="glass-icon-btn" onClick={() => void speakText(answer.slice(0, 1400), lang, lite || offline).then(setStage)} aria-label="Play assistant response"><Volume2 size={18} /></button></div>}
       {error && <p className="voice-error" role="alert">{error}</p>}
-      {decision && <small className="voice-decision" title={decision.model}>
-        {decision.model.startsWith("jev-simulated") ? "Simulated Jev" : "Jev"} · {Math.round(decision.confidence * 100)}% confidence · {decision.route === "clarification" ? "Clarification" : apps[decision.route].title}
-      </small>}
     </div>}
     <div className="voice-glass-main">
       <form className={"voice-glass-form" + (isMultiline ? " multiline" : "")} onSubmit={submit}>

@@ -1877,6 +1877,126 @@ th { background: var(--faint); color: var(--forest); }
   flex: 1;
 }
 
+/* Mini chat: the conversation as bubbles, newest last. */
+.voice-reply-glass {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.voice-history-toggle {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  border-radius: 9999px;
+  padding: 0.22rem 0.65rem;
+  font-size: 0.7rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.voice-history-toggle:hover {
+  background: rgba(255, 255, 255, 0.19);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.voice-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-height: min(24dvh, 190px);
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.2rem;
+}
+
+.voice-chat-turn {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  max-width: 88%;
+  padding: 0.5rem 0.7rem;
+  border-radius: 14px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.voice-chat-turn.user {
+  align-self: flex-end;
+  background: linear-gradient(135deg, var(--accent-600) 0%, var(--accent-700) 100%);
+  color: #ffffff;
+  border-bottom-right-radius: 6px;
+}
+
+.voice-chat-turn.assistant {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  color: #ffffff;
+  border-bottom-left-radius: 6px;
+}
+
+.voice-chat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.voice-chat-role {
+  font-size: 0.6rem;
+  font-weight: 750;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  opacity: 0.62;
+}
+
+.voice-chat-turn p {
+  margin: 0;
+  color: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.voice-chat-turn .glass-icon-btn {
+  color: rgba(255, 255, 255, 0.75);
+  flex-shrink: 0;
+}
+
+.voice-chat-turn .glass-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.voice-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.voice-options button {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  border-radius: 9999px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.voice-options button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.voice-error {
+  color: #ffb4a2;
+  font-size: 0.82rem;
+}
+
 .voice-glass-main {
   display: flex;
   flex-direction: column;

@@ -170,10 +170,17 @@ export async function POST(request: Request) {
               ? "اسکیم شیلڈ کھول کر آپ کا پیغام چیک کیا جا رہا ہے۔"
               : "Opened Scam Shield and started checking your message.";
           } else if (target === "claim") {
-            emitAction({ type: "start_new_claim" });
-            guidance = locale === "ur"
-              ? "نئی ریلیف درخواست کا فارم کھول دیا گیا ہے۔ اپنی آمدنی اور افراد کی تعداد درج کریں۔"
-              : "Opened Relief Claim and started a new claim form for you. Enter your monthly income and household size to continue.";
+            if (screenContext?.claim?.editing && /back|list|exit|cancel/i.test(prompt)) {
+              emitAction({ type: "claim_back_to_list" });
+              guidance = locale === "ur"
+                ? "کلیمز کی فہرست پر واپس چلے گئے۔ آپ کا ڈرافٹ محفوظ ہے۔"
+                : "Back on the Relief Claim list now. Your draft is still saved.";
+            } else {
+              emitAction({ type: "start_new_claim" });
+              guidance = locale === "ur"
+                ? "نئی ریلیف درخواست کا فارم کھول دیا گیا ہے۔ اپنی آمدنی اور افراد کی تعداد درج کریں۔"
+                : "Opened Relief Claim and started a new claim form for you. Enter your monthly income and household size to continue.";
+            }
           } else {
             guidance = locale === "ur"
               ? "متعلقہ ایپ کھول دی گئی ہے۔ ادائیگی سے پہلے افسر کا فیصلہ ضروری ہے۔"

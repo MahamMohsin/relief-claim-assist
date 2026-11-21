@@ -46,8 +46,9 @@ export function resolveApp(value: unknown): (typeof appKeys)[number] | null {
   return alias ? appAliases[alias] : null;
 }
 
-export function resolveStep(value: unknown): "household" | "evidence" | "review" | "submit" | null {
+export function resolveStep(value: unknown): "household" | "evidence" | "review" | "submit" | "list" | null {
   const norm = String(value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (norm.includes("back") || norm.includes("list") || norm.includes("claim") || norm.includes("cancel") || norm.includes("exit")) return "list";
   if (norm.includes("household") || norm.includes("income") || norm.includes("step1")) return "household";
   if (norm.includes("evidence") || norm.includes("attach") || norm.includes("document") || norm.includes("proof")) return "evidence";
   if (norm.includes("submit")) return "submit";
@@ -103,6 +104,9 @@ export function registerTools(pi: ExtensionAPI, context: PiContext) {
       if (!app) throw new ApiError(400, `Unknown app "${input.app}". Use one of: ${appKeys.join(", ")}.`);
       if (!canOpen(profile.role, app)) throw new ApiError(403, "Your role cannot open this app.");
       emit({ type: "open_mini_app", app });
+      if (app === "claim" && context.screenContext?.claim?.editing) {
+        emit({ type: "claim_back_to_list" });
+      }
       if (input.search && input.search.trim() && (app === "family" || app === "review" || app === "users")) {
         emit({ type: "search_app_visual", app, query: input.search.trim() });
       }
@@ -175,17 +179,21 @@ export function registerTools(pi: ExtensionAPI, context: PiContext) {
   pi.registerTool({
     name: "claim_step_navigate",
     label: "Advance claim step",
-    description: "Visually navigate to household, evidence, review, or submit step inside Relief Claim. Optionally pick a sample document (clear, blurred, altered, incomplete) and docType (identity, income), and attach evidence. The user always clicks final Submit.",
+    description: "Visually navigate between steps inside Relief Claim: household, evidence, review, submit, or click 'Back to claims' to return to the claims list (list/back). Optionally pick a sample document (clear, blurred, altered, incomplete) and docType (identity, income), and attach evidence. The user always clicks final Submit.",
     parameters: Type.Object({
-      step: Type.String({ maxLength: 30, description: "household, evidence, review, or submit" }),
+      step: Type.String({ maxLength: 30, description: "household, evidence, review, submit, or list/back" }),
       docType: Type.Optional(Type.Union([Type.Literal("identity"), Type.Literal("income")])),
       fixture: Type.Optional(Type.Union([Type.Literal("clear"), Type.Literal("blurred"), Type.Literal("altered"), Type.Literal("incomplete")])),
       attachEvidence: Type.Optional(Type.Boolean()),
     }),
     async execute(_id, input) {
       const step = resolveStep(input.step);
-      if (!step) throw new ApiError(400, "Choose household, evidence, review, or submit.");
+      if (!step) throw new ApiError(400, "Choose household, evidence, review, submit, or list.");
       emit({ type: "open_mini_app", app: "claim" });
+      if (step === "list") {
+        emit({ type: "claim_back_to_list" });
+        return textResult({ returnedToClaimsList: true });
+      }
       emit({
         type: "advance_claim_step",
         step,

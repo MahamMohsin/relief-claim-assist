@@ -79,7 +79,7 @@ const cues: [MiniApp, RegExp][] = [
   ["users", /registered users|users list|user directory|accounts list/i],
   ["audit", /audit|safety eval|forensic/i],
   ["policy", /policy|eligib|qualify|income cap|who can|which document|what document|what proof|how much (?:aid|money|payout|is)|how do (?:i|raast)|can (?:a |we |i )?apply|widow|پالیسی|اہلیت|بیوہ|بیواؤں/i],
-  ["claim", /claim|relife|apply|application|draft|attach evidence|submit (?:my |the )?claim|monthly income|my income|income is|household|family size|\b\d+\s*(?:people|members|persons)\b|درخواست/i],
+  ["claim", /claims?|clains?|relief|relife|apply|application|draft|attach evidence|back to claims?|submit (?:my |the )?claim|monthly income|my income|income is|household|family size|\b\d+\s*(?:people|members|persons)\b|درخواست/i],
 ];
 
 export async function routeIntent(input: string) {

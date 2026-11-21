@@ -20,6 +20,23 @@ export function sanitizeSpeechText(text: string): string {
     .trim();
 }
 
+/**
+ * The installed voices, once the browser has them. The list loads
+ * asynchronously, so an empty list is not yet an answer — wait a moment for
+ * `voiceschanged` before deciding there is nothing to speak with.
+ */
+function availableVoices(): Promise<SpeechSynthesisVoice[]> {
+  const list = window.speechSynthesis.getVoices();
+  if (list.length > 0) return Promise.resolve(list);
+  return new Promise(resolve => {
+    const timer = window.setTimeout(() => resolve(window.speechSynthesis.getVoices()), 1200);
+    window.speechSynthesis.addEventListener("voiceschanged", () => {
+      window.clearTimeout(timer);
+      resolve(window.speechSynthesis.getVoices());
+    }, { once: true });
+  });
+}
+
 export function queueSpeakSegment(text: string, locale: "en" | "ur", localOnly: boolean): Promise<string> {
   const clean = sanitizeSpeechText(text).slice(0, 1400);
   if (clean.length < 2) return Promise.resolve("Ready");
@@ -57,11 +74,15 @@ export function queueSpeakSegment(text: string, locale: "en" | "ur", localOnly: 
     }
     if (version !== playbackVersion) return "Playback stopped";
     if (!("speechSynthesis" in window)) return "Speech playback is unavailable";
-    const voice = window.speechSynthesis.getVoices().find(item => item.lang.toLowerCase().startsWith(locale));
-    if (!voice && locale === "ur") return "Urdu speech is unavailable on this device";
+    const voices = await availableVoices();
+    if (version !== playbackVersion) return "Playback stopped";
+    const voice = voices.find(item => item.lang.toLowerCase().startsWith(locale));
+    // Without a voice the utterance never ends, so say so rather than leaving
+    // the caller waiting on a promise that will not resolve.
+    if (!voice) return locale === "ur" ? "Urdu speech is unavailable on this device" : "Speech playback is unavailable";
     const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.lang = voice?.lang ?? "en";
-    if (voice) utterance.voice = voice;
+    utterance.lang = voice.lang;
+    utterance.voice = voice;
     const spoken = await new Promise<boolean>(resolve => {
       const finish = (ok: boolean) => {
         if (version === playbackVersion) cancelPlayback = undefined;

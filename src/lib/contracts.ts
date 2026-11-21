@@ -175,8 +175,9 @@ export function canOpen(role: Role, app: MiniApp) {
 
 export type UIAction = { type: "open_mini_app"; app: MiniApp }
   | { type: "start_new_claim"; fields?: Partial<Payload> }
+  | { type: "claim_back_to_list" }
   | { type: "prefill_fields"; fields: Partial<Payload>; claimId?: string; saved?: boolean }
-  | { type: "advance_claim_step"; step: "household" | "evidence" | "review" | "submit"; docType?: "identity" | "income"; fixture?: "clear" | "blurred" | "altered" | "incomplete"; attachEvidence?: boolean }
+  | { type: "advance_claim_step"; step: "household" | "evidence" | "review" | "submit" | "list"; docType?: "identity" | "income"; fixture?: "clear" | "blurred" | "altered" | "incomplete"; attachEvidence?: boolean }
   | { type: "ask_policy_visual"; question: string }
   | { type: "check_scam_visual"; message: string; reference?: string }
   | { type: "privacy_correction_visual"; field: "full_name" | "phone" | "village_area" | "household_size" | "monthly_income_mock"; value: string }

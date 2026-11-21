@@ -47,6 +47,7 @@ export type ClaimCuaHandler = {
   getStep: () => number;
   getSnapshot: () => NonNullable<ScreenContextSnapshot["claim"]>;
   startNew: () => void;
+  backToList: () => void;
   setField: (field: "monthly_income" | "household_size" | "notes", value: number | string) => void;
   setClaimId: (id: string | null) => void;
   setStep: (step: number) => void;
@@ -254,9 +255,13 @@ class CuaEngine {
       spotlight: this.spotlightFor(el),
     });
     if (action) {
+      // The click has landed, so the highlight has done its job — drop it
+      // instead of holding it over a control the agent has already used.
+      this.emit({ spotlight: null });
       await action();
     } else {
       el.click();
+      this.emit({ spotlight: null });
     }
     if (!(await this.sleep(160, gen))) return false;
     this.emit({ clicking: false });
@@ -289,6 +294,8 @@ class CuaEngine {
     }
     if (this.isStale(gen)) return false;
     onUpdate(text);
+    // The field has been filled — the highlight has done its job.
+    this.emit({ spotlight: null });
     return await this.sleep(180, gen);
   }
 
@@ -424,6 +431,22 @@ class CuaEngine {
         return;
       }
 
+      case "claim_back_to_list": {
+        if (!(await this.ensureAppOpen("claim", gen, true))) return;
+        const handler = await this.waitForHandler(() => this.claim, gen);
+        if (!handler) return;
+        if (handler.isEditing()) {
+          const backBtn = await this.waitForElement('[data-cua="claim-back-btn"]', gen, 1000);
+          if (backBtn) {
+            await this.clickElement(backBtn, "Clicking Back to claims", gen, () => handler.backToList());
+          } else {
+            handler.backToList();
+          }
+          await this.sleep(200, gen);
+        }
+        return;
+      }
+
       case "start_new_claim": {
         if (!(await this.ensureAppOpen("claim", gen, true))) return;
         const handler = await this.waitForHandler(() => this.claim, gen);
@@ -480,6 +503,19 @@ class CuaEngine {
         if (!(await this.ensureAppOpen("claim", gen, true))) return;
         const handler = await this.waitForHandler(() => this.claim, gen);
         if (!handler) return;
+
+        if (action.step === "list") {
+          if (handler.isEditing()) {
+            const backBtn = await this.waitForElement('[data-cua="claim-back-btn"]', gen, 1000);
+            if (backBtn) {
+              await this.clickElement(backBtn, "Clicking Back to claims", gen, () => handler.backToList());
+            } else {
+              handler.backToList();
+            }
+            await this.sleep(200, gen);
+          }
+          return;
+        }
 
         if (!handler.isEditing()) {
           const newBtn = await this.waitForElement('[data-cua="claim-new-btn"]', gen, 900);
