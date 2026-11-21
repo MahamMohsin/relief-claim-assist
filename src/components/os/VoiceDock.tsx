@@ -208,12 +208,15 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
       {error && <p className="voice-error" role="alert">{error}</p>}
     </div>}
     <div className="voice-glass-main">
-      <div className="voice-status-pill">
-        <span className="voice-pulse-indicator">{recording ? <span className="wave" aria-hidden="true"><i /><i /><i /><i /></span> : <AudioLines size={15} />}</span>
-        <span className="voice-stage-label" aria-live="polite">{stage}</span>
-        {decision && <span className="decision-chip-glass" title={decision.model}>{decision.model.startsWith("jev-simulated") ? "Simulated Jev" : "Jev"} · {Math.round(decision.confidence * 100)}%</span>}
-        {(answer || error || clarify) && <button className="glass-icon-btn" onClick={() => setExpanded(value => !value)} aria-expanded={expanded} aria-label="Toggle assistant response"><ChevronDown size={14} /></button>}
-      </div>
+      {/* Status indicator only shown when recording, active, clarifying, or error */}
+      {(recording || working || clarify || error || decision) && (
+        <div className="voice-status-pill">
+          <span className="voice-pulse-indicator">{recording ? <span className="wave" aria-hidden="true"><i /><i /><i /><i /></span> : <AudioLines size={15} />}</span>
+          <span className="voice-stage-label" aria-live="polite">{stage}</span>
+          {decision && <span className="decision-chip-glass" title={decision.model}>{decision.model.startsWith("jev-simulated") ? "Simulated Jev" : "Jev"} · {Math.round(decision.confidence * 100)}%</span>}
+          {(answer || error || clarify) && <button className="glass-icon-btn" onClick={() => setExpanded(value => !value)} aria-expanded={expanded} aria-label="Toggle assistant response"><ChevronDown size={14} /></button>}
+        </div>
+      )}
 
       <form className="voice-glass-form" onSubmit={submit}>
         <button type="button" className={"glass-mic-btn" + (recording ? " recording" : "")} onClick={() => void toggleRecord()} aria-label={recording ? "Stop microphone recording" : "Start microphone recording"}>
