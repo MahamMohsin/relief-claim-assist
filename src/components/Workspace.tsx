@@ -206,42 +206,11 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
               </motion.div>
             ) : !selection || !current ? (
               <motion.div key="home" initial={{ opacity: motionDisabled ? 1 : 0 }} animate={{ opacity: 1 }} className="dashboard-canvas">
-                {/* Apple-style Widget Canvas */}
-                <div className="ios-widget-row">
-                  {/* Persona Profile Widget: Minimal Fatima Bibi Apple Card */}
-                  <div className="ios-widget glass-card widget-profile">
-                    <div className="profile-identity" style={{ margin: 0 }}>
-                      <div className="avatar-squircle">
-                        FB
-                      </div>
-                      <div>
-                        <h3 style={{ fontSize: "1.45rem", fontWeight: 800 }}>Fatima Bibi</h3>
-                        <p className="role-tag" style={{ color: "var(--forest)", fontWeight: 700 }}>CITIZEN WORKSPACE</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Scheme Overview Widget */}
-                  <div className="ios-widget glass-card widget-scheme">
-                    <div className="widget-header">
-                      <span className="widget-badge gold">Emergency Cash Aid</span>
-                      <small>PKR 25,000 / household</small>
-                    </div>
-                    <div className="scheme-details">
-                      <div className="scheme-ring">
-                        <HandHeart size={28} />
-                      </div>
-                      <div>
-                        <h4>Relief within reach</h4>
-                        <p>Ask in voice or tap a service below to file, verify, or review decisions.</p>
-                      </div>
-                    </div>
-                    <div className="scheme-quick-actions">
-                      <button className="ios-glass-btn" onClick={() => changeApp(available[0])}>
-                        Launch {apps[available[0]].title} <ArrowRight size={14} />
-                      </button>
-                    </div>
-                  </div>
+                {/* Clean Top Title */}
+                <div style={{ padding: "0.5rem 0.2rem 0" }}>
+                  <h1 style={{ fontSize: "clamp(2rem, 4.5vw, 2.75rem)", fontWeight: 800, color: "#ffffff", letterSpacing: "-0.04em", textShadow: "0 2px 14px rgba(0,0,0,0.3)" }}>
+                    Fatima Bibi
+                  </h1>
                 </div>
 
                 {/* Section title */}
