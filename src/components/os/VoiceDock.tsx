@@ -532,7 +532,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
           {lang === "ur" ? "اردو" : "EN"}
         </button>
         {(working || recording || input.trim()) && (
-          <button type="button" className="glass-icon-btn stop" aria-label="Cancel" title="Cancel" onClick={cancel}>
+          <button type="button" className="glass-icon-btn" aria-label="Cancel" title="Cancel" onClick={cancel}>
             <X size={18} />
           </button>
         )}
