@@ -1955,16 +1955,21 @@ th { background: var(--faint); color: var(--forest); }
   line-height: 1.45;
 }
 
-/* The person's own message: an iMessage-style frosted bubble. */
+/* The person's own message: an iMessage-style frosted bubble in vibrant iMessage blue. */
 .voice-chat-turn.user {
   align-self: flex-end;
-  background: rgba(255, 255, 255, 0.16);
+  background: linear-gradient(180deg, #0a84ff 0%, #007aff 100%);
   border: 1px solid rgba(255, 255, 255, 0.26);
   backdrop-filter: blur(20px) saturate(170%);
   -webkit-backdrop-filter: blur(20px) saturate(170%);
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.32);
   color: #ffffff;
-  border-bottom-right-radius: 6px;
+  border-bottom-right-radius: 4px;
+}
+
+.voice-chat-turn.user .voice-chat-role {
+  color: rgba(255, 255, 255, 0.9);
+  opacity: 0.88;
 }
 
 .voice-chat-turn.assistant {
@@ -2276,9 +2281,9 @@ th { background: var(--faint); color: var(--forest); }
 }
 
 .glass-action-btn.has-text {
-  background: linear-gradient(135deg, var(--accent-600) 0%, var(--accent-700) 100%);
+  background: linear-gradient(180deg, #0a84ff 0%, #007aff 100%);
   color: #fff;
-  box-shadow: 0 4px 14px rgba(194, 85, 45, 0.45);
+  box-shadow: 0 4px 14px rgba(0, 122, 255, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .glass-action-btn.recording {
@@ -5452,7 +5457,7 @@ button.secondary { background: var(--surface); color: var(--brand-800); }
 button.hero-button { background: var(--accent-600); color: var(--surface); }
 button.persona-card, button.kanban-card { background: var(--surface); }
 .glass-action-btn { background: #ffffff; color: #0b1512; }
-.glass-action-btn.has-text { background: linear-gradient(135deg, var(--accent-600) 0%, var(--accent-700) 100%); color: #fff; }
+.glass-action-btn.has-text { background: linear-gradient(180deg, #0a84ff 0%, #007aff 100%); color: #fff; box-shadow: 0 4px 14px rgba(0, 122, 255, 0.45); }
 .glass-action-btn.recording { background: linear-gradient(135deg, var(--accent-500) 0%, var(--accent-600) 100%); color: #fff; }
 .glass-lang-pill { background: rgba(19, 74, 65, 0.58); }
 .glass-lang-pill:hover { background: rgba(27, 92, 81, 0.68); }
@@ -6006,12 +6011,29 @@ body:has(.persona-dock-workspace-blurred) {
     inset 0 -1px 0 rgba(255, 255, 255, 0.06);
 }
 
+/* Every widget surface. The officer's cards are buttons, so they are named
+   as buttons too - the light-card block above targets them more
+   specifically than a bare class would. */
 .liquid-user-pill,
 .liquid-user-pill.expanded,
 .relief-stats-widget,
 .ios-history-widget.compact,
 .overview-card,
+button.overview-card,
+.active-cases-card,
+button.active-cases-card,
 .audit-glass-suite.is-compact .audit-glass-card {
+  --ink: var(--text-on-dark);
+  --soft-ink: var(--text-on-dark-muted);
+  --muted: var(--text-on-dark-muted);
+  --line: var(--glass-divider);
+  --faint: rgba(255, 255, 255, 0.07);
+  --forest: var(--text-on-dark);
+  --deep: var(--text-on-dark);
+  --color-text-primary: var(--text-on-dark);
+  --color-text-secondary: var(--text-on-dark-muted);
+  --color-icon-primary: var(--text-on-dark);
+  --color-icon-secondary: var(--text-on-dark-muted);
   background: var(--widget-surface);
   -webkit-backdrop-filter: var(--widget-blur);
   backdrop-filter: var(--widget-blur);
@@ -6019,6 +6041,19 @@ body:has(.persona-dock-workspace-blurred) {
   border-radius: var(--widget-radius);
   box-shadow: var(--widget-shadow);
   padding: var(--widget-pad);
+  color: var(--text-on-dark);
+}
+
+/* Hover keeps the same material, just lifted. */
+.liquid-user-pill:hover,
+.relief-stats-widget:hover,
+.ios-history-widget.compact:hover,
+.overview-card:hover,
+button.overview-card:hover,
+.active-cases-card:hover,
+button.active-cases-card:hover {
+  background: var(--widget-surface-hover);
+  border-color: rgba(255, 255, 255, 0.32);
 }
 
 /* The stats and Recent Claim cards fill the column instead of hugging 330px. */
@@ -6028,14 +6063,20 @@ body:has(.persona-dock-workspace-blurred) {
   width: 100%;
 }
 
-/* Hover keeps the same material, just lifted. */
-.liquid-user-pill:hover,
-.relief-stats-widget:hover,
-.ios-history-widget.compact:hover,
-.overview-card:hover {
-  background: var(--widget-surface-hover);
-  border-color: rgba(255, 255, 255, 0.32);
-}
+/* Text inside the widgets follows the dark glass, not the light card. */
+.overview-card-title,
+.active-cases-card .overview-card-title { color: var(--text-on-dark-muted); }
+.overview-live-badge { background: rgba(255, 255, 255, 0.14); border-color: var(--widget-border); color: var(--text-on-dark); }
+.overview-big-num { color: var(--text-on-dark); }
+.overview-sub-meta,
+.overview-empty { color: var(--text-on-dark-muted); }
+.cluster-avatar,
+.mini-av { border-color: rgba(255, 255, 255, 0.9); }
+.prop-bubble { border-color: var(--widget-border); }
+.stack-metric-num { color: var(--text-on-dark); }
+.stack-metric-denom,
+.bubbles-legend-footer { color: var(--text-on-dark-muted); }
+.stack-urgent-badge { color: var(--pending-text); background: var(--pending-bg); border-color: var(--pending-border); }
 
 /* 2G Lite mode: no blur, solid fallback for every widget alike. */
 .workspace.lite .liquid-user-pill,
