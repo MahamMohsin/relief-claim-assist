@@ -438,11 +438,11 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
           }
         >
           {recording ? (
-            <Send size={15} />
+            <Send size={20} />
           ) : input.trim() ? (
-            <Send size={15} />
+            <Send size={20} />
           ) : (
-            <Mic size={17} />
+            <Mic size={24} />
           )}
         </button>
       </form>
