@@ -39,6 +39,7 @@ export type ScreenContextSnapshot = {
   privacy?: {
     field: string;
     value: string;
+    helpers?: { id: string; name: string; status: string }[];
   };
 };
 
@@ -73,6 +74,7 @@ export type PrivacyCuaHandler = {
   setField: (field: string) => void;
   setValue: (value: string) => void;
   submit: (field: string, value: string) => Promise<void>;
+  setHelperConsent: (consent: "revoked" | "granted", helperNameOrId?: string) => Promise<void>;
 };
 
 export type WorkspaceCuaBridge = {
@@ -380,7 +382,6 @@ class CuaEngine {
       if (saveBtn) {
         await this.moveTo(saveBtn, "Draft saved — ready for evidence", gen, "done");
       }
-      handler.setMessage("Assistant filled your claim fields and saved the draft. Review or continue to evidence.");
       this.bridge?.refresh();
     } else {
       const nextEl = await this.waitForElement('[data-cua="claim-continue-evidence"]', gen, 800);
@@ -686,6 +687,26 @@ class CuaEngine {
         if (submitBtn) {
           await this.moveTo(submitBtn, "Review & click Request correction", gen, "done");
         }
+        return;
+      }
+
+      case "privacy_helper_consent_visual": {
+        if (!(await this.ensureAppOpen("privacy", gen, true))) return;
+        const handler = await this.waitForHandler(() => this.privacy, gen);
+        if (!handler) return;
+
+        const targetConsent = action.consent;
+        const helperBtn = await this.waitForElement('[data-cua="privacy-helper-btn"]', gen, 1200);
+        if (helperBtn) {
+          const actionWord = targetConsent === "revoked" ? "Revoking" : "Granting";
+          await this.clickElement(helperBtn, `${actionWord} helper access`, gen, async () => {
+            await handler.setHelperConsent(targetConsent, action.helperId ?? action.helperName);
+          });
+        } else {
+          await handler.setHelperConsent(targetConsent, action.helperId ?? action.helperName);
+        }
+        await this.sleep(200, gen);
+        this.bridge?.refresh();
         return;
       }
 

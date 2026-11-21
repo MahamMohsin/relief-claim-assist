@@ -181,6 +181,7 @@ export type UIAction = { type: "open_mini_app"; app: MiniApp }
   | { type: "ask_policy_visual"; question: string }
   | { type: "check_scam_visual"; message: string; reference?: string }
   | { type: "privacy_correction_visual"; field: "full_name" | "phone" | "village_area" | "household_size" | "monthly_income_mock"; value: string }
+  | { type: "privacy_helper_consent_visual"; consent: "revoked" | "granted"; helperId?: string; helperName?: string }
   | { type: "search_app_visual"; app: "family" | "review" | "users"; query: string }
   | { type: "show_jev_badge"; label: string; confidence: number; route: MiniApp | "clarification"; model: string }
   | { type: "ask_clarification"; question: string; options: MiniApp[] }

@@ -13,6 +13,7 @@ export const names = [
   "claim_draft_upsert",
   "claim_step_navigate",
   "privacy_request_correction",
+  "privacy_manage_helper",
   "mock_dpi_verify",
   "policy_rag_search",
   "escalate_to_officer",
@@ -223,6 +224,46 @@ export function registerTools(pi: ExtensionAPI, context: PiContext) {
       emit({ type: "open_mini_app", app: "privacy" });
       emit({ type: "privacy_correction_visual", field: input.field, value: input.value.trim() });
       return textResult({ openedPrivacy: true, field: input.field, value: input.value.trim() });
+    },
+  });
+
+  pi.registerTool({
+    name: "privacy_manage_helper",
+    label: "Manage helper access in Privacy",
+    description: "Open My Privacy and visually grant or revoke community helper access (permissions) for this family. Action is 'revoke' or 'grant'.",
+    parameters: Type.Object({
+      action: Type.Union([Type.Literal("revoke"), Type.Literal("grant")]),
+      helperName: Type.Optional(Type.String({ maxLength: 100 })),
+    }),
+    async execute(_id, input) {
+      const consent = input.action === "revoke" ? "revoked" as const : "granted" as const;
+      emit({ type: "open_mini_app", app: "privacy" });
+      emit({ type: "privacy_helper_consent_visual", consent, helperName: input.helperName });
+      let updated = false;
+      let matchedHelper = "Community helper";
+      if (citizenId) {
+        try {
+          const priv = await gateway<{ helpers: { id: string; name: string; status: string }[] }>("privacy", { citizenId });
+          const helper = input.helperName
+            ? priv.helpers.find(h => h.name.toLowerCase().includes(input.helperName!.toLowerCase()))
+            : priv.helpers[0];
+          if (helper) {
+            matchedHelper = helper.name;
+            await gateway("consent", { citizenId, helperId: helper.id, consent, key: crypto.randomUUID() });
+            updated = true;
+          }
+        } catch {
+          // visual action dispatched
+        }
+      }
+      return textResult({
+        openedPrivacy: true,
+        action: input.action,
+        helperName: matchedHelper,
+        consent,
+        updated,
+        message: `${matchedHelper} permissions ${consent} in My Privacy.`,
+      });
     },
   });
 

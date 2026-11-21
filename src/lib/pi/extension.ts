@@ -31,6 +31,9 @@ export function createReliefExtension(context: PiContext, locale: "en" | "ur"): 
       }
       if (sc?.privacy) {
         screenLines.push(`My Privacy correction form: field="${sc.privacy.field}", value=${JSON.stringify(sc.privacy.value)}.`);
+        if (sc.privacy.helpers?.length) {
+          screenLines.push(`My Privacy helpers: ${sc.privacy.helpers.map(h => `${h.name} (${h.status})`).join(", ")}.`);
+        }
       }
       const liveScreenBlock = screenLines.length
         ? " LIVE SCREEN STATE: " + screenLines.join(" ")
@@ -51,8 +54,9 @@ export function createReliefExtension(context: PiContext, locale: "en" | "ur"): 
           + "• Returning to claims list: If the user asks to go 'back to claims', click 'Back to claims', or return to the claims list, call claim_step_navigate with step='list' so the cursor clicks Back to claims. "
           + "• Policy / RAG questions: For ANY question about eligibility, income cap, documents, widows, Raast payments, disputes, consent, or rules, ALWAYS call policy_rag_search so Policy Ask opens and types their question visually; cite section codes and abstain if no citation matches. "
           + "• Scam / SMS / Raast verification: If the user wants to check a suspicious SMS, link, OTP request, or payment reference, ALWAYS call jev_classify_and_route so Scam Shield opens and runs the check live. "
-          + "• Privacy corrections: If they ask to update/correct their name, phone, village/area, household size, or income record, call privacy_request_correction. "
-          + "• Other apps (privacy, family, review, rules, users, audit): Call ui_control (with optional search query) to open and navigate directly. "
+          + "• Privacy corrections & helper access: In My Privacy, citizens can view who has access to their family account and revoke or grant community helper permissions. If they ask to revoke or grant a helper's permissions/access, call privacy_manage_helper immediately — never say you cannot do it or that another app is needed! If they ask to update/correct their name, phone, village/area, household size, or income record, call privacy_request_correction. "
+          + "• Other apps (privacy, profile, family, review, rules, users, audit): Call ui_control (with optional search query) to open and navigate directly. "
+          + "• Greetings and casual questions: If the user says hello, hi, asks what you can do, or checks in, reply warmly and conversationally, introducing what you can help with across all 5 citizen apps: Relief Claim, My Profile, Scam Shield, Policy Ask, and My Privacy. "
           + "Keep your final reply concise (1–2 short sentences) summarizing what you just did on screen so it sounds natural spoken aloud. "
           + "Reply in " + (locale === "ur" ? "Urdu, unless the request is clearly English." : "English."),
       };
@@ -62,7 +66,7 @@ export function createReliefExtension(context: PiContext, locale: "en" | "ur"): 
       try {
         await gateway("agent_guard", { citizenId: context.citizenId });
         const familyTool = ["claim_start_new", "claim_draft_upsert", "claim_step_navigate", "escalate_to_officer"].includes(event.toolName);
-        const privacyTool = event.toolName === "privacy_request_correction";
+        const privacyTool = event.toolName === "privacy_request_correction" || event.toolName === "privacy_manage_helper";
         const requestedApp = event.toolName === "ui_control" ? resolveApp(event.input.app) : null;
         const unknownApp = event.toolName === "ui_control" && !requestedApp;
         const navigationDenied = requestedApp !== null && !canOpen(context.profile.role, requestedApp);

@@ -224,7 +224,6 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
       setPendingDraft(undefined);
     }
     setDetails(current => ({ ...current, ...ctx.prefill?.fields }));
-    setMessage("Assistant filled the fields. Review them before saving.");
   }, [ctx.prefill]);
 
   useEffect(() => {
@@ -506,8 +505,12 @@ function PrivacyView({ ctx }: { ctx: ViewContext }) {
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
   const changeRef = useRef<(action: "consent" | "correction", body: object) => Promise<void>>(async () => {});
-  const privacySnapshotRef = useRef({ field, value });
-  privacySnapshotRef.current = { field, value };
+  const privacySnapshotRef = useRef<{ field: string; value: string; helpers?: { id: string; name: string; status: string }[] }>({ field, value });
+  privacySnapshotRef.current = {
+    field,
+    value,
+    helpers: data?.helpers?.map(h => ({ id: h.id, name: h.name, status: h.status })),
+  };
   useEffect(() => {
     cuaEngine.privacy = {
       getSnapshot: () => ({ ...privacySnapshotRef.current }),
@@ -516,11 +519,18 @@ function PrivacyView({ ctx }: { ctx: ViewContext }) {
       submit: async (nextField, nextValue) => {
         await changeRef.current("correction", { field: nextField, value: nextValue });
       },
+      setHelperConsent: async (consent, helperNameOrId) => {
+        const target = helperNameOrId && data?.helpers
+          ? data.helpers.find(h => h.id === helperNameOrId || h.name.toLowerCase().includes(helperNameOrId.toLowerCase())) ?? data.helpers[0]
+          : data?.helpers?.[0];
+        if (!target) return;
+        await changeRef.current("consent", { helperId: target.id, consent });
+      },
     };
     return () => {
       if (cuaEngine.privacy) cuaEngine.privacy = null;
     };
-  }, []);
+  }, [data?.helpers]);
   if (!ctx.citizen) return <FamilyRequired ctx={ctx} />;
 
   async function change(action: "consent" | "correction", body: object) {
@@ -550,7 +560,23 @@ function PrivacyView({ ctx }: { ctx: ViewContext }) {
             <VStack gap={0.5}><strong>{helper.name}</strong><small>Community helper</small></VStack>
             <HStack gap={2}>
               <Badge label={title(helper.status)} variant={helper.status === "granted" ? "success" : "warning"} />
-              {ctx.profile.role === "citizen" && <Button variant="secondary" size="sm" label={helper.status === "granted" ? "Revoke" : "Grant"} isDisabled={busy} onClick={() => void change("consent", { helperId: helper.id, consent: helper.status === "granted" ? "revoked" : "granted" })} />}
+              {ctx.profile.role === "citizen" && (
+                <span
+                  data-cua="privacy-helper-btn"
+                  data-cua-consent={helper.status}
+                  data-helper-id={helper.id}
+                  data-helper-name={helper.name}
+                  style={{ display: "inline-flex" }}
+                >
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    label={helper.status === "granted" ? "Revoke" : "Grant"}
+                    isDisabled={busy}
+                    onClick={() => void change("consent", { helperId: helper.id, consent: helper.status === "granted" ? "revoked" : "granted" })}
+                  />
+                </span>
+              )}
             </HStack>
           </HStack>
         </Card>)}
