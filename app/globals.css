@@ -179,8 +179,136 @@ table { width: 100%; border-collapse: collapse; text-align: left; font-size: .88
 th, td { padding: .6rem .52rem; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { background: var(--faint); color: var(--forest); }
 /* ========================================================
-   APPLE-STYLE WIDGETS, SQUIRCLES & GLASS DOCK
+   APPLE LIQUID GLASS THIN NAVBAR
    ======================================================== */
+
+.ios-liquid-navbar {
+  position: sticky;
+  top: 0.75rem;
+  z-index: 30;
+  width: min(1140px, calc(100% - 1.5rem));
+  margin: 0.65rem auto 1.2rem;
+}
+
+.ios-liquid-nav-inner {
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(36px) saturate(220%);
+  -webkit-backdrop-filter: blur(36px) saturate(220%);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.3) inset;
+  border-radius: 9999px;
+  padding: 0.35rem 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.ios-nav-left {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.ios-nav-logo {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #00715D 0%, #004D3F 100%);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 2px 6px rgba(0, 113, 93, 0.35);
+}
+
+.ios-nav-title {
+  font-size: 0.85rem;
+  font-weight: 750;
+  color: #111e1b;
+  letter-spacing: -0.02em;
+}
+
+.ios-nav-chip {
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: #00715D;
+  background: rgba(0, 113, 93, 0.1);
+  padding: 0.15rem 0.45rem;
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ios-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.ios-nav-link {
+  border: none;
+  background: transparent;
+  color: rgba(17, 30, 27, 0.75);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.3rem 0.75rem;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ios-nav-link:hover {
+  background: rgba(255, 255, 255, 0.55);
+  color: #111e1b;
+}
+
+.ios-nav-link.active {
+  background: rgba(255, 255, 255, 0.85);
+  color: #00715D;
+  font-weight: 750;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.ios-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.ios-nav-status {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.74rem;
+  font-weight: 680;
+  color: rgba(17, 30, 27, 0.8);
+  padding: 0.25rem 0.55rem;
+  background: rgba(255, 255, 255, 0.45);
+  border-radius: 9999px;
+}
+
+.ios-nav-profile-pill {
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.85);
+  color: #111e1b;
+  font-size: 0.76rem;
+  font-weight: 750;
+  padding: 0.28rem 0.7rem;
+  border-radius: 9999px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  transition: transform 0.15s;
+}
+
+.ios-nav-profile-pill:hover {
+  transform: scale(1.04);
+}
+
+@media (max-width: 640px) {
+  .ios-nav-links {
+    display: none;
+  }
+}
 
 .dashboard-canvas {
   display: flex;

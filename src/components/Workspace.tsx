@@ -200,6 +200,38 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
 
   return (
     <div className={lite ? "workspace lite" : "workspace"}>
+      {/* Apple Liquid Glass Floating Top Navbar */}
+      <header className="ios-liquid-navbar">
+        <div className="ios-liquid-nav-inner">
+          <div className="ios-nav-left">
+            <span className="ios-nav-logo">
+              <HandHeart size={16} />
+            </span>
+            <span className="ios-nav-title">Relief Claim Assist</span>
+            <span className="ios-nav-chip">Prototype · DPI</span>
+          </div>
+
+          <nav className="ios-nav-links">
+            <button className="ios-nav-link active" onClick={() => changeApp(null)}>Dashboard</button>
+            <button className="ios-nav-link" onClick={() => changeApp("claim")}>Claims</button>
+            <button className="ios-nav-link" onClick={() => changeApp("policy")}>Rules</button>
+            <button className="ios-nav-link" onClick={() => changeApp("privacy")}>Privacy</button>
+          </nav>
+
+          <div className="ios-nav-right">
+            <div className="ios-nav-status">
+              <span className="status-dot-pulse" />
+              <span>{offline ? "Offline" : "Online"}</span>
+            </div>
+            {profile && (
+              <button className="ios-nav-profile-pill" onClick={() => setChooser(true)}>
+                <span>{profile.full_name.split(" ")[0]}</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
+
       {(headMessage || failed) && <div className="top-notice"><p role="status">{headMessage || failed?.failure}</p><button onClick={() => setHeadMessage("")} aria-label="Dismiss update"><X size={17} /></button></div>}
 
       <main className="content">
