@@ -481,21 +481,10 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
       {/* Apple macOS Full-Width Top Menu Bar */}
       <header className="macos-menubar">
         <div className="macos-menu-left">
-          <span className="macos-apple-logo" title="Relief System">
-            <HandHeart size={14} />
-          </span>
           <span className="macos-app-name">Relief Assist</span>
         </div>
 
-        <nav className="macos-menu-center">
-          <button className="macos-menu-item" onClick={() => changeApp(null)}>Dashboard</button>
-          {available.includes("claim") && <button className="macos-menu-item" onClick={() => changeApp("claim")}>Claims</button>}
-          {available.includes("profile") && <button className="macos-menu-item" onClick={() => changeApp("profile")}>{profile?.role === "helper" ? "Family Profile" : "Profile"}</button>}
-          {available.includes("review") && <button className="macos-menu-item" onClick={() => changeApp("review")}>Review</button>}
-          {available.includes("policy") && <button className="macos-menu-item" onClick={() => changeApp("policy")}>Policy</button>}
-          {available.includes("privacy") && <button className="macos-menu-item" onClick={() => changeApp("privacy")}>Privacy</button>}
-          {available.includes("audit") && <button className="macos-menu-item" onClick={() => changeApp("audit")}>Audit</button>}
-        </nav>
+        <nav className="macos-menu-center" />
 
         <div className="macos-menu-right">
           {profile?.role === "officer" && (
@@ -630,6 +619,11 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                       <div className="liquid-user-title-col">
                         <h1>{profile ? profile.full_name : "Fatima Bibi"}</h1>
                         <p>{profile?.role === "helper" ? "Community Health Worker" : profile?.role === "officer" ? "Department Review Officer" : profile?.role === "auditor" ? "Read-Only Compliance Auditor" : profile?.role === "admin" ? "Scheme Administrator" : "Emergency Cash Assistance"}</p>
+                        {userDropdownOpen && (
+                          <small className="liquid-user-email">
+                            {profile?.full_name ? profile.full_name.toLowerCase().replace(/\s+/g, ".") + "@relief-demo.example" : "fatima@relief-demo.example"}
+                          </small>
+                        )}
                       </div>
                       <span className={"liquid-chevron" + (userDropdownOpen ? " rotated" : "")} aria-hidden="true">
                         <ChevronDown size={22} strokeWidth={2.4} />
@@ -649,10 +643,6 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                         >
                           <div className="liquid-menu-divider" />
                           <div className="liquid-menu-body">
-                            <div className="liquid-user-meta">
-                              <small>{profile?.full_name ? profile.full_name.toLowerCase().replace(/\s+/g, ".") + "@relief-demo.example" : "fatima@relief-demo.example"}</small>
-                            </div>
-
                             <div className="liquid-status-section">
                               <div className="liquid-action-buttons toggles">
                                 <button
