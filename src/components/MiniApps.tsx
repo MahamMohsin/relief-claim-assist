@@ -11,6 +11,7 @@ import { PolicyChatView } from "./PolicyChatView";
 import { ScamChatView } from "./ScamChatView";
 import { AuditVaultView, type SafetyMetric } from "./AuditVaultView";
 import { CitizenProfileView } from "./CitizenProfileView";
+import { ApplicantProfilePanel } from "./ApplicantProfilePanel";
 import { Button } from "@astryxdesign/core/Button";
 import { Card } from "@astryxdesign/core/Card";
 import { Badge } from "@astryxdesign/core/Badge";
@@ -649,6 +650,13 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
       <div className="facts two"><div><small>Rule version</small><strong>v{claim.rule_version_used ?? "–"}</strong></div><div><small>Payment</small><strong>{title(claim.payment_status)}</strong></div></div>
       <p>{claim.handoff_notes}</p>
       {Boolean(claim.reports) && <Notice text={String(claim.reports) + " missing payment report(s) on this case."} warning />}
+      <ApplicantProfilePanel
+        citizenId={claim.citizen_id}
+        claimIncome={claim.payload_json.monthly_income}
+        claimHousehold={claim.payload_json.household_size}
+        offline={ctx.offline}
+        version={ctx.version}
+      />
       <div className="rows">{claim.documents?.map(doc => <div className="list-row static" key={doc.id}><div><strong>{title(doc.doc_type)}</strong>
         <small>{doc.tamper_reason ?? doc.ocr_json.summary ?? "No model report"}</small>
         {doc.blur_score !== null && <small>Blur score {pc(doc.blur_score)}</small>}
