@@ -388,6 +388,32 @@ export function PipLoginModal({
           </div>
         </div>
       </div>
+
+      {/* 1-Click Fast Login Bar for the 6 Seeded Profiles */}
+      <div
+        className={s.easyProfilesBar}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <span className={s.easyProfilesLabel}>1-Click Login:</span>
+        <div className={s.easyProfilesList}>
+          {(Object.entries(personas) as [Persona, (typeof personas)[Persona]][]).map(
+            ([key, p]) => (
+              <button
+                key={key}
+                type="button"
+                className={s.easyProfilePill}
+                onClick={() => onSelectPersona(key)}
+                disabled={Boolean(busy) || offline}
+                title={`Log in instantly as ${p.name} (${p.role})`}
+              >
+                <span>{p.name.split(" ")[0]}</span>
+                <span className={s.easyProfileRole}>{p.role}</span>
+              </button>
+            )
+          )}
+        </div>
+      </div>
     </div>
   );
 }
