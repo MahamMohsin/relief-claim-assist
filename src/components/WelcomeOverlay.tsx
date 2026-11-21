@@ -13,7 +13,7 @@ interface WelcomeOverlayProps {
 /** How long the finished greeting stays on screen before the overlay closes. */
 const HOLD_MS = 1600;
 /** Backstop so a font that never loads can never strand the user here. */
-const MAX_MS = 8000;
+const MAX_MS = 12000;
 /** Matches the fade-out in the stylesheet. */
 const FADE_MS = 420;
 
@@ -21,6 +21,11 @@ export function WelcomeOverlay({ name, onDismiss }: WelcomeOverlayProps) {
   const [leaving, setLeaving] = useState(false);
   const closed = useRef(false);
   const timers = useRef<number[]>([]);
+  // The parent re-renders often, so the dismiss callback is read through a ref
+  // rather than captured: capturing it would restart the timers on every
+  // re-render and the greeting would never let go of the screen.
+  const dismissRef = useRef(onDismiss);
+  dismissRef.current = onDismiss;
 
   const later = useCallback((fn: () => void, delay: number) => {
     const id = window.setTimeout(fn, delay);
@@ -32,8 +37,8 @@ export function WelcomeOverlay({ name, onDismiss }: WelcomeOverlayProps) {
     if (closed.current) return;
     closed.current = true;
     setLeaving(true);
-    later(onDismiss, FADE_MS);
-  }, [later, onDismiss]);
+    later(() => dismissRef.current(), FADE_MS);
+  }, [later]);
 
   // The greeting holds once the handwriting is finished, then it fades away.
   const handleComplete = useCallback(() => {
