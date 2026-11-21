@@ -946,36 +946,51 @@ th { background: var(--faint); color: var(--forest); }
   background: rgba(255, 255, 255, 0.42);
   backdrop-filter: blur(40px) saturate(220%);
   -webkit-backdrop-filter: blur(40px) saturate(220%);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(255, 255, 255, 0.3) inset;
-  border-radius: 9999px;
+  border: 1px solid transparent;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+  border-radius: 24px;
   padding: 0.45rem 0.55rem;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.voice-dock-glass:has(.voice-reply-glass) {
-  border-radius: 28px;
+/* Rounded rectangular glowing boundary ONLY appears when speaking / listening */
+.voice-dock-glass.is-recording {
+  border-radius: 20px;
+  border-color: rgba(255, 59, 48, 0.65);
+  box-shadow: 0 0 0 3px rgba(255, 59, 48, 0.2), 0 20px 48px rgba(0, 0, 0, 0.2);
+}
+
+.voice-dock-glass.is-working {
+  border-radius: 20px;
+  border-color: rgba(0, 113, 93, 0.45);
+  box-shadow: 0 0 0 3px rgba(0, 113, 93, 0.12), 0 20px 48px rgba(0, 0, 0, 0.16);
 }
 
 .voice-dock-glass.clarifying {
+  border-radius: 20px;
   border-color: rgba(255, 149, 0, 0.65);
-  box-shadow: 0 20px 48px rgba(255, 149, 0, 0.22);
+  box-shadow: 0 0 0 3px rgba(255, 149, 0, 0.15), 0 20px 48px rgba(0, 0, 0, 0.16);
+}
+
+.voice-dock-glass:has(.voice-reply-glass) {
+  border-radius: 22px;
 }
 
 /* Voice reply bubble (Dynamic Island / Siri expansion style) */
 .voice-reply-glass {
   padding: 0.85rem 1rem;
-  background: rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(25px);
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
   max-height: min(28dvh, 220px);
   overflow-y: auto;
   font-size: 0.9rem;
   line-height: 1.45;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
 }
 
 .clarify-title {
@@ -998,39 +1013,40 @@ th { background: var(--faint); color: var(--forest); }
 .voice-glass-main {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
 }
 
-.voice-status-pill {
-  display: flex;
+/* Sleek inline status indicator inside the input pill */
+.glass-inline-status {
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.2rem 0.85rem;
-  font-size: 0.76rem;
-  font-weight: 650;
-  color: #1a3830;
-}
-
-.voice-pulse-indicator {
-  display: flex;
-  align-items: center;
+  gap: 0.35rem;
+  background: rgba(0, 113, 93, 0.1);
   color: var(--forest);
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 650;
+  max-width: 140px;
+  flex-shrink: 0;
 }
 
-.voice-stage-label {
-  flex: 1;
+.inline-spin-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--forest);
+  animation: pulse-dot 1s infinite alternate;
+}
+
+@keyframes pulse-dot {
+  from { opacity: 0.35; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1.15); }
+}
+
+.inline-stage-text {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.decision-chip-glass {
-  background: rgba(0, 113, 93, 0.15);
-  color: var(--forest);
-  padding: 0.15rem 0.5rem;
-  border-radius: 9999px;
-  font-size: 0.7rem;
-  font-weight: 750;
 }
 
 /* Glass Form Controls */
@@ -1039,7 +1055,7 @@ th { background: var(--faint); color: var(--forest); }
   align-items: center;
   gap: 0.45rem;
   background: rgba(255, 255, 255, 0.35);
-  border-radius: 9999px;
+  border-radius: 18px;
   padding: 0.22rem 0.35rem;
   border: 1px solid rgba(255, 255, 255, 0.45);
 }

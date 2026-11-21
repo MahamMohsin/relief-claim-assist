@@ -190,23 +190,13 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
 
   function submit(event: FormEvent) { event.preventDefault(); void command(input); }
 
-  return <section className={"voice-dock-glass" + (clarify ? " clarifying" : "")} aria-label="Relief voice assistant">
+  return <section className={"voice-dock-glass" + (recording ? " is-recording" : "") + (working ? " is-working" : "") + (clarify ? " clarifying" : "")} aria-label="Relief voice assistant">
     {expanded && (answer || error || clarify) && <div className="voice-reply-glass">
       {clarify && <div><p className="clarify-title">{clarify.question}</p><div className="voice-options">{clarify.options.map(app => <button type="button" key={app} onClick={() => choose(app)}>{apps[app].title}</button>)}</div></div>}
       {answer && <div className="voice-answer"><p>{answer}</p><button className="glass-icon-btn" onClick={() => void speakText(answer.slice(0, 1400), lang, lite || offline).then(setStage)} aria-label="Play assistant response"><Volume2 size={18} /></button></div>}
       {error && <p className="voice-error" role="alert">{error}</p>}
     </div>}
     <div className="voice-glass-main">
-      {/* Status indicator only shown when recording, active, clarifying, or error */}
-      {(recording || working || clarify || error || decision) && (
-        <div className="voice-status-pill">
-          <span className="voice-pulse-indicator">{recording ? <span className="wave" aria-hidden="true"><i /><i /><i /><i /></span> : <AudioLines size={15} />}</span>
-          <span className="voice-stage-label" aria-live="polite">{stage}</span>
-          {decision && <span className="decision-chip-glass" title={decision.model}>{decision.model.startsWith("jev-simulated") ? "Simulated Jev" : "Jev"} · {Math.round(decision.confidence * 100)}%</span>}
-          {(answer || error || clarify) && <button className="glass-icon-btn" onClick={() => setExpanded(value => !value)} aria-expanded={expanded} aria-label="Toggle assistant response"><ChevronDown size={14} /></button>}
-        </div>
-      )}
-
       <form className="voice-glass-form" onSubmit={submit}>
         <button type="button" className={"glass-mic-btn" + (recording ? " recording" : "")} onClick={() => void toggleRecord()} aria-label={recording ? "Stop microphone recording" : "Start microphone recording"}>
           {recording ? <Square size={15} /> : <Mic size={18} />}
@@ -214,11 +204,18 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
         <input
           className="glass-voice-input"
           aria-label="Type a relief assistant command"
-          placeholder={lang === "ur" ? "اپنا سوال لکھیں یا مائیک دبائیں…" : "Ask anything or tap mic to speak…"}
+          placeholder={recording ? (lang === "ur" ? "سن رہا ہے…" : "Listening…") : (lang === "ur" ? "اپنا سوال لکھیں یا مائیک دبائیں…" : "Ask anything or tap mic to speak…")}
           value={input}
           maxLength={1000}
           onChange={event => setInput(event.target.value)}
         />
+        {/* Subtle inline status dot/chip while working or routing */}
+        {(working || clarify) && (
+          <span className="glass-inline-status" title={stage}>
+            <span className="inline-spin-dot" />
+            <span className="inline-stage-text">{stage}</span>
+          </span>
+        )}
         <button type="button" className="glass-lang-pill" aria-label="Switch voice language" onClick={() => setLang(value => value === "en" ? "ur" : "en")}>
           {lang === "ur" ? "اردو" : "EN"}
         </button>
