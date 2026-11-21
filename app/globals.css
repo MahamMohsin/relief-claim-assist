@@ -598,22 +598,22 @@ th { background: var(--faint); color: var(--forest); }
 }
 
 .ios-hero-name h1 {
-  font-size: clamp(2.4rem, 5vw, 3.4rem);
-  font-weight: 800;
+  font-size: clamp(2rem, 4.2vw, 2.9rem);
+  font-weight: 300;
   color: #ffffff;
-  letter-spacing: -0.045em;
-  line-height: 1.05;
-  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.35);
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.3);
   margin: 0;
 }
 
 .ios-hero-name p {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.85);
-  margin-top: 0.35rem;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.25);
-  letter-spacing: -0.01em;
+  font-size: 0.9rem;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.75);
+  margin-top: 0.25rem;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.2);
+  letter-spacing: 0.01em;
 }
 
 @media (max-width: 768px) {
