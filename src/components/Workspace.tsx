@@ -21,7 +21,7 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
   const [profile, setProfile] = useState(initialProfile);
   const [openApps, setOpenApps] = useState<MiniApp[]>([]);
   const [activeApp, setActiveApp] = useState<MiniApp | null>(null);
-  const [windowState, setWindowState] = useState<Record<MiniApp, { maximized?: boolean; width?: number; height?: number }>>({} as any);
+  const [windowState, setWindowState] = useState<Record<MiniApp, { sizePreset?: "compact" | "default" | "wide" | "max"; maximized?: boolean }>>({} as any);
   const [chooser, setChooser] = useState(showLogin);
   const [family, setFamily] = useState<Family | null>(null);
   const [fixtureOnline, setFixtureOnline] = useState(true);
@@ -131,11 +131,29 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
     }
   }
 
-  function toggleMaximize(appId: MiniApp) {
+  function setAppSizePreset(appId: MiniApp, preset: "compact" | "default" | "wide" | "max") {
     setWindowState(prev => ({
       ...prev,
-      [appId]: { ...prev[appId], maximized: !prev[appId]?.maximized }
+      [appId]: {
+        ...prev[appId],
+        sizePreset: preset,
+        maximized: preset === "max"
+      }
     }));
+  }
+
+  function toggleMaximize(appId: MiniApp) {
+    setWindowState(prev => {
+      const currentlyMax = prev[appId]?.maximized || prev[appId]?.sizePreset === "max";
+      return {
+        ...prev,
+        [appId]: {
+          ...prev[appId],
+          maximized: !currentlyMax,
+          sizePreset: currentlyMax ? "default" : "max"
+        }
+      };
+    });
   }
 
   function changeApp(next: MiniApp | null) {
@@ -372,7 +390,8 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                   const appMeta = apps[appId];
                   const isFocused = activeApp === appId;
                   const state = windowState[appId] || {};
-                  const isMaximized = Boolean(state.maximized);
+                  const preset = state.sizePreset || "default";
+                  const isMaximized = Boolean(state.maximized || preset === "max");
                   const Icon = appMeta.icon;
 
                   // Stagger initial positions for overlapping feel
@@ -391,7 +410,7 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                         top: isMaximized ? "36px" : `calc(50px + ${offset}px)`,
                         left: isMaximized ? "12px" : `calc(max(20px, 50% - 440px) + ${offset}px)`,
                       }}
-                      className={"desktop-window " + (isMaximized ? "maximized " : "") + (isFocused ? "focused " : "")}
+                      className={"desktop-window preset-" + preset + (isMaximized ? " maximized " : " ") + (isFocused ? "focused " : "")}
                       onPointerDown={() => setActiveApp(appId)}
                     >
                       {/* Window Title Bar */}
@@ -401,7 +420,7 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                             type="button"
                             className="traffic-light close"
                             onClick={e => { e.stopPropagation(); closeAppWindow(appId); }}
-                            title="Close"
+                            title="Close window"
                           >
                             <X size={8} strokeWidth={3} />
                           </button>
@@ -417,7 +436,7 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                             type="button"
                             className="traffic-light maximize"
                             onClick={e => { e.stopPropagation(); toggleMaximize(appId); }}
-                            title={isMaximized ? "Restore" : "Maximize"}
+                            title={isMaximized ? "Restore window" : "Maximize window"}
                           >
                             {isMaximized ? <Minimize2 size={8} strokeWidth={3} /> : <Maximize2 size={8} strokeWidth={3} />}
                           </button>
@@ -430,8 +449,44 @@ export function Workspace({ initialProfile, showLogin = false }: { initialProfil
                           <span className="window-title-text">{appMeta.title}</span>
                         </div>
 
-                        <div className="window-titlebar-right">
-                          <span className="window-badge">{appMeta.badge || "App"}</span>
+                        {/* Window Quick Size & Close Options */}
+                        <div className="window-controls-right">
+                          <div className="window-size-selector" title="Window size preset">
+                            <button
+                              type="button"
+                              className={"size-btn" + (preset === "compact" ? " active" : "")}
+                              onClick={e => { e.stopPropagation(); setAppSizePreset(appId, "compact"); }}
+                              title="Compact view (480px)"
+                            >
+                              S
+                            </button>
+                            <button
+                              type="button"
+                              className={"size-btn" + (preset === "default" ? " active" : "")}
+                              onClick={e => { e.stopPropagation(); setAppSizePreset(appId, "default"); }}
+                              title="Standard view (780px)"
+                            >
+                              M
+                            </button>
+                            <button
+                              type="button"
+                              className={"size-btn" + (preset === "wide" ? " active" : "")}
+                              onClick={e => { e.stopPropagation(); setAppSizePreset(appId, "wide"); }}
+                              title="Wide split view (1020px)"
+                            >
+                              L
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            className="window-close-action-btn"
+                            onClick={e => { e.stopPropagation(); closeAppWindow(appId); }}
+                            title="Close app"
+                            aria-label="Close app"
+                          >
+                            <X size={14} />
+                          </button>
                         </div>
                       </div>
 
