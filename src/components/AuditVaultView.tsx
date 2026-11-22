@@ -14,6 +14,7 @@ export type SafetyMetric = {
 };
 
 type AuditStage = "flagged" | "ai" | "consent" | "verified";
+type StreamCategory = "claims" | "ai" | "consent" | "flagged";
 type ScopeFilter = "recent" | "ai" | "all";
 type StreakRange = "hourly" | "monthly";
 
@@ -21,44 +22,27 @@ const STAGE_META: Record<
   AuditStage,
   {
     label: string;
-    laneIndex: number;
     fill: string;
-    soft: string;
-    gradId: string;
   }
 > = {
-  flagged: {
-    label: "Flagged",
-    laneIndex: 0,
-    fill: "#ff7854",
-    soft: "#ff7854",
-    gradId: "lg-audit-grad-flagged",
-  },
-  ai: {
-    label: "AI Tool",
-    laneIndex: 1,
-    fill: "#a88bff",
-    soft: "#a88bff",
-    gradId: "lg-audit-grad-ai",
-  },
-  consent: {
-    label: "Consent",
-    laneIndex: 2,
-    fill: "#64c4ff",
-    soft: "#64c4ff",
-    gradId: "lg-audit-grad-consent",
-  },
-  verified: {
-    label: "Verified",
-    laneIndex: 3,
-    fill: "#9ca3af",
-    soft: "#9ca3af",
-    gradId: "lg-audit-grad-verified",
-  },
+  flagged: { label: "Flagged", fill: "#ff7854" },
+  ai: { label: "AI", fill: "#a88bff" },
+  consent: { label: "Consent", fill: "#64c4ff" },
+  verified: { label: "Verified", fill: "#34d399" },
 };
 
-const STAGE_ORDER: AuditStage[] = ["verified", "ai", "consent", "flagged"];
-const LANE_LABELS: AuditStage[] = ["flagged", "ai", "consent", "verified"];
+const BAR_CATEGORIES: {
+  key: StreamCategory;
+  label: string;
+  fill: string;
+  soft: string;
+  gradId: string;
+}[] = [
+  { key: "claims", label: "Claims", fill: "#34d399", soft: "#10b981", gradId: "lg-bar-claims" },
+  { key: "ai", label: "AI", fill: "#a88bff", soft: "#7c5cff", gradId: "lg-bar-ai" },
+  { key: "consent", label: "Consent", fill: "#64c4ff", soft: "#38bdf8", gradId: "lg-bar-consent" },
+  { key: "flagged", label: "Flagged", fill: "#ff7854", soft: "#ef4444", gradId: "lg-bar-flagged" },
+];
 
 const HOUR_SLICE_LABELS = [":00", ":10", ":20", ":30", ":40", ":50"] as const;
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
@@ -133,6 +117,27 @@ export function classifyAuditStage(row: Audit): AuditStage {
   return "verified";
 }
 
+function isClaimEvent(row: Audit): boolean {
+  const ev = row.event_type.toLowerCase();
+  return (
+    row.entity_type === "claim" ||
+    row.entity_type === "claim_document" ||
+    [
+      "draft",
+      "draft_saved",
+      "submit",
+      "submit_claim",
+      "evidence_checked",
+      "tamper_detected",
+      "officer_approve",
+      "officer_reject",
+      "mock_payment_paid",
+      "mock_payment_failed",
+      "report",
+    ].includes(ev)
+  );
+}
+
 function isConsentEvent(row: Audit): boolean {
   const ev = row.event_type.toLowerCase();
   return (
@@ -146,65 +151,16 @@ function isAiEvent(row: Audit): boolean {
   return classifyAuditStage(row) === "ai" || row.confidence !== null;
 }
 
-type StageBlock = {
-  index: number;
-  stage: AuditStage;
-  events: Audit[];
-  startIso: string;
-  endIso: string;
-  weight: number;
-};
+function isFlaggedEvent(row: Audit): boolean {
+  const ev = row.event_type.toLowerCase();
+  return ev === "access_denied" || ev === "tool_blocked" || classifyAuditStage(row) === "flagged";
+}
 
-function buildHypnogramBlocks(events: Audit[], maxBuckets: number): StageBlock[] {
-  if (!events.length) return [];
-  const chronological = [...events].sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-  );
-
-  const bucketCount = Math.min(maxBuckets, chronological.length);
-  const perBucket = chronological.length / bucketCount;
-  const rawBuckets: { stage: AuditStage; events: Audit[] }[] = [];
-
-  for (let i = 0; i < bucketCount; i++) {
-    const start = Math.floor(i * perBucket);
-    const end = Math.max(start + 1, Math.floor((i + 1) * perBucket));
-    const slice = chronological.slice(start, end);
-    if (!slice.length) continue;
-
-    const counts: Record<AuditStage, number> = { flagged: 0, ai: 0, consent: 0, verified: 0 };
-    for (const item of slice) counts[classifyAuditStage(item)]++;
-
-    const priority: AuditStage[] = ["flagged", "consent", "ai", "verified"];
-    let dominant: AuditStage = "verified";
-    let best = -1;
-    for (const stage of priority) {
-      if (counts[stage] > best) {
-        best = counts[stage];
-        dominant = stage;
-      }
-    }
-    rawBuckets.push({ stage: dominant, events: slice });
-  }
-
-  const merged: StageBlock[] = [];
-  for (const bucket of rawBuckets) {
-    const prev = merged[merged.length - 1];
-    if (prev && prev.stage === bucket.stage) {
-      prev.events.push(...bucket.events);
-      prev.endIso = bucket.events[bucket.events.length - 1].created_at;
-      prev.weight += 1;
-    } else {
-      merged.push({
-        index: merged.length,
-        stage: bucket.stage,
-        events: [...bucket.events],
-        startIso: bucket.events[0].created_at,
-        endIso: bucket.events[bucket.events.length - 1].created_at,
-        weight: 1,
-      });
-    }
-  }
-  return merged;
+function matchesStreamCategory(row: Audit, key: StreamCategory): boolean {
+  if (key === "claims") return isClaimEvent(row);
+  if (key === "ai") return isAiEvent(row);
+  if (key === "consent") return isConsentEvent(row);
+  return isFlaggedEvent(row);
 }
 
 type StreakCell = {
@@ -237,7 +193,7 @@ export function AuditorGlassSuite({
 }) {
   const [streamScope, setStreamScope] = useState<ScopeFilter>("all");
   const [streakRange, setStreakRange] = useState<StreakRange>("hourly");
-  const [selectedBlock, setSelectedBlock] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<StreamCategory | null>(null);
   const [hoveredCell, setHoveredCell] = useState<StreakCell | null>(null);
 
   const scopedLogs = useMemo(() => {
@@ -248,11 +204,11 @@ export function AuditorGlassSuite({
 
   const stats = useMemo(() => {
     const total = scopedLogs.length;
-    const stageCounts: Record<AuditStage, number> = {
-      verified: 0,
-      ai: 0,
-      consent: 0,
-      flagged: 0,
+    const categoryEvents: Record<StreamCategory, Audit[]> = {
+      claims: [],
+      ai: [],
+      consent: [],
+      flagged: [],
     };
 
     let consentGranted = 0;
@@ -263,7 +219,9 @@ export function AuditorGlassSuite({
     let lowConfCount = 0;
 
     for (const row of scopedLogs) {
-      stageCounts[classifyAuditStage(row)]++;
+      for (const { key } of BAR_CATEGORIES) {
+        if (matchesStreamCategory(row, key)) categoryEvents[key].push(row);
+      }
       if (row.event_type === "consent_granted" || row.outcome === "granted") consentGranted++;
       if (row.event_type === "consent_revoked" || row.outcome === "revoked") consentRevoked++;
       if (row.event_type === "access_denied" || row.event_type === "tool_blocked") accessDenied++;
@@ -273,6 +231,15 @@ export function AuditorGlassSuite({
         if (row.confidence < 0.7) lowConfCount++;
       }
     }
+
+    const categoryCounts: Record<StreamCategory, number> = {
+      claims: categoryEvents.claims.length,
+      ai: categoryEvents.ai.length,
+      consent: categoryEvents.consent.length,
+      flagged: categoryEvents.flagged.length,
+    };
+    const maxBarCount = Math.max(1, ...Object.values(categoryCounts));
+    const categorySum = Object.values(categoryCounts).reduce((a, b) => a + b, 0);
 
     const avgConf = confCount > 0 ? confSum / confCount : null;
     const strictEval = safety.find(item => item.threshold === 0.9) ?? safety[0];
@@ -289,7 +256,10 @@ export function AuditorGlassSuite({
 
     return {
       total,
-      stageCounts,
+      categoryCounts,
+      categoryEvents,
+      maxBarCount,
+      categorySum,
       consentGranted,
       consentRevoked,
       accessDenied,
@@ -302,8 +272,6 @@ export function AuditorGlassSuite({
       newestDate,
     };
   }, [scopedLogs, safety, logs]);
-
-  const hypnoBlocks = useMemo(() => buildHypnogramBlocks(scopedLogs, 20), [scopedLogs]);
 
   // GitHub-style Streak Matrix: Hourly (16 hrs x 6 ten-min slices) or Monthly (16 weeks x 7 weekdays)
   const streakGrid = useMemo(() => {
@@ -528,35 +496,21 @@ export function AuditorGlassSuite({
     };
   }, [logs, streakRange]);
 
-  const HYPNO_W = 680;
-  const HYPNO_H = compact ? 124 : 168;
-  const PAD_LEFT = 56;
-  const PAD_RIGHT = 6;
-  const PAD_TOP = 6;
-  const CHART_BOTTOM = compact ? 102 : 140;
-  const LANE_H = compact ? 23.5 : 32;
-  const PILL_H = compact ? 18 : 24;
-  const CHART_W = HYPNO_W - PAD_LEFT - PAD_RIGHT;
-  const totalWeight = hypnoBlocks.reduce((acc, b) => acc + b.weight, 0) || 1;
-  const activeBlock = selectedBlock !== null ? hypnoBlocks[selectedBlock] ?? null : null;
+  const BAR_W = 680;
+  const BAR_H = compact ? 132 : 176;
+  const BAR_LEFT = 36;
+  const BAR_RIGHT = 12;
+  const BAR_TOP = 24;
+  const BAR_BOTTOM = compact ? 104 : 144;
+  const BAR_PLOT_W = BAR_W - BAR_LEFT - BAR_RIGHT;
+  const BAR_PLOT_H = BAR_BOTTOM - BAR_TOP;
+  const BAR_SLOT_W = BAR_PLOT_W / BAR_CATEGORIES.length;
+  const BAR_COL_W = Math.min(compact ? 74 : 92, BAR_SLOT_W * 0.54);
 
-  const timeTicks = useMemo(() => {
-    if (!hypnoBlocks.length) return [];
-    const indices =
-      hypnoBlocks.length <= 4
-        ? hypnoBlocks.map((_, i) => i)
-        : [
-            0,
-            Math.floor(hypnoBlocks.length * 0.33),
-            Math.floor(hypnoBlocks.length * 0.66),
-            hypnoBlocks.length - 1,
-          ];
-    return [...new Set(indices)].map(idx => {
-      const priorWeight = hypnoBlocks.slice(0, idx).reduce((s, b) => s + b.weight, 0);
-      const x = PAD_LEFT + (priorWeight / totalWeight) * CHART_W;
-      return { x, label: shortTime(hypnoBlocks[idx].startIso), key: `${idx}-${hypnoBlocks[idx].startIso}` };
-    });
-  }, [hypnoBlocks, totalWeight, CHART_W]);
+  const selectedMeta = selectedCategory
+    ? BAR_CATEGORIES.find(c => c.key === selectedCategory) ?? null
+    : null;
+  const selectedEvents = selectedCategory ? stats.categoryEvents[selectedCategory] : [];
 
   const HEAT_W = 540;
   const HEAT_H = compact ? 156 : 198;
@@ -597,7 +551,7 @@ export function AuditorGlassSuite({
                   className={"audit-glass-seg-btn" + (streamScope === key ? " active" : "")}
                   onClick={() => {
                     setStreamScope(key);
-                    setSelectedBlock(null);
+                    setSelectedCategory(null);
                   }}
                 >
                   {label}
@@ -664,111 +618,136 @@ export function AuditorGlassSuite({
           </div>
         </div>
 
-        {/* 4-lane Hypnogram SVG */}
+        {/* 4-Category Bar Chart: Claims · AI · Consent · Flagged */}
         <div className="audit-hypno-wrap">
-          {hypnoBlocks.length > 0 ? (
+          {stats.total > 0 ? (
             <svg
-              viewBox={`0 0 ${HYPNO_W} ${HYPNO_H}`}
+              viewBox={`0 0 ${BAR_W} ${BAR_H}`}
               className="audit-svg"
               role="img"
-              aria-label="Chronological audit stage timeline"
+              aria-label="Audit events bar chart by category: Claims, AI, Consent, Flagged"
             >
               <defs>
-                {LANE_LABELS.map(stage => {
-                  const meta = STAGE_META[stage];
-                  return (
-                    <linearGradient
-                      key={meta.gradId}
-                      id={meta.gradId + (compact ? "-c" : "")}
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop offset="0%" stopColor={meta.fill} stopOpacity={0.34} />
-                      <stop offset="100%" stopColor={meta.soft} stopOpacity={0.03} />
-                    </linearGradient>
-                  );
-                })}
+                {BAR_CATEGORIES.map(cat => (
+                  <linearGradient
+                    key={cat.gradId}
+                    id={cat.gradId + (compact ? "-c" : "")}
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop offset="0%" stopColor={cat.fill} stopOpacity={0.95} />
+                    <stop offset="100%" stopColor={cat.soft} stopOpacity={0.28} />
+                  </linearGradient>
+                ))}
               </defs>
 
-              {LANE_LABELS.map(stage => {
-                const meta = STAGE_META[stage];
-                const y = PAD_TOP + meta.laneIndex * LANE_H + PILL_H * 0.65;
+              {/* Horizontal gridlines & Y-axis ticks */}
+              {[0, 0.5, 1].map(ratio => {
+                const y = BAR_BOTTOM - ratio * BAR_PLOT_H;
+                const tickVal = Math.round(stats.maxBarCount * ratio);
                 return (
-                  <text key={stage} x={0} y={y} fontSize={11.5} fill="rgba(255, 255, 255, 0.56)">
-                    {meta.label}
-                  </text>
+                  <g key={ratio}>
+                    <line
+                      x1={BAR_LEFT}
+                      y1={y}
+                      x2={BAR_W - BAR_RIGHT}
+                      y2={y}
+                      stroke={ratio === 0 ? "rgba(255, 255, 255, 0.18)" : "rgba(255, 255, 255, 0.08)"}
+                      strokeDasharray={ratio === 0 ? undefined : "3 4"}
+                      strokeWidth={1}
+                    />
+                    <text
+                      x={BAR_LEFT - 8}
+                      y={y + 3.5}
+                      textAnchor="end"
+                      fontSize={10.5}
+                      fontFamily="Geist Mono, ui-monospace, monospace"
+                      fill="rgba(255, 255, 255, 0.48)"
+                    >
+                      {tickVal}
+                    </text>
+                  </g>
                 );
               })}
 
-              <line
-                x1={PAD_LEFT}
-                y1={CHART_BOTTOM}
-                x2={HYPNO_W - PAD_RIGHT}
-                y2={CHART_BOTTOM}
-                stroke="rgba(255, 255, 255, 0.14)"
-                strokeWidth={1}
-              />
+              {/* Category Bars */}
+              {BAR_CATEGORIES.map((cat, idx) => {
+                const count = stats.categoryCounts[cat.key];
+                const share = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
+                const slotCenter = BAR_LEFT + (idx + 0.5) * BAR_SLOT_W;
+                const x = slotCenter - BAR_COL_W / 2;
+                const barH = count > 0 ? Math.max(8, (count / stats.maxBarCount) * BAR_PLOT_H) : 0;
+                const y = BAR_BOTTOM - barH;
+                const isPicked = selectedCategory === cat.key;
 
-              {(() => {
-                let cursor = 0;
-                return hypnoBlocks.map(block => {
-                  const meta = STAGE_META[block.stage];
-                  const x = PAD_LEFT + (cursor / totalWeight) * CHART_W;
-                  const rawW = (block.weight / totalWeight) * CHART_W;
-                  cursor += block.weight;
-                  const gap = Math.min(3.5, rawW * 0.12);
-                  const w = Math.max(8, rawW - gap);
-                  const pillY = PAD_TOP + meta.laneIndex * LANE_H;
-                  const colH = Math.max(0, CHART_BOTTOM - (pillY + PILL_H * 0.5));
-                  const isPicked = selectedBlock === block.index;
+                return (
+                  <g
+                    key={cat.key}
+                    className="audit-svg-interactive"
+                    onClick={() =>
+                      setSelectedCategory(prev => (prev === cat.key ? null : cat.key))
+                    }
+                  >
+                    <title>{`${cat.label}: ${count} event(s) (${share}% of ${stats.total})`}</title>
 
-                  return (
-                    <g
-                      key={block.index}
-                      className="audit-svg-interactive"
-                      onClick={() =>
-                        setSelectedBlock(prev => (prev === block.index ? null : block.index))
-                      }
+                    {/* Frosted backdrop track */}
+                    <rect
+                      x={x}
+                      y={BAR_TOP}
+                      width={BAR_COL_W}
+                      height={BAR_PLOT_H}
+                      rx={10}
+                      fill="rgba(255, 255, 255, 0.045)"
+                      stroke="rgba(255, 255, 255, 0.07)"
+                      strokeWidth={0.75}
+                    />
+
+                    {/* Filled liquid glass bar */}
+                    {barH > 0 && (
+                      <rect
+                        x={x}
+                        y={y}
+                        width={BAR_COL_W}
+                        height={barH}
+                        rx={10}
+                        fill={`url(#${cat.gradId}${compact ? "-c" : ""})`}
+                        stroke={isPicked ? "#ffffff" : "rgba(255, 255, 255, 0.28)"}
+                        strokeWidth={isPicked ? 2 : 0.9}
+                      />
+                    )}
+
+                    {/* Value + % label above bar */}
+                    <text
+                      x={slotCenter}
+                      y={Math.max(13, y - 7)}
+                      textAnchor="middle"
+                      fontSize={compact ? 11 : 12}
+                      fontWeight={700}
+                      fontFamily="Geist Mono, ui-monospace, monospace"
+                      fill="#ffffff"
                     >
-                      <title>
-                        {`${meta.label} · ${block.events.length} event(s) (${shortTime(block.startIso)}–${shortTime(block.endIso)})`}
-                      </title>
-                      <rect
-                        x={x}
-                        y={pillY + PILL_H * 0.5}
-                        width={w}
-                        height={colH}
-                        fill={`url(#${meta.gradId}${compact ? "-c" : ""})`}
-                      />
-                      <rect
-                        x={x}
-                        y={pillY}
-                        width={w}
-                        height={PILL_H}
-                        rx={7}
-                        fill={meta.fill}
-                        stroke={isPicked ? "#ffffff" : "rgba(255, 255, 255, 0.2)"}
-                        strokeWidth={isPicked ? 2 : 0.75}
-                      />
-                    </g>
-                  );
-                });
-              })()}
+                      {count}
+                      <tspan fill="rgba(255, 255, 255, 0.55)" fontWeight={500}>
+                        {` · ${share}%`}
+                      </tspan>
+                    </text>
 
-              {timeTicks.map(tick => (
-                <text
-                  key={tick.key}
-                  x={Math.min(HYPNO_W - PAD_RIGHT - 32, tick.x)}
-                  y={HYPNO_H - 6}
-                  fontSize={11}
-                  fontFamily="Geist Mono, ui-monospace, monospace"
-                  fill="rgba(255, 255, 255, 0.48)"
-                >
-                  {tick.label}
-                </text>
-              ))}
+                    {/* Category label below axis */}
+                    <text
+                      x={slotCenter}
+                      y={BAR_H - 6}
+                      textAnchor="middle"
+                      fontSize={compact ? 11.5 : 12.5}
+                      fontWeight={isPicked ? 700 : 600}
+                      fill={isPicked ? "#ffffff" : "rgba(255, 255, 255, 0.78)"}
+                    >
+                      {cat.label}
+                    </text>
+                  </g>
+                );
+              })}
             </svg>
           ) : (
             <p className="audit-glass-empty">
@@ -777,38 +756,42 @@ export function AuditorGlassSuite({
           )}
         </div>
 
-        {activeBlock && (
+        {selectedMeta && (
           <div className="audit-glass-callout">
             <span className="audit-glass-callout-text">
-              <strong>{STAGE_META[activeBlock.stage].label}</strong> · {activeBlock.events.length} event(s) ·{" "}
-              {shortTime(activeBlock.startIso)}–{shortTime(activeBlock.endIso)} ·{" "}
-              {[...new Set(activeBlock.events.map(e => formatLabel(e.event_type)))].slice(0, 3).join(", ")}
+              <strong>{selectedMeta.label}</strong> · {selectedEvents.length} event(s)
+              {selectedEvents.length > 0 &&
+                ` · Latest ${shortTime(selectedEvents[0].created_at)} · ${[
+                  ...new Set(selectedEvents.map(e => formatLabel(e.event_type))),
+                ]
+                  .slice(0, 3)
+                  .join(", ")}`}
             </span>
-            {onSelectStage && (
+            {onOpenVault && (
               <button
                 type="button"
                 className="audit-glass-mini-btn"
-                onClick={() => onSelectStage(activeBlock.stage)}
+                onClick={onOpenVault}
               >
-                Filter log
+                Open Vault
               </button>
             )}
           </div>
         )}
 
         {/* Horizontal segmented proportion bar */}
-        {stats.total > 0 && (
-          <div className="audit-prop-bar" role="img" aria-label="Audit stage proportions">
-            {STAGE_ORDER.map(stage => {
-              const count = stats.stageCounts[stage];
+        {stats.categorySum > 0 && (
+          <div className="audit-prop-bar" role="img" aria-label="Audit category proportions">
+            {BAR_CATEGORIES.map(cat => {
+              const count = stats.categoryCounts[cat.key];
               if (!count) return null;
               return (
                 <span
-                  key={stage}
+                  key={cat.key}
                   className="audit-prop-seg"
                   style={{
                     flexGrow: count,
-                    background: STAGE_META[stage].fill,
+                    background: cat.fill,
                   }}
                 />
               );
@@ -816,26 +799,27 @@ export function AuditorGlassSuite({
           </div>
         )}
 
-        {/* 4-column stage breakdown footer */}
+        {/* 4-column category breakdown footer */}
         <div className="audit-stage-legend">
-          {STAGE_ORDER.map(stage => {
-            const meta = STAGE_META[stage];
-            const count = stats.stageCounts[stage];
+          {BAR_CATEGORIES.map(cat => {
+            const count = stats.categoryCounts[cat.key];
             const share = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
-            const active = stageFilter === stage;
+            const active = selectedCategory === cat.key || (cat.key !== "claims" && stageFilter === cat.key);
             return (
               <button
-                key={stage}
+                key={cat.key}
                 type="button"
                 className={"audit-stage-item" + (active ? " active" : "")}
                 onClick={() => {
-                  if (onSelectStage) onSelectStage(active ? null : stage);
-                  else if (onOpenVault) onOpenVault();
+                  setSelectedCategory(prev => (prev === cat.key ? null : cat.key));
+                  if (onSelectStage && cat.key !== "claims") {
+                    onSelectStage(stageFilter === cat.key ? null : cat.key);
+                  }
                 }}
               >
                 <span className="audit-stage-label">
-                  <i style={{ background: meta.fill }} />
-                  {meta.label}
+                  <i style={{ background: cat.fill }} />
+                  {cat.label}
                 </span>
                 <span className="audit-stage-vals">
                   <strong>{count}</strong>
