@@ -155,7 +155,7 @@ export async function POST(request: Request) {
           if (cancelled) return;
           confidence = decision.confidence;
           const threshold = scheme.config.confidence_threshold;
-          const isGreeting = decision.label === "greeting";
+          const isGreeting = decision.label === "greeting" || decision.label === "workspace_control";
           const explicitTarget = decision.app && canOpen(profile.role, decision.app) ? decision.app : null;
           const explicitAccepted = (Boolean(explicitTarget) && confidence >= threshold) || isGreeting;
 
