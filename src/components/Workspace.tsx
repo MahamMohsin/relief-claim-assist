@@ -1061,43 +1061,36 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                 )}
               </div>
 
-              {/* Apple iPad / Desktop App Grid (Icons with names below, max 6 per column, batches move left) */}
+              {/* Apple iPad / Desktop App Grid (flows vertically and wraps columns leftward to fit viewport height) */}
               <div className="ios-desktop-grid">
-                {Array.from({ length: Math.ceil(available.length / 6) }, (_, colIndex) => {
-                  const colApps = available.slice(colIndex * 6, colIndex * 6 + 6);
+                {available.map(id => {
+                  const item = apps[id];
+                  const title = appTitle(id, profile.role);
+                  const Icon = item.icon;
+                  const isRunning = openApps.includes(id);
+                  const isMinimized = isRunning && minimizedApps.includes(id);
                   return (
-                    <div className="ios-desktop-column" key={colIndex}>
-                      {colApps.map(id => {
-                        const item = apps[id];
-                        const title = appTitle(id, profile.role);
-                        const Icon = item.icon;
-                        const isRunning = openApps.includes(id);
-                        const isMinimized = isRunning && minimizedApps.includes(id);
-                        return (
-                          <motion.button
-                            className={"ios-desktop-app" + (isRunning ? " running" : "") + (isMinimized ? " minimized" : "")}
-                            key={id}
-                            data-app-tile={id}
-                            data-cua={"app-icon-" + id}
-                            aria-label={isMinimized ? title + " (minimized, click to restore)" : undefined}
-                            onClick={() => openAppWindow(id)}
-                            whileHover={motionDisabled ? undefined : { y: -7, scale: 1.06 }}
-                            whileTap={motionDisabled ? undefined : { scale: 0.91 }}
-                            transition={{ type: "spring", stiffness: 360, damping: 22, mass: 0.7 }}
-                          >
-                            <div className={"ios-desktop-icon " + item.color}>
-                              {"image" in item && item.image ? (
-                                <img src={item.image} alt={title} className="ios-desktop-icon-img" />
-                              ) : (
-                                <Icon size={34} strokeWidth={2.1} />
-                              )}
-                            </div>
-                            <span className="ios-desktop-label">{title}</span>
-                            {isRunning && <span className="ios-app-running-dot" />}
-                          </motion.button>
-                        );
-                      })}
-                    </div>
+                    <motion.button
+                      className={"ios-desktop-app" + (isRunning ? " running" : "") + (isMinimized ? " minimized" : "")}
+                      key={id}
+                      data-app-tile={id}
+                      data-cua={"app-icon-" + id}
+                      aria-label={isMinimized ? title + " (minimized, click to restore)" : undefined}
+                      onClick={() => openAppWindow(id)}
+                      whileHover={motionDisabled ? undefined : { y: -7, scale: 1.06 }}
+                      whileTap={motionDisabled ? undefined : { scale: 0.91 }}
+                      transition={{ type: "spring", stiffness: 360, damping: 22, mass: 0.7 }}
+                    >
+                      <div className={"ios-desktop-icon " + item.color}>
+                        {"image" in item && item.image ? (
+                          <img src={item.image} alt={title} className="ios-desktop-icon-img" />
+                        ) : (
+                          <Icon size={34} strokeWidth={2.1} />
+                        )}
+                      </div>
+                      <span className="ios-desktop-label">{title}</span>
+                      {isRunning && <span className="ios-app-running-dot" />}
+                    </motion.button>
                   );
                 })}
               </div>

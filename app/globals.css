@@ -6640,3 +6640,154 @@ button.active-cases-card:hover {
   backdrop-filter: none;
 }
 
+/* ========================================================
+   VIEWPORT-HEIGHT RESPONSIVE SCALING (prevents bottom Y overflow
+   on 1366x768 / 125%–150% DPI laptops while preserving full size
+   on tall 900px–1080px+ screens)
+   ======================================================== */
+.dashboard-canvas {
+  padding: clamp(0.6rem, 1.5dvh, 1.5rem) clamp(1rem, 2vw, 2rem) clamp(4.6rem, 8.2dvh, 6rem);
+  gap: clamp(0.9rem, 1.6vw, 1.8rem);
+}
+
+.ios-top-hero-row {
+  max-height: calc(100dvh - clamp(108px, 14dvh, 134px));
+  gap: clamp(0.55rem, 1.2dvh, 1rem);
+  padding: 0.25rem 0.45rem 1.25rem 0.2rem;
+}
+
+.ios-top-widgets-group {
+  gap: clamp(0.55rem, 1.2dvh, 1rem);
+}
+
+/* Desktop icon grid: flows top-to-bottom and wraps extra icons into columns
+   to the LEFT so they NEVER overflow off the bottom edge or behind VoiceDock. */
+.ios-desktop-grid {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap-reverse;
+  align-content: flex-start;
+  align-items: center;
+  justify-content: flex-start;
+  max-height: calc(100dvh - clamp(112px, 14.5dvh, 138px));
+  gap: clamp(0.55rem, 1.45dvh, 1.35rem) clamp(0.75rem, 1.4vw, 1.65rem);
+  padding: 0.25rem 0.35rem 0.5rem;
+}
+
+.ios-desktop-app {
+  width: clamp(72px, 9.2dvh, 90px);
+  gap: clamp(0.28rem, 0.65dvh, 0.6rem);
+  position: relative;
+}
+
+.ios-desktop-icon {
+  width: clamp(50px, 7.4dvh, 72px);
+  height: clamp(50px, 7.4dvh, 72px);
+  border-radius: clamp(14px, 2.05dvh, 20px);
+}
+
+.ios-desktop-icon::after {
+  border-radius: clamp(14px, 2.05dvh, 20px);
+}
+
+.ios-desktop-icon svg {
+  width: clamp(23px, 3.5dvh, 34px);
+  height: clamp(23px, 3.5dvh, 34px);
+}
+
+.ios-desktop-label {
+  font-size: clamp(0.71rem, 1.2dvh, 0.84rem);
+  line-height: 1.18;
+}
+
+@media (max-width: 900px) {
+  .ios-desktop-grid {
+    flex-direction: row;
+    flex-wrap: wrap;
+    max-height: none;
+    justify-content: flex-start;
+  }
+}
+
+/* Compact vertical rhythm on shorter laptop viewports (e.g. 125%–150% DPI scaling) */
+@media (max-height: 820px) {
+  .liquid-user-header {
+    padding: 0.55rem 0.85rem;
+  }
+
+  .ios-hero-name .liquid-user-pill h1 {
+    font-size: 1.05rem;
+  }
+
+  .relief-stats-widget,
+  .ios-history-widget.compact {
+    padding: 0.8rem 0.95rem;
+    border-radius: 18px;
+  }
+
+  .overview-stats-suite {
+    gap: 0.75rem;
+  }
+
+  .overview-stats-suite .overview-card,
+  .overview-stats-suite .stack-metric-card {
+    padding: 0.8rem 0.95rem;
+    border-radius: 18px;
+  }
+
+  .overview-cluster-wrap {
+    height: 76px;
+    margin: 0.2rem 0;
+  }
+
+  .proportional-bubbles-stage {
+    height: 100px;
+  }
+
+  .overview-big-num {
+    font-size: 1.85rem;
+  }
+
+  .stack-metric-num {
+    font-size: 1.5rem;
+  }
+
+  .overview-stack-col {
+    gap: 0.75rem;
+  }
+
+  .audit-glass-suite.is-compact .audit-glass-card {
+    padding: 0.65rem 0.82rem;
+    gap: 0.42rem;
+  }
+
+  .desktop-window {
+    max-height: calc(100dvh - 108px);
+  }
+}
+
+@media (max-height: 680px) {
+  .ios-desktop-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 13px;
+  }
+
+  .ios-desktop-icon svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .ios-desktop-app {
+    width: 68px;
+  }
+
+  .ios-desktop-label {
+    font-size: 0.69rem;
+  }
+
+  .bottom-shell {
+    bottom: 0.45rem;
+  }
+}
+
