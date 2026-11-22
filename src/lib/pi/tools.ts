@@ -1,7 +1,7 @@
 import * as Type from "typebox";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
-import { actions, canOpen, type Claim, type Payload, type Profile, type UIAction } from "@/src/lib/contracts";
+import { actions, canOpen, personas, type Claim, type Payload, type Persona, type Profile, type RuleConfig, type UIAction } from "@/src/lib/contracts";
 import { ApiError, gateway } from "@/src/lib/server";
 import { classifyScam } from "@/src/lib/ai/jev";
 import { answerPolicy } from "@/src/lib/ai/rag";
@@ -16,7 +16,19 @@ export const names = [
   "privacy_manage_helper",
   "mock_dpi_verify",
   "policy_rag_search",
+  "profile_upload_sample_document",
   "escalate_to_officer",
+  "persona_switch",
+  "family_switch_select",
+  "review_claim_action",
+  "review_disburse_payment",
+  "review_set_filter",
+  "rules_configure_and_simulate",
+  "rules_publish_version",
+  "rules_staff_approval",
+  "scheme_budget_adjust",
+  "whatsapp_configure_agent",
+  "window_manage",
 ];
 const appKeys = ["claim", "profile", "scam", "policy", "privacy", "family", "review", "rules", "users", "audit", "whatsapp"] as const;
 export const miniApp = z.enum(appKeys);
@@ -393,6 +405,243 @@ export function registerTools(pi: ExtensionAPI, context: PiContext) {
       const result = await gateway("agent_escalate", { ...args, citizenId });
       emit({ type: "highlight_alert", severity: "info", message: "This claim has been flagged for an officer." });
       return textResult(result);
+    },
+  });
+
+  pi.registerTool({
+    name: "persona_switch",
+    label: "Switch demo persona",
+    description: "Switch the active demo persona to another user/role (e.g. fatima: citizen, zainab: health worker/helper, tariq: shopkeeper, bilal: review officer, sana: admin, kamran: compliance auditor).",
+    parameters: Type.Object({
+      persona: Type.String({ maxLength: 30 }),
+    }),
+    async execute(_id, input) {
+      const norm = input.persona.toLowerCase().replace(/[^a-z]/g, "");
+      const matched = (Object.keys(personas) as Persona[]).find(p => norm.includes(p) || p.includes(norm));
+      if (!matched) throw new ApiError(400, "Unknown persona. Choose: fatima, zainab, tariq, bilal, sana, or kamran.");
+      emit({ type: "switch_persona", persona: matched });
+      return textResult({ switchedTo: matched, name: personas[matched].name, role: personas[matched].role });
+    },
+  });
+
+  pi.registerTool({
+    name: "family_switch_select",
+    label: "Select family",
+    description: "Open Family Switch and switch the active family/household by name or ID.",
+    parameters: Type.Object({
+      familyName: Type.Optional(Type.String({ maxLength: 100 })),
+      familyId: Type.Optional(Type.String({ maxLength: 60 })),
+    }),
+    async execute(_id, input) {
+      if (!canOpen(profile.role, "family")) throw new ApiError(403, "Your role cannot switch families.");
+      emit({ type: "open_mini_app", app: "family" });
+      emit({ type: "switch_family_action", citizenId: input.familyId, familyName: input.familyName });
+      return textResult({ openedFamilySwitch: true, family: input.familyName || input.familyId || "selected" });
+    },
+  });
+
+  pi.registerTool({
+    name: "review_claim_action",
+    label: "Review claim",
+    description: "Perform officer review desk operations: select a claim to inspect, produce an AI case assessment summary, approve/accept, reject, or request more proof with reason.",
+    parameters: Type.Object({
+      action: Type.Union([
+        Type.Literal("select"),
+        Type.Literal("summary"),
+        Type.Literal("approve"),
+        Type.Literal("reject"),
+        Type.Literal("more_proof"),
+      ]),
+      claimId: Type.Optional(Type.String({ maxLength: 60 })),
+      citizenName: Type.Optional(Type.String({ maxLength: 100 })),
+      reason: Type.Optional(Type.String({ maxLength: 600 })),
+      reasonUr: Type.Optional(Type.String({ maxLength: 600 })),
+    }),
+    async execute(_id, input) {
+      if (!canOpen(profile.role, "review")) throw new ApiError(403, "Your role cannot review claims.");
+      emit({ type: "open_mini_app", app: "review" });
+      if (input.action === "select") {
+        emit({ type: "review_select_claim", claimId: input.claimId, citizenName: input.citizenName });
+        return textResult({ selectedClaim: input.claimId || input.citizenName || "first" });
+      }
+      if (input.action === "summary") {
+        emit({ type: "review_produce_summary", claimId: input.claimId });
+        return textResult({ producedAiSummary: true, claimId: input.claimId });
+      }
+      emit({
+        type: "review_decide_claim",
+        claimId: input.claimId,
+        decision: input.action,
+        reason: input.reason,
+        reasonUr: input.reasonUr,
+      });
+      return textResult({ recordedDecision: input.action, claimId: input.claimId, reason: input.reason });
+    },
+  });
+
+  pi.registerTool({
+    name: "review_disburse_payment",
+    label: "Disburse payment",
+    description: "Issue or retry a simulated Raast payment for an approved claim in Review Desk.",
+    parameters: Type.Object({
+      claimId: Type.Optional(Type.String({ maxLength: 60 })),
+      outcome: Type.Optional(Type.Union([Type.Literal("paid"), Type.Literal("failed")])),
+    }),
+    async execute(_id, input) {
+      if (!canOpen(profile.role, "review")) throw new ApiError(403, "Your role cannot disburse payments.");
+      emit({ type: "open_mini_app", app: "review" });
+      emit({ type: "review_disburse", claimId: input.claimId, outcome: input.outcome || "paid" });
+      return textResult({ disbursedPayment: true, outcome: input.outcome || "paid" });
+    },
+  });
+
+  pi.registerTool({
+    name: "review_set_filter",
+    label: "Filter review queue",
+    description: "Filter the Review Desk queue by status (all, accepted, rejected) and/or sort by reliability score (asc, desc).",
+    parameters: Type.Object({
+      filter: Type.Optional(Type.Union([Type.Literal("all"), Type.Literal("accepted"), Type.Literal("rejected")])),
+      sort: Type.Optional(Type.Union([Type.Literal("asc"), Type.Literal("desc")])),
+    }),
+    async execute(_id, input) {
+      if (!canOpen(profile.role, "review")) throw new ApiError(403, "Your role cannot access review desk.");
+      emit({ type: "open_mini_app", app: "review" });
+      emit({ type: "review_filter", filter: input.filter || "all", sort: input.sort });
+      return textResult({ setFilter: input.filter || "all", sort: input.sort });
+    },
+  });
+
+  pi.registerTool({
+    name: "rules_configure_and_simulate",
+    label: "Configure or simulate rules",
+    description: "Open Rule Studio, update rule parameters (income cap, min household, payout, confidence threshold) and optionally simulate impact on historical cases (Digital Twin).",
+    parameters: Type.Object({
+      incomeCap: Type.Optional(Type.Number({ minimum: 0, maximum: 10000000 })),
+      minimumHousehold: Type.Optional(Type.Number({ minimum: 1, maximum: 100 })),
+      amountPkr: Type.Optional(Type.Number({ minimum: 1, maximum: 1000000 })),
+      confidenceThreshold: Type.Optional(Type.Number({ minimum: 0.5, maximum: 1 })),
+      name: Type.Optional(Type.String({ maxLength: 100 })),
+      simulate: Type.Optional(Type.Boolean()),
+    }),
+    async execute(_id, input) {
+      if (!canOpen(profile.role, "rules")) throw new ApiError(403, "Your role cannot edit scheme rules.");
+      const patch: Partial<RuleConfig> = {};
+      if (input.incomeCap !== undefined) patch.income_cap = input.incomeCap;
+      if (input.minimumHousehold !== undefined) patch.minimum_household = input.minimumHousehold;
+      if (input.amountPkr !== undefined) patch.amount_pkr = input.amountPkr;
+      if (input.confidenceThreshold !== undefined) patch.confidence_threshold = input.confidenceThreshold;
+      emit({ type: "open_mini_app", app: "rules" });
+      emit({ type: "rules_update_config", config: patch, name: input.name });
+      if (input.simulate) {
+        emit({ type: "rules_simulate", config: patch });
+      }
+      return textResult({ updatedRuleConfig: patch, simulated: Boolean(input.simulate) });
+    },
+  });
+
+  pi.registerTool({
+    name: "rules_publish_version",
+    label: "Publish rule version",
+    description: "Publish a new live eligibility rule version in Rule Studio.",
+    parameters: Type.Object({
+      name: Type.String({ minLength: 3, maxLength: 100 }),
+      incomeCap: Type.Number({ minimum: 0, maximum: 10000000 }),
+      minimumHousehold: Type.Number({ minimum: 1, maximum: 100 }),
+      amountPkr: Type.Number({ minimum: 1, maximum: 1000000 }),
+      confidenceThreshold: Type.Number({ minimum: 0.5, maximum: 1 }),
+    }),
+    async execute(_id, input) {
+      if (!canOpen(profile.role, "rules")) throw new ApiError(403, "Your role cannot publish scheme rules.");
+      const config: RuleConfig = {
+        income_cap: input.incomeCap,
+        minimum_household: input.minimumHousehold,
+        amount_pkr: input.amountPkr,
+        confidence_threshold: input.confidenceThreshold,
+      };
+      emit({ type: "open_mini_app", app: "rules" });
+      emit({ type: "rules_publish", config, name: input.name });
+      return textResult({ publishedRuleName: input.name, config });
+    },
+  });
+
+  pi.registerTool({
+    name: "rules_staff_approval",
+    label: "Approve or reject staff access",
+    description: "Approve or reject a pending staff access request in Rule Studio.",
+    parameters: Type.Object({
+      userId: Type.String({ maxLength: 60 }),
+      decision: Type.Union([Type.Literal("active"), Type.Literal("rejected")]),
+    }),
+    async execute(_id, input) {
+      if (!canOpen(profile.role, "rules")) throw new ApiError(403, "Your role cannot manage staff access.");
+      emit({ type: "open_mini_app", app: "rules" });
+      emit({ type: "rules_staff_decision", userId: input.userId, decision: input.decision });
+      return textResult({ userId: input.userId, decision: input.decision });
+    },
+  });
+
+  pi.registerTool({
+    name: "scheme_budget_adjust",
+    label: "Adjust scheme budget",
+    description: "Update the scheme budget total PKR and record a reason.",
+    parameters: Type.Object({
+      totalPkr: Type.Number({ minimum: 0, maximum: 999999999999 }),
+      reason: Type.String({ minLength: 5, maxLength: 300 }),
+    }),
+    async execute(_id, input) {
+      if (profile.role !== "admin" && profile.role !== "officer") throw new ApiError(403, "Only administrators or officers can update scheme budget.");
+      emit({ type: "budget_update", totalPkr: input.totalPkr, reason: input.reason.trim() });
+      return textResult({ updatedBudgetPkr: input.totalPkr, reason: input.reason.trim() });
+    },
+  });
+
+  pi.registerTool({
+    name: "whatsapp_configure_agent",
+    label: "Configure WhatsApp Agent",
+    description: "Open the WhatsApp AI Agent mini-app and save or update your official Meta WhatsApp Agent Platform API key.",
+    parameters: Type.Object({
+      apiKey: Type.String({ maxLength: 200 }),
+    }),
+    async execute(_id, input) {
+      emit({ type: "open_mini_app", app: "whatsapp" });
+      emit({ type: "whatsapp_set_key", key: input.apiKey.trim() });
+      return textResult({ configuredWhatsAppKey: true });
+    },
+  });
+
+  pi.registerTool({
+    name: "window_manage",
+    label: "Manage workspace window",
+    description: "Close, minimize, or restore an open mini-app window, or toggle 2G Lite mode or simulated network drop.",
+    parameters: Type.Object({
+      action: Type.Union([
+        Type.Literal("close"),
+        Type.Literal("minimize"),
+        Type.Literal("restore"),
+        Type.Literal("toggle_lite"),
+        Type.Literal("toggle_network_drop"),
+      ]),
+      app: Type.Optional(Type.String({ maxLength: 40 })),
+    }),
+    async execute(_id, input) {
+      if (input.action === "toggle_lite") {
+        emit({ type: "toggle_feature", feature: "lite" });
+        return textResult({ toggledLiteMode: true });
+      }
+      if (input.action === "toggle_network_drop") {
+        emit({ type: "toggle_feature", feature: "network_drop" });
+        return textResult({ toggledNetworkDrop: true });
+      }
+      const targetApp = resolveApp(input.app) || (context.screenContext?.activeApp ? resolveApp(context.screenContext.activeApp) : null);
+      if (!targetApp) throw new ApiError(400, "Specify which app to close, minimize, or restore.");
+      if (input.action === "close") {
+        emit({ type: "close_window", app: targetApp });
+      } else if (input.action === "minimize") {
+        emit({ type: "minimize_window", app: targetApp });
+      } else if (input.action === "restore") {
+        emit({ type: "open_mini_app", app: targetApp });
+      }
+      return textResult({ action: input.action, app: targetApp });
     },
   });
 }
