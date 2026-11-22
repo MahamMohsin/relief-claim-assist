@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, LockKeyhole, RefreshCw, Search, ShieldCheck } from "lucide-react";
 import type { Audit } from "@/src/lib/contracts";
 import type { ViewContext } from "./MiniApps";
+import { cuaEngine } from "./os/cuaEngine";
 
 export type SafetyMetric = {
   threshold: number;
@@ -1103,6 +1104,63 @@ export function AuditVaultView({
     });
   }, [allLogs, filterText, category]);
 
+  const auditSnapRef = useRef({
+    tab,
+    category,
+    filterText,
+    allLogs,
+    filteredRows,
+    safetyList,
+  });
+  auditSnapRef.current = { tab, category, filterText, allLogs, filteredRows, safetyList };
+
+  useEffect(() => {
+    cuaEngine.search.audit = setFilterText;
+    cuaEngine.audit = {
+      getSnapshot: () => {
+        const s = auditSnapRef.current;
+        const confRows = s.allLogs.filter(r => r.confidence !== null);
+        const avgConf = confRows.length
+          ? Math.round((confRows.reduce((acc, r) => acc + (r.confidence ?? 0), 0) / confRows.length) * 100)
+          : undefined;
+        const strict = s.safetyList.find(item => item.threshold === 0.9) ?? s.safetyList[0];
+        const relaxed = s.safetyList.find(item => item.threshold !== 0.9);
+        return {
+          totalLogs: s.allLogs.length,
+          activeTab: s.tab,
+          category: s.category,
+          filterText: s.filterText,
+          filteredCount: s.filteredRows.length,
+          safetyScoreAverage: avgConf,
+          recentEvents: s.filteredRows.slice(0, 5).map(r => ({
+            eventType: r.event_type,
+            actorRole: r.actor_role,
+            outcome: r.outcome,
+          })),
+          ...(strict ? {
+            safetySummary: {
+              strictBadApprovals: strict.bad_approvals ?? 0,
+              strictOfficerReviewPct: Math.round((strict.officer_review_rate ?? 1) * 100),
+              relaxedBadApprovals: relaxed?.bad_approvals ?? 0,
+            },
+          } : {}),
+        };
+      },
+      setTab: next => setTab(next),
+      setCategory: next => setCategory(next),
+      setFilterText: query => setFilterText(query),
+      selectEvent: idx => {
+        const row = auditSnapRef.current.filteredRows[idx];
+        if (row) setSelection(row);
+      },
+      refresh: () => refreshRef.current(),
+    };
+    return () => {
+      delete cuaEngine.search.audit;
+      if (cuaEngine.audit) cuaEngine.audit = null;
+    };
+  }, []);
+
   return (
     <div className="audit-vault-shell">
       {(logs.error || safety.error) && (
@@ -1116,6 +1174,7 @@ export function AuditVaultView({
         <div className="tabs">
           <button
             type="button"
+            data-cua="audit-tab-events"
             aria-pressed={tab === "events"}
             onClick={() => setTab("events")}
           >
@@ -1123,6 +1182,7 @@ export function AuditVaultView({
           </button>
           <button
             type="button"
+            data-cua="audit-tab-eval"
             aria-pressed={tab === "eval"}
             onClick={() => setTab("eval")}
           >
@@ -1138,6 +1198,7 @@ export function AuditVaultView({
           ))}
           <button
             type="button"
+            data-cua="audit-refresh"
             className="secondary"
             disabled={ctx.offline || logs.loading}
             onClick={() => ctx.refresh()}
@@ -1161,7 +1222,7 @@ export function AuditVaultView({
           </div>
 
           <div className="audit-search-row">
-            <span className="kanban-search">
+            <span className="kanban-search" data-cua="audit-search">
               <Search size={15} />
               <input
                 type="search"
@@ -1185,6 +1246,7 @@ export function AuditVaultView({
                 <button
                   key={key}
                   type="button"
+                  data-cua={`audit-cat-${key}`}
                   className={"audit-filter-pill" + (category === key ? " is-active" : "")}
                   aria-pressed={category === key}
                   onClick={() => setCategory(key)}
