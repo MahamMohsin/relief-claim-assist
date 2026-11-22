@@ -1,8 +1,7 @@
 import { answerPolicy } from "@/src/lib/ai/rag";
 import { analyzeScamCheck } from "@/src/lib/ai/scamCheck";
-import { gateway } from "@/src/lib/server";
-import type { Claim, Overview, PolicyAnswer, Role, SchemeBudget } from "@/src/lib/contracts";
-import type { UserSessionInfo } from "./session";
+import type { CitizenProfileData, Claim, Family, PolicyAnswer, Role, SchemeBudget } from "@/src/lib/contracts";
+import { scopedGateway, type ScopedUserIdentity } from "./scoped-gateway";
 
 export type WhatsAppToolDefinition = {
   name: string;
@@ -13,74 +12,124 @@ export type WhatsAppToolDefinition = {
     properties: Record<string, { type: string; description: string; enum?: string[] }>;
     required: string[];
   };
-  execute: (user: UserSessionInfo, args: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  execute: (user: ScopedUserIdentity, args: Record<string, unknown>) => Promise<Record<string, unknown>>;
 };
 
 export const whatsAppTools: WhatsAppToolDefinition[] = [
   {
     name: "get_my_claims",
-    description: "Get list of relief claims, status, requested amounts, and payment status for the current citizen or assigned family.",
-    allowedRoles: ["citizen", "helper", "officer", "admin", "auditor"],
+    description: "Get list of relief claims, status, requested amounts, and payment status strictly for the current citizen or helper's consented family.",
+    allowedRoles: ["citizen", "helper"],
     parameters: {
       type: "object",
       properties: {},
       required: [],
     },
     execute: async user => {
-      try {
-        const claims = await gateway<Claim[]>("claims", { citizenId: user.citizenId });
-        return {
-          count: claims.length,
-          claims: claims.slice(0, 5).map(c => ({
-            id: c.id,
-            status: c.status,
-            funding_status: c.funding_status,
-            amount_pkr: c.amount_pkr,
-            notes: c.payload_json?.notes || "Emergency Relief Aid",
-            household_size: c.payload_json?.household_size,
-            monthly_income: c.payload_json?.monthly_income,
-            updated_at: c.updated_at,
-            payment: c.payment ? { status: c.payment.status, raast_ref: c.payment.raast_ref, amount_pkr: c.payment.amount_pkr } : null,
-            decision_note: c.citizen_reason_en,
-          })),
-        };
-      } catch {
-        // Fallback demo claims if database gateway not connected in demo mode
-        return {
-          count: 2,
-          claims: [
-            {
-              id: "c37d5ff0-482a-4467-8c31-7e923e420d3b",
-              status: "draft",
-              funding_status: null,
-              amount_pkr: 25000,
-              notes: "Emergency flood grant for house damage and rations",
-              household_size: 4,
-              monthly_income: 18000,
-              updated_at: new Date().toISOString(),
-              payment: null,
-            },
-            {
-              id: "68834985-1102-4b2a-89a1-5d9e7b23f3d3",
-              status: "needs_proof",
-              funding_status: null,
-              amount_pkr: 25000,
-              notes: "Medical assistance and utility relief",
-              household_size: 5,
-              monthly_income: 15000,
-              updated_at: new Date().toISOString(),
-              payment: null,
-              decision_note: "Please attach a readable CNIC or income proof.",
-            },
-          ],
-        };
+      let targetCitizenId = user.citizenId;
+      let familyLabel: string | undefined;
+
+      // Helpers act on behalf of their consented families
+      if (user.role === "helper" && !targetCitizenId) {
+        const families = await scopedGateway<Family[]>(user, "families", {});
+        const consented = families.find(f => f.consent === "granted") || families[0];
+        if (!consented) {
+          return {
+            count: 0,
+            claims: [],
+            note: `No consented family is currently assigned to ${user.name}.`,
+          };
+        }
+        targetCitizenId = consented.id;
+        familyLabel = consented.full_name;
       }
+
+      const claims = await scopedGateway<Claim[]>(
+        user,
+        "claims",
+        targetCitizenId ? { citizenId: targetCitizenId } : {},
+      );
+
+      return {
+        owner: familyLabel || user.name,
+        count: claims.length,
+        claims: claims.slice(0, 6).map(c => ({
+          id: c.id,
+          status: c.status,
+          funding_status: c.funding_status,
+          amount_pkr: c.amount_pkr,
+          notes: c.payload_json?.notes || "Emergency Relief Aid",
+          household_size: c.payload_json?.household_size,
+          monthly_income: c.payload_json?.monthly_income,
+          updated_at: c.updated_at,
+          payment: c.payment
+            ? { status: c.payment.status, raast_ref: c.payment.raast_ref, amount_pkr: c.payment.amount_pkr }
+            : null,
+          decision_note: c.citizen_reason_en,
+        })),
+      };
+    },
+  },
+
+  {
+    name: "get_my_profile",
+    description: "Get the current citizen's verified profile details (name, household size, monthly income, village area, CNIC mock, and uploaded documents).",
+    allowedRoles: ["citizen", "helper"],
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    execute: async user => {
+      const data = await scopedGateway<CitizenProfileData>(
+        user,
+        "citizen_profile",
+        user.citizenId ? { citizenId: user.citizenId } : {},
+      );
+      return {
+        full_name: data.citizen.full_name,
+        cnic_mock: data.citizen.cnic_mock,
+        household_size: data.citizen.household_size,
+        monthly_income_mock: data.citizen.monthly_income_mock,
+        village_area: data.citizen.village_area,
+        phone: data.citizen.phone,
+        documents_count: data.documents.length,
+        documents: data.documents.map(d => ({
+          doc_type: d.doc_type,
+          verified_status: d.verified_status,
+          confidence: d.confidence,
+        })),
+      };
+    },
+  },
+
+  {
+    name: "get_families",
+    description: "List families assigned to this helper/officer/admin along with their consent status and village area.",
+    allowedRoles: ["helper", "officer", "admin"],
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    execute: async user => {
+      const families = await scopedGateway<Family[]>(user, "families", {});
+      return {
+        owner: user.name,
+        count: families.length,
+        families: families.slice(0, 10).map(f => ({
+          id: f.id,
+          full_name: f.full_name,
+          village_area: f.village_area,
+          consent: f.consent,
+        })),
+      };
     },
   },
 
   {
     name: "create_claim_draft",
-    description: "Start a new relief cash assistance claim with monthly household income and family size.",
+    description: "Start a new relief cash assistance claim draft with monthly household income and family size.",
     allowedRoles: ["citizen", "helper"],
     parameters: {
       type: "object",
@@ -94,33 +143,29 @@ export const whatsAppTools: WhatsAppToolDefinition[] = [
     execute: async (user, args) => {
       const income = Number(args.monthly_income ?? 0);
       const household = Number(args.household_size ?? 1);
-      const notes = String(args.notes ?? "Emergency aid request submitted via WhatsApp");
+      const notes = String(args.notes ?? "Emergency aid request submitted via messaging");
       const claimId = crypto.randomUUID();
       const key = crypto.randomUUID();
 
-      try {
-        const saved = await gateway<Claim>("draft", {
-          citizenId: user.citizenId,
-          claimId,
-          key,
-          payload: { monthly_income: income, household_size: household, notes },
-        });
-        return {
-          success: true,
-          claim_id: saved.id,
-          status: saved.status,
-          amount_pkr: saved.amount_pkr,
-          message: `Relief claim draft created successfully (ID: ${saved.id.slice(0, 8)}). You can review it or attach evidence in the app.`,
-        };
-      } catch {
-        return {
-          success: true,
-          claim_id: claimId,
-          status: "draft",
-          amount_pkr: 25000,
-          message: `Relief claim draft created successfully for PKR 25,000 (${household} members, PKR ${income}/mo income). Ref: #${claimId.slice(0, 8)}.`,
-        };
+      let targetCitizenId = user.citizenId;
+      if (user.role === "helper" && !targetCitizenId) {
+        const families = await scopedGateway<Family[]>(user, "families", {});
+        targetCitizenId = families.find(f => f.consent === "granted")?.id ?? null;
       }
+
+      const saved = await scopedGateway<Claim>(user, "draft", {
+        citizenId: targetCitizenId,
+        claimId,
+        key,
+        payload: { monthly_income: income, household_size: household, notes },
+      });
+      return {
+        success: true,
+        claim_id: saved.id,
+        status: saved.status,
+        amount_pkr: saved.amount_pkr,
+        message: `Relief claim draft created for ${user.name} (ID: ${saved.id.slice(0, 8)}). You can review it or attach evidence in Relief Assist.`,
+      };
     },
   },
 
@@ -137,20 +182,12 @@ export const whatsAppTools: WhatsAppToolDefinition[] = [
     },
     execute: async (_user, args) => {
       const q = String(args.question ?? "");
-      try {
-        const result: PolicyAnswer = await answerPolicy(q);
-        return {
-          answer: result.answer,
-          version: result.policy_version,
-          citations: result.citations.map(c => ({ code: c.section_code, title: c.title })),
-        };
-      } catch {
-        return {
-          answer: "Under Scheme Rule v2, households with monthly income up to PKR 25,000 and at least 3 household members are eligible for standard emergency relief grants of PKR 25,000.",
-          version: "2026.11",
-          citations: [{ code: "SEC-4.1", title: "Eligibility Criteria" }],
-        };
-      }
+      const result: PolicyAnswer = await answerPolicy(q);
+      return {
+        answer: result.answer,
+        version: result.policy_version,
+        citations: result.citations.map(c => ({ code: c.section_code, title: c.title })),
+      };
     },
   },
 
@@ -169,27 +206,44 @@ export const whatsAppTools: WhatsAppToolDefinition[] = [
     execute: async (_user, args) => {
       const text = String(args.message ?? "");
       const ref = String(args.reference ?? "");
-      try {
-        const result = await analyzeScamCheck({ message: text, reference: ref });
-        return {
-          classification: result.jev_label,
-          confidence: Math.round(result.jev_confidence * 100),
-          rail_match: result.rail_match_status,
-          explanation: result.explanation,
-          red_flags: result.red_flags,
-        };
-      } catch {
-        const isSuspicious = /urgent|congratulations|lottery|pin|otp|click here|bit\.ly|whatsapp cash/i.test(text);
-        return {
-          classification: isSuspicious ? "scam" : "genuine",
-          confidence: isSuspicious ? 94 : 88,
-          rail_match: "no_direct_match",
-          explanation: isSuspicious
-            ? "Contains high-risk scam indicators: asks for urgent action, OTP, or external suspicious payment link."
-            : "No active phishing links or unauthorized disbursement claims detected.",
-          red_flags: isSuspicious ? ["Urgent payment demand", "Unofficial disbursement channel"] : [],
-        };
-      }
+      const result = await analyzeScamCheck({ message: text, reference: ref });
+      return {
+        classification: result.jev_label,
+        confidence: Math.round(result.jev_confidence * 100),
+        rail_match: result.rail_match_status,
+        explanation: result.explanation,
+        red_flags: result.red_flags,
+      };
+    },
+  },
+
+  {
+    name: "report_missing_payment",
+    description: "Report a missing or disputed Raast payment reference (used by shopkeepers, citizens, and helpers).",
+    allowedRoles: ["shopkeeper", "citizen", "helper"],
+    parameters: {
+      type: "object",
+      properties: {
+        reference: { type: "string", description: "The Raast or payout reference code" },
+        message: { type: "string", description: "Details of the missing payment report" },
+      },
+      required: ["reference"],
+    },
+    execute: async (user, args) => {
+      const reference = String(args.reference || "").trim();
+      const message = String(args.message || "Missing payment reported via messaging");
+      const key = crypto.randomUUID();
+      const res = await scopedGateway<Record<string, unknown>>(user, "report", {
+        reference,
+        message,
+        key,
+      });
+      return {
+        success: true,
+        reference,
+        reported_by: user.name,
+        result: res,
+      };
     },
   },
 
@@ -202,31 +256,20 @@ export const whatsAppTools: WhatsAppToolDefinition[] = [
       properties: {},
       required: [],
     },
-    execute: async () => {
-      try {
-        const queue = await gateway<Claim[]>("queue");
-        return {
-          count: queue.length,
-          claims: queue.slice(0, 5).map(c => ({
-            id: c.id,
-            applicant: c.citizen_name || "Applicant",
-            amount_pkr: c.amount_pkr,
-            status: c.status,
-            ai_confidence: c.ai_confidence ? Math.round(c.ai_confidence * 100) : null,
-            documents_count: c.documents?.length || 0,
-            notes: c.payload_json?.notes,
-          })),
-        };
-      } catch {
-        return {
-          count: 3,
-          claims: [
-            { id: "c37d5ff0-482a-4467-8c31-7e923e420d3b", applicant: "Fatima Bibi", amount_pkr: 25000, status: "submitted", ai_confidence: 96, documents_count: 2 },
-            { id: "e102f4a1-7712-4cf0-88b1-3a9d8c4456e7", applicant: "Rasheed Ahmed", amount_pkr: 25000, status: "submitted", ai_confidence: 84, documents_count: 1 },
-            { id: "68834985-1102-4b2a-89a1-5d9e7b23f3d3", applicant: "Nasreen Akhtar", amount_pkr: 25000, status: "needs_proof", ai_confidence: 52, documents_count: 1 },
-          ],
-        };
-      }
+    execute: async user => {
+      const queue = await scopedGateway<Claim[]>(user, "queue", {});
+      return {
+        count: queue.length,
+        claims: queue.slice(0, 6).map(c => ({
+          id: c.id,
+          applicant: c.citizen_name || "Applicant",
+          amount_pkr: c.amount_pkr,
+          status: c.status,
+          ai_confidence: c.ai_confidence ? Math.round(c.ai_confidence * 100) : null,
+          documents_count: c.documents?.length || 0,
+          notes: c.payload_json?.notes,
+        })),
+      };
     },
   },
 
@@ -237,33 +280,25 @@ export const whatsAppTools: WhatsAppToolDefinition[] = [
     parameters: {
       type: "object",
       properties: {
-        claim_id: { type: "string", description: "The UUID or prefix of the claim being reviewed" },
+        claim_id: { type: "string", description: "The UUID of the claim being reviewed" },
         decision: { type: "string", enum: ["approve", "more_proof", "reject"], description: "Review decision" },
         reason: { type: "string", description: "Official justification reason for the decision" },
       },
       required: ["claim_id", "decision", "reason"],
     },
-    execute: async (_user, args) => {
-      const claimId = String(args.claim_id ?? "");
+    execute: async (user, args) => {
+      const claimId = String(args.claim_id ?? "").trim();
       const decision = String(args.decision ?? "approve") as "approve" | "more_proof" | "reject";
-      const reason = String(args.reason ?? "Reviewed via WhatsApp assistant");
+      const reason = String(args.reason ?? "Reviewed via messaging assistant");
 
-      try {
-        await gateway("review", { claimId, decision, reason });
-        return {
-          success: true,
-          claim_id: claimId,
-          decision,
-          message: `Claim ${claimId.slice(0, 8)} successfully updated to: ${decision.toUpperCase()}. Reason: "${reason}".`,
-        };
-      } catch {
-        return {
-          success: true,
-          claim_id: claimId,
-          decision,
-          message: `Claim ${claimId.slice(0, 8)} recorded as ${decision.toUpperCase()}. Reason: "${reason}".`,
-        };
-      }
+      await scopedGateway(user, "review", { claimId, decision, reason });
+      return {
+        success: true,
+        claim_id: claimId,
+        decision,
+        reviewed_by: user.name,
+        message: `Claim ${claimId.slice(0, 8)} successfully updated to ${decision.toUpperCase()}. Reason: "${reason}".`,
+      };
     },
   },
 
@@ -276,27 +311,16 @@ export const whatsAppTools: WhatsAppToolDefinition[] = [
       properties: {},
       required: [],
     },
-    execute: async () => {
-      try {
-        const budget = await gateway<SchemeBudget>("scheme_budget");
-        return {
-          total_budget_pkr: budget.total_pkr,
-          available_pkr: budget.available_pkr,
-          reserved_pkr: budget.reserved_pkr,
-          paid_pkr: budget.paid_pkr,
-          awaiting_claims: budget.awaiting_claims,
-          funded_claims: budget.funded_claims,
-        };
-      } catch {
-        return {
-          total_budget_pkr: 5000000,
-          available_pkr: 3250000,
-          reserved_pkr: 1000000,
-          paid_pkr: 750000,
-          awaiting_claims: 2,
-          funded_claims: 40,
-        };
-      }
+    execute: async user => {
+      const budget = await scopedGateway<SchemeBudget>(user, "scheme_budget", {});
+      return {
+        total_budget_pkr: budget.total_pkr,
+        available_pkr: budget.available_pkr,
+        reserved_pkr: budget.reserved_pkr,
+        paid_pkr: budget.paid_pkr,
+        awaiting_claims: budget.awaiting_claims,
+        funded_claims: budget.funded_claims,
+      };
     },
   },
 
@@ -312,30 +336,22 @@ export const whatsAppTools: WhatsAppToolDefinition[] = [
       },
       required: ["total_pkr", "reason"],
     },
-    execute: async (_user, args) => {
+    execute: async (user, args) => {
       const totalPkr = Number(args.total_pkr);
-      const reason = String(args.reason || "Emergency fund injection via WhatsApp");
-      try {
-        const budget = await gateway<SchemeBudget>("scheme_budget");
-        const updated = await gateway<SchemeBudget>("set_scheme_budget", {
-          totalPkr,
-          expectedTotalPkr: budget.total_pkr,
-          reason,
-        });
-        return {
-          success: true,
-          new_total_pkr: updated.total_pkr,
-          available_pkr: updated.available_pkr,
-          funded_claims: updated.funded_claims,
-          message: `Relief scheme budget successfully updated to PKR ${new Intl.NumberFormat("en-PK").format(updated.total_pkr)}.`,
-        };
-      } catch {
-        return {
-          success: true,
-          new_total_pkr: totalPkr,
-          message: `Scheme budget allocated to PKR ${new Intl.NumberFormat("en-PK").format(totalPkr)}. Reason: "${reason}".`,
-        };
-      }
+      const reason = String(args.reason || "Emergency fund injection via messaging");
+      const budget = await scopedGateway<SchemeBudget>(user, "scheme_budget", {});
+      const updated = await scopedGateway<SchemeBudget>(user, "set_scheme_budget", {
+        totalPkr,
+        expectedTotalPkr: budget.total_pkr,
+        reason,
+      });
+      return {
+        success: true,
+        new_total_pkr: updated.total_pkr,
+        available_pkr: updated.available_pkr,
+        funded_claims: updated.funded_claims,
+        message: `Relief scheme budget successfully updated to PKR ${new Intl.NumberFormat("en-PK").format(updated.total_pkr)}.`,
+      };
     },
   },
 ];
