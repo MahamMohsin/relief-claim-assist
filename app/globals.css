@@ -7393,6 +7393,76 @@ button.active-cases-card:hover {
   }
 }
 
+/* Officer Top Claimants Histogram Card (Airbnb-style Liquid Glass) */
+.officer-hist-wrap {
+  width: 100%;
+  padding: 0.1rem 0 0.05rem;
+}
+
+.officer-range-pills {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.officer-range-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.22rem;
+}
+
+.officer-range-label {
+  font-size: 0.64rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.officer-range-pill {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.32rem;
+  padding: 0.32rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.officer-range-pill.is-primary {
+  background: rgba(59, 130, 246, 0.18);
+  border-color: rgba(96, 165, 250, 0.52);
+}
+
+.officer-range-pill strong {
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.officer-range-pill span {
+  font-size: 0.68rem;
+  color: #93c5fd;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.officer-hist-foot {
+  margin: 0;
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.officer-hist-foot strong {
+  color: #60a5fa;
+  font-weight: 650;
+}
+
 
 /* Claim status banner (citizen claim view): colors follow the live claim status. */
 .claim-status[data-tone="approved"] .astryx-banner { background: var(--success-bg); color: var(--success-text); }

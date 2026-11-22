@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ArrowUpRight } from "lucide-react";
 import type { Claim, Overview, SchemeBudget } from "@/src/lib/contracts";
 
@@ -23,42 +23,31 @@ export function OfficerDashboard({
   offline: boolean;
   onOpenReview: () => void;
 }) {
+  const [pickedApplicant, setPickedApplicant] = useState<string | null>(null);
+
   const analytics = useMemo(() => {
-    const docs = queue.flatMap(c => c.documents ?? []);
-    const verifiedDocs = docs.filter(d => ["genuine", "readable", "verified"].includes(d.verified_status)).length;
-    const suspectDocs = docs.filter(d => d.tamper_flag || ["suspect", "tampered"].includes(d.verified_status)).length;
-    const pendingDocs = Math.max(0, docs.length - verifiedDocs - suspectDocs);
-    const verifiedPct = docs.length > 0 ? Math.round((verifiedDocs / docs.length) * 100) : 0;
-
-    const confValues = queue
-      .map(c => c.ai_confidence)
-      .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-    const avgReliability = confValues.length
-      ? Math.round((confValues.reduce((a, b) => a + b, 0) / confValues.length) * 100)
-      : null;
-
-    // 4-band confidence distribution from live queue
-    const bands = [
-      { key: "low", label: "<50%", fill: "#ff7854", soft: "#ef4444", count: 0 },
-      { key: "mid", label: "50–70%", fill: "#fbbf24", soft: "#d97706", count: 0 },
-      { key: "good", label: "70–90%", fill: "#64c4ff", soft: "#38bdf8", count: 0 },
-      { key: "high", label: "90%+", fill: "#34d399", soft: "#10b981", count: 0 },
-    ];
-    for (const v of confValues) {
-      if (v < 0.5) bands[0].count++;
-      else if (v < 0.7) bands[1].count++;
-      else if (v < 0.9) bands[2].count++;
-      else bands[3].count++;
-    }
-    const maxBand = Math.max(1, ...bands.map(b => b.count));
-
     const paidPkr = queue
       .filter(c => c.payment_status === "paid")
       .reduce((acc, c) => acc + (c.payment?.amount_pkr ?? c.amount_pkr ?? 0), 0);
     const pendingPkr = queue
       .filter(c => ["submitted", "in_review", "needs_proof", "approved"].includes(c.status) && c.payment_status !== "paid")
       .reduce((acc, c) => acc + (c.amount_pkr || 0), 0);
-    const totalReports = queue.reduce((acc, c) => acc + (c.reports ?? 0), 0);
+
+    // Group real claims by applicant to find people with the most claims
+    const byApplicant = new Map<string, { id: string; name: string; count: number; latestStatus: string }>();
+    for (const c of queue) {
+      const key = c.citizen_id || c.citizen_name || c.id;
+      const name = c.citizen_name?.trim() || `Applicant ${key.slice(0, 6)}`;
+      const existing = byApplicant.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        byApplicant.set(key, { id: key, name, count: 1, latestStatus: c.status });
+      }
+    }
+    const rankedApplicants = [...byApplicant.values()].sort((a, b) => b.count - a.count);
+    const maxApplicantClaims = Math.max(1, rankedApplicants[0]?.count ?? 1);
+    const minApplicantClaims = rankedApplicants.length > 0 ? rankedApplicants[rankedApplicants.length - 1].count : 0;
 
     // 7-day claim intake sparkline from real created_at/updated_at timestamps
     const now = new Date();
@@ -85,17 +74,11 @@ export function OfficerDashboard({
     const maxDay = Math.max(1, ...days.map(d => d.count));
 
     return {
-      docsCount: docs.length,
-      verifiedDocs,
-      suspectDocs,
-      pendingDocs,
-      verifiedPct,
-      avgReliability,
-      bands,
-      maxBand,
       paidPkr,
       pendingPkr,
-      totalReports,
+      rankedApplicants,
+      maxApplicantClaims,
+      minApplicantClaims,
       days,
       maxDay,
     };
@@ -235,90 +218,131 @@ export function OfficerDashboard({
         </div>
       </article>
 
-      {/* CARD 2: AI Triage Reliability & Document Integrity */}
-      <article className="audit-glass-card officer-glass-card" onClick={onOpenReview} role="button" tabIndex={0} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") onOpenReview(); }}>
-        <header className="audit-glass-head">
-          <div className="audit-glass-title-group">
-            <span className="audit-glass-dot violet" />
-            <span className="audit-glass-kicker">AI triage</span>
-            <strong className="audit-glass-title">{overview.priority} priority</strong>
-          </div>
-          <span className="officer-meta-chip">
-            {analytics.totalReports > 0 ? `${analytics.totalReports} alerts` : `${overview.closed} closed`}
-          </span>
-        </header>
+      {/* CARD 2: Top Claimants Histogram Card (Airbnb-style rounded bars + range pills) */}
+      {(() => {
+        const list = analytics.rankedApplicants;
+        const barCount = Math.min(18, Math.max(list.length, 12));
+        // Arrange real applicants in a smooth bell-like distribution centered on the highest claimants
+        const bars = Array.from({ length: barCount }, (_, idx) => {
+          const item = list[idx] ?? null;
+          const heightRatio = item
+            ? Math.max(0.18, item.count / analytics.maxApplicantClaims)
+            : Math.max(0.08, 0.24 - ((idx - list.length) * 0.02));
+          const isHighlighted = item ? idx < Math.max(1, Math.min(5, Math.ceil(list.length * 0.6))) : false;
+          return { idx, item, heightRatio, isHighlighted };
+        });
 
-        <div className="officer-triage-metrics">
-          <div className="officer-triage-stat">
-            <span className="audit-metric-label">Avg reliability</span>
-            <div className="audit-score-num-wrap">
-              <strong className="officer-big-stat">{analytics.avgReliability ?? "—"}</strong>
-              <span className="audit-score-denom">%</span>
+        const topPerson = list[0] ?? null;
+        const secondPerson = list[1] ?? null;
+        const focused = (pickedApplicant ? list.find(p => p.id === pickedApplicant) : null) ?? topPerson;
+
+        const W = 280;
+        const H = 76;
+        const BASE_Y = 64;
+        const MAX_H = 52;
+        const step = W / barCount;
+        const barW = Math.max(7, Math.min(14, step * 0.68));
+        const activeStartIdx = 0;
+        const activeEndIdx = Math.max(0, Math.min(barCount - 1, Math.min(list.length - 1, 4)));
+        const thumb1X = activeStartIdx * step + step / 2;
+        const thumb2X = activeEndIdx * step + step / 2;
+
+        return (
+          <article
+            className="audit-glass-card officer-glass-card"
+            onClick={onOpenReview}
+            role="button"
+            tabIndex={0}
+            onKeyDown={e => { if (e.key === "Enter" || e.key === " ") onOpenReview(); }}
+          >
+            <header className="audit-glass-head">
+              <div className="audit-glass-title-group">
+                <span className="audit-glass-dot violet" />
+                <span className="audit-glass-kicker">Most claims</span>
+                <strong className="audit-glass-title">{list.length} applicants</strong>
+              </div>
+              <span className="officer-meta-chip">
+                {overview.priority} priority
+              </span>
+            </header>
+
+            {/* Rounded vertical histogram bars + range slider baseline */}
+            <div className="officer-hist-wrap">
+              <svg viewBox={`0 0 ${W} ${H}`} className="audit-svg" role="img" aria-label="Applicants ranked by number of claims">
+                {bars.map(b => {
+                  const x = b.idx * step + (step - barW) / 2;
+                  const h = Math.max(6, b.heightRatio * MAX_H);
+                  const y = BASE_Y - h;
+                  const isPicked = Boolean(b.item && focused?.id === b.item.id);
+                  return (
+                    <rect
+                      key={b.idx}
+                      x={x}
+                      y={y}
+                      width={barW}
+                      height={h}
+                      rx={3.5}
+                      fill={
+                        isPicked
+                          ? "#3b82f6"
+                          : b.isHighlighted
+                            ? "rgba(59, 130, 246, 0.72)"
+                            : "rgba(255, 255, 255, 0.18)"
+                      }
+                      className={b.item ? "audit-svg-interactive" : undefined}
+                      onMouseEnter={() => { if (b.item) setPickedApplicant(b.item.id); }}
+                      onClick={e => {
+                        if (b.item) {
+                          e.stopPropagation();
+                          setPickedApplicant(b.item.id);
+                        }
+                      }}
+                    >
+                      <title>
+                        {b.item ? `${b.item.name}: ${b.item.count} claim(s)` : "No additional applicants"}
+                      </title>
+                    </rect>
+                  );
+                })}
+
+                {/* Baseline track + highlighted span + circular white range thumbs */}
+                <line x1={4} y1={BASE_Y + 4} x2={W - 4} y2={BASE_Y + 4} stroke="rgba(255, 255, 255, 0.16)" strokeWidth={2} strokeLinecap="round" />
+                {list.length > 0 && (
+                  <>
+                    <line x1={thumb1X} y1={BASE_Y + 4} x2={Math.max(thumb1X + 8, thumb2X)} y2={BASE_Y + 4} stroke="#3b82f6" strokeWidth={2.5} strokeLinecap="round" />
+                    <circle cx={thumb1X} cy={BASE_Y + 4} r={5.5} fill="#ffffff" stroke="rgba(59, 130, 246, 0.85)" strokeWidth={1.8} />
+                    <circle cx={Math.max(thumb1X + 14, thumb2X)} cy={BASE_Y + 4} r={5.5} fill="#ffffff" stroke="rgba(59, 130, 246, 0.85)" strokeWidth={1.8} />
+                  </>
+                )}
+              </svg>
             </div>
-          </div>
-          <div className="officer-triage-stat">
-            <span className="audit-metric-label">Docs verified</span>
-            <strong className="officer-mid-stat">{analytics.verifiedPct}%</strong>
-            <small className="officer-sub-stat">{analytics.verifiedDocs}/{analytics.docsCount}</small>
-          </div>
-          <div className="officer-triage-stat">
-            <span className="audit-metric-label">Tamper flags</span>
-            <strong className={"officer-mid-stat" + (analytics.suspectDocs > 0 ? " is-warn" : " is-ok")}>
-              {analytics.suspectDocs}
-            </strong>
-            <small className="officer-sub-stat">{analytics.suspectDocs > 0 ? "Inspect" : "All clean"}</small>
-          </div>
-        </div>
 
-        {/* 4-Band AI Reliability Distribution Bar Chart */}
-        <div className="officer-bars-wrap">
-          <svg viewBox="0 0 280 78" className="audit-svg" role="img" aria-label="AI confidence distribution across queued claims">
-            <defs>
-              {analytics.bands.map(b => (
-                <linearGradient key={b.key} id={`off-bar-${b.key}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={b.fill} stopOpacity={0.95} />
-                  <stop offset="100%" stopColor={b.soft} stopOpacity={0.28} />
-                </linearGradient>
-              ))}
-            </defs>
-            {analytics.bands.map((band, idx) => {
-              const slotW = 280 / 4;
-              const colW = 40;
-              const cx = idx * slotW + slotW / 2;
-              const x = cx - colW / 2;
-              const plotTop = 16;
-              const plotBottom = 60;
-              const plotH = plotBottom - plotTop;
-              const barH = band.count > 0 ? Math.max(6, (band.count / analytics.maxBand) * plotH) : 0;
-              const y = plotBottom - barH;
-              return (
-                <g key={band.key}>
-                  <title>{`${band.label} reliability: ${band.count} case(s)`}</title>
-                  <rect x={x} y={plotTop} width={colW} height={plotH} rx={7} fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.08)" strokeWidth={0.7} />
-                  {barH > 0 && (
-                    <rect x={x} y={y} width={colW} height={barH} rx={7} fill={`url(#off-bar-${band.key})`} stroke="rgba(255,255,255,0.28)" strokeWidth={0.8} />
-                  )}
-                  <text x={cx} y={Math.max(11, y - 4)} textAnchor="middle" fontSize={10} fontWeight={700} fontFamily="Geist Mono, ui-monospace, monospace" fill="#ffffff">
-                    {band.count}
-                  </text>
-                  <text x={cx} y={74} textAnchor="middle" fontSize={9.5} fontFamily="Geist Mono, ui-monospace, monospace" fill="rgba(255,255,255,0.62)">
-                    {band.label}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
-        </div>
+            {/* Dual Rounded Pills (Top Applicant vs Runner-Up / Range) */}
+            <div className="officer-range-pills">
+              <div className="officer-range-col">
+                <span className="officer-range-label">Top claimant</span>
+                <div className="officer-range-pill is-primary">
+                  <strong>{focused ? focused.name.split(" ")[0] : "—"}</strong>
+                  <span>{focused ? `${focused.count} claims` : "0"}</span>
+                </div>
+              </div>
+              <div className="officer-range-col">
+                <span className="officer-range-label">{secondPerson ? "Next highest" : "Range"}</span>
+                <div className="officer-range-pill">
+                  <strong>{secondPerson ? secondPerson.name.split(" ")[0] : `${analytics.minApplicantClaims}–${analytics.maxApplicantClaims}`}</strong>
+                  <span>{secondPerson ? `${secondPerson.count} claims` : "claims"}</span>
+                </div>
+              </div>
+            </div>
 
-        {/* Document Integrity Proportion Bar */}
-        {analytics.docsCount > 0 && (
-          <div className="audit-prop-bar" role="img" aria-label="Document verification proportions">
-            {analytics.verifiedDocs > 0 && <span className="audit-prop-seg" style={{ flexGrow: analytics.verifiedDocs, background: "#34d399" }} />}
-            {analytics.pendingDocs > 0 && <span className="audit-prop-seg" style={{ flexGrow: analytics.pendingDocs, background: "#fbbf24" }} />}
-            {analytics.suspectDocs > 0 && <span className="audit-prop-seg" style={{ flexGrow: analytics.suspectDocs, background: "#ff7854" }} />}
-          </div>
-        )}
-      </article>
+            <p className="officer-hist-foot">
+              {focused
+                ? <>{focused.name} · <strong>{focused.count} claims</strong> on queue</>
+                : "No claims in queue yet"}
+            </p>
+          </article>
+        );
+      })()}
 
       {/* CARD 3: Compact Overall Scheme Budget Strip (shared across Admin & Reviewer) */}
       {(() => {
