@@ -371,17 +371,20 @@ th { background: var(--faint); color: var(--forest); }
   color: rgba(255, 255, 255, 0.85);
 }
 
+/* The username sits on the same level as the Online pill and the clock: flat
+   text carrying the menu bar's own shadow, with no drop-shadow of its own
+   lifting it off the bar. The shadow is set explicitly because the button
+   reset clears the inherited one. */
 .macos-user-btn {
   border: none;
   background: transparent;
-  color: #ffffff;
+  color: rgba(255, 255, 255, 0.95);
   font-size: 0.78rem;
   font-weight: 500;
   padding: 0.12rem 0.35rem;
   border-radius: 4px;
   cursor: pointer;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65), 0 0 1px rgba(0, 0, 0, 0.4);
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   transition: background 0.12s;
 }
 
