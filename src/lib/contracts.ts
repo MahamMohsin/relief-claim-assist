@@ -155,16 +155,16 @@ export type CitizenRecord = {
 export type CitizenProfileData = { citizen: CitizenRecord; documents: CitizenDocument[] };
 
 export const appRoles = {
-  claim: ["citizen", "helper"],
-  profile: ["citizen", "helper"],
-  scam: ["citizen", "helper", "shopkeeper"],
+  claim: ["citizen", "helper", "officer", "admin", "auditor"],
+  profile: ["citizen", "helper", "officer", "admin", "auditor"],
+  scam: ["citizen", "helper", "shopkeeper", "officer", "admin", "auditor"],
   policy: ["citizen", "helper", "shopkeeper", "officer", "admin", "auditor"],
-  privacy: ["citizen", "helper"],
-  family: ["helper"],
-  review: ["officer"],
-  rules: ["admin"],
-  users: ["admin"],
-  audit: ["admin", "auditor"],
+  privacy: ["citizen", "helper", "officer", "admin", "auditor"],
+  family: ["helper", "officer", "admin"],
+  review: ["officer", "admin", "auditor"],
+  rules: ["admin", "officer"],
+  users: ["admin", "officer", "auditor"],
+  audit: ["admin", "auditor", "officer"],
 } satisfies Record<string, Role[]>;
 export type MiniApp = keyof typeof appRoles;
 export function canOpen(role: Role, app: MiniApp) {
