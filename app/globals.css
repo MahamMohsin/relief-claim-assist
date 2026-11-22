@@ -6791,3 +6791,14 @@ button.active-cases-card:hover {
   }
 }
 
+
+/* Claim status banner (citizen claim view): colors follow the live claim status. */
+.claim-status[data-tone="approved"] .astryx-banner { background: var(--success-bg); color: var(--success-text); }
+.claim-status[data-tone="needs_proof"] .astryx-banner { background: var(--pending-bg); color: var(--pending-text); }
+.claim-status[data-tone="in_review"] .astryx-banner { background: var(--review-bg); color: var(--review-text); }
+.claim-status[data-tone="rejected"] .astryx-banner { background: var(--error-bg); color: var(--error-text); }
+.claim-status .astryx-banner-icon { color: inherit; }
+
+/* Urdu text uses Nastaliq. Button labels are plain text, so the citizen claim view sets data-app-lang. */
+[lang="ur"], [lang="ur"] * { font-family: "Noto Nastaliq Urdu", var(--font); }
+[data-app-lang="ur"] .astryx-button { font-family: "Noto Nastaliq Urdu", var(--font); }

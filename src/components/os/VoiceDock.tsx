@@ -11,6 +11,7 @@ import { receiveActions } from "./UIActionBus";
 import { queueSpeakSegment, speakText, stopSpeaking } from "./speech";
 import { cuaEngine } from "./cuaEngine";
 import { BotAvatar } from "./BotAvatar";
+import { useLang } from "@/src/lib/i18n";
 
 type VoiceProps = {
   profile: Profile;
@@ -33,7 +34,7 @@ type ChatTurn = {
 const VISIBLE_TURNS = 2;
 
 export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAction, onQueueAudio }: VoiceProps) {
-  const [lang, setLang] = useState(profile.locale);
+  const { lang, setLang } = useLang(); // app-wide language: drives Deepgram input and Cartesia replies
   const [input, setInput] = useState("");
   const [working, setWorking] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -626,8 +627,9 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
             }
           }}
         />
-        <button type="button" className="glass-lang-pill" aria-label="Switch voice language" onClick={() => setLang(value => value === "en" ? "ur" : "en")}>
-          {lang === "ur" ? "اردو" : "EN"}
+        <button type="button" className="glass-lang-pill" aria-label="Switch language" onClick={() => setLang(lang === "en" ? "ur" : "en")}>
+          {/* Shows the language you can switch to */}
+          {lang === "ur" ? "EN" : "اردو"}
         </button>
         {(working || recording || input.trim()) && (
           <button type="button" className="glass-icon-btn" aria-label="Cancel" title="Cancel" onClick={cancel}>

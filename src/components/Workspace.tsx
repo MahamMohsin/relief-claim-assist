@@ -8,7 +8,7 @@ import { ArrowLeft, ArrowRight, ArrowUpRight, Award, Bell, CheckCircle2, Chevron
   LoaderCircle, LogOut, Maximize2, MessageSquare, Minimize2, Minus, Radio, ShieldCheck, Trophy, UserPlus, UserRound, Users, Wifi, X } from "lucide-react";
 import { canOpen, personas, type Audit, type Claim, type Family, type MiniApp, type Overview, type Persona, type Profile } from "@/src/lib/contracts";
 import { api, jsonRequest } from "@/src/lib/client";
-import { pick, strings, useLang } from "@/src/lib/i18n";
+import { pick, strings, useLang, waitingToSend } from "@/src/lib/i18n";
 import { queued, pushMutation, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
 import { syncQueue } from "@/src/lib/offline/syncEngine";
 import { apps, appTitle } from "./launcher";
@@ -818,7 +818,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                                     onClick={() => void synchronize(true)}
                                   >
                                     <Cloud size={15} />
-                                    <span lang={lang}>{pick(syncing ? strings.syncing : strings.syncNow, lang)}</span>
+                                    <span lang={lang}>{syncing ? pick(strings.syncing, lang) : pick(strings.syncNow, lang) + " · " + waitingToSend[lang](pending.length)}</span>
                                   </button>
                                 )}
                               </div>
