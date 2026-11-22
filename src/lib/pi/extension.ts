@@ -110,7 +110,7 @@ export function createReliefExtension(context: PiContext, locale: "en" | "ur"): 
         }
       }
       if (sc?.whatsapp) {
-        screenLines.push(`WhatsApp Agent: configured=${sc.whatsapp.configured}${sc.whatsapp.agentName ? `, agent=${sc.whatsapp.agentName}` : ""}, messages=${sc.whatsapp.recentMessagesCount ?? 0}.`);
+        screenLines.push(`WhatsApp & Direct SMS: WhatsApp configured=${sc.whatsapp.configured}${sc.whatsapp.agentName ? `, agent=${sc.whatsapp.agentName}` : ""}, WA messages=${sc.whatsapp.recentMessagesCount ?? 0}${sc.whatsapp.smsStatus ? `, Google Messages SMS status=${sc.whatsapp.smsStatus}` : ""}${sc.whatsapp.smsAdminPhone ? `, adminPhone=${sc.whatsapp.smsAdminPhone}` : ""}${sc.whatsapp.smsLinked !== undefined ? `, userSmsLinked=${sc.whatsapp.smsLinked}` : ""}${sc.whatsapp.smsLoginCommand ? `, personalLoginCmd="${sc.whatsapp.smsLoginCommand}"` : ""}${sc.whatsapp.smsActiveSessions !== undefined ? `, activeSmsSessions=${sc.whatsapp.smsActiveSessions}` : ""}.`);
       }
 
       const liveScreenBlock = " LIVE SCREEN STATE: " + screenLines.join(" ");
@@ -137,7 +137,7 @@ export function createReliefExtension(context: PiContext, locale: "en" | "ur"): 
           + "• Rule Studio (rules): Use rules_configure_and_simulate to edit rule values and run Digital Twin simulation, rules_publish_version to publish live, and rules_staff_approval to approve/reject pending staff by name or ID. "
           + "• Scheme Budget (admin): Use scheme_budget_adjust (admin only) with totalPkr and reason (>=5 chars). "
           + "• Audit Vault (audit): Use audit_vault_control to switch tabs (events/eval), filter category (all/claims/ai/consent/blocked), search query, inspect an event row, or refresh. "
-          + "• WhatsApp Link (whatsapp): Use whatsapp_configure_agent to connect an API key, disconnect, send a test simulator message, or search live messages. "
+          + "• WhatsApp & Direct SMS (whatsapp): Use whatsapp_configure_agent to connect an API key, disconnect, send a test simulator message, or search live messages; use sms_gateway_control to regenerate a user's personal /login SMS key or (admin only) pair/refresh QR/set phone/toggle safe mode/disconnect/simulate Direct SMS via Google Messages. "
           + "• Window & Workspace Controls: Use window_manage to close, close_all, minimize, restore, resize (compact/default/wide), open_account_menu, open_persona_switcher, open_notifications, sync_now, toggle_lite, or toggle_network_drop. "
           + "Keep your final reply concise (1–2 short sentences) summarizing what you did or read from the screen so it sounds natural spoken aloud. "
           + "Reply in " + (locale === "ur" ? "Urdu, unless the request is clearly English." : "English."),
