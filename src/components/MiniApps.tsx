@@ -133,7 +133,7 @@ function evidenceLabel(doc: { verified_status: string; tamper_flag?: boolean }):
   if (doc.tamper_flag || ["flagged", "tampered"].includes(doc.verified_status)) return "flagged";
   if (["readable", "verified"].includes(doc.verified_status)) return "verified";
   if (["unreadable", "incomplete", "blurry", "blurred", "needs_proof"].includes(doc.verified_status)) return "clearer";
-  if (["unverified", "failed"].includes(doc.verified_status)) return "failed";
+  if (["check_failed", "unverified", "failed"].includes(doc.verified_status)) return "failed";
   return null;
 }
 const toneStatus: Record<ClaimTone, "success" | "warning" | "info" | "error"> = {

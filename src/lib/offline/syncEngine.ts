@@ -1,4 +1,4 @@
-import { api, isRetryable, transcribe } from "@/src/lib/client";
+import { api, isRetryable, REQUEST_TIMEOUT_MS, transcribe } from "@/src/lib/client";
 import { complete, markRetry, queued, resolveDraft } from "./queue";
 
 type SyncOptions = {
@@ -25,7 +25,7 @@ export async function syncQueue({ owner, citizen, manual, flush = false, signal,
     }
     try {
       if (item.action === "transcribe" && item.audio) {
-        const text = await transcribe(item.audio, item.body.locale === "en" ? "en" : "ur", signal);
+        const text = await transcribe(item.audio, item.body.locale === "en" ? "en" : "ur", signal, REQUEST_TIMEOUT_MS);
         if (text) onTranscript(text);
         await complete(item);
       } else if (item.action !== "transcribe") {

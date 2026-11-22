@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { SLOW_HINT_TEXT, useSlowHint } from "@/src/lib/useSlowHint";
 import {
   Briefcase,
   Expand,
@@ -114,6 +115,7 @@ export function CitizenProfileView({ ctx }: { ctx: ViewContext }) {
   const [imageData, setImageData] = useState<string | null>(null);
   const [applyToCore, setApplyToCore] = useState(true);
   const [busy, setBusy] = useState(false);
+  const slow = useSlowHint(busy);
 
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -583,7 +585,7 @@ export function CitizenProfileView({ ctx }: { ctx: ViewContext }) {
               />
               <Button
                 variant="primary"
-                label={busy ? "Extracting…" : "Extract & save"}
+                label={busy ? (slow ? SLOW_HINT_TEXT : "Extracting…") : "Extract & save"}
                 icon={<Icon icon={Sparkles} size="sm" />}
                 isLoading={busy}
                 isDisabled={busy || ctx.offline || !imageData || migrationMissing}

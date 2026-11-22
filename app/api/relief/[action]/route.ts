@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import { actions, type Action, type Profile } from "@/src/lib/contracts";
-import { callJobs, enqueueJob, jobsAvailable, runJobs } from "@/src/lib/jobs";
+import { callJobs, enqueueJob, enqueueTriage, jobsAvailable, runJobs } from "@/src/lib/jobs";
 import { apiError, ApiError, authClient, gateway, readJson } from "@/src/lib/server";
 import { answerPolicy } from "@/src/lib/ai/rag";
 import { inspectEvidence } from "@/src/lib/ai/ocr";
@@ -88,12 +88,14 @@ export async function POST(request: Request, context: RouteContext<"/api/relief/
         const claim = await gateway<{ id: string; status: string; ai_route: string | null; citizen_reason_en: string | null; citizen_reason_ur: string | null }>(operation, args);
         if (await jobsAvailable() && ["submitted", "in_review", "needs_proof"].includes(claim.status)) {
           // Triage re-runs eligibility / registry / evidence routing once background document checks finish.
-          await callJobs("mark_checking", { claimId: claim.id });
-          await enqueueJob("claim_triage", "submit:" + args.key, { claimId: claim.id, payload: { notes: args.payload.notes } });
-          after(() => runJobs().catch(() => {}));
-          claim.ai_route = "checking";
-          claim.citizen_reason_en = "Received. Checking your documents…";
-          claim.citizen_reason_ur = "درخواست موصول ہو گئی۔ آپ کے کاغذات کی جانچ ہو رہی ہے۔";
+          // Only a NEW triage job marks the claim "checking"; an idempotent replay returns the stored response untouched.
+          const triage = await enqueueTriage(claim.id, "submit:" + args.key, { notes: args.payload.notes });
+          if (triage.queued) {
+            after(() => runJobs().catch(() => {}));
+            claim.ai_route = "checking";
+            claim.citizen_reason_en = "Received. Checking your documents…";
+            claim.citizen_reason_ur = "درخواست موصول ہو گئی۔ آپ کے کاغذات کی جانچ ہو رہی ہے۔";
+          }
         }
         result = claim;
         break;

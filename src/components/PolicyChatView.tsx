@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useLang } from "@/src/lib/i18n";
+import { SLOW_HINT_TEXT, useSlowHint } from "@/src/lib/useSlowHint";
 import { BookOpen, RotateCcw, Sparkles, Volume2 } from "lucide-react";
 import { api } from "@/src/lib/client";
 import type { PolicyAnswer } from "@/src/lib/contracts";
@@ -113,6 +114,7 @@ export function PolicyChatView({ ctx }: { ctx: ViewContext }) {
   const [draft, setDraft] = useState("");
   const [inputError, setInputError] = useState("");
   const [busy, setBusy] = useState(false);
+  const slow = useSlowHint(busy);
   const activeController = useRef<AbortController | null>(null);
   const askRef = useRef<(raw: string) => Promise<void>>(async () => {});
 
@@ -374,7 +376,7 @@ export function PolicyChatView({ ctx }: { ctx: ViewContext }) {
                     <ChatMessageBubble variant="ghost">
                       {turn.status === "searching" && (
                         <Text color="secondary">
-                          Searching official policy sections…
+                          {slow ? SLOW_HINT_TEXT : "Searching official policy sections…"}
                         </Text>
                       )}
 

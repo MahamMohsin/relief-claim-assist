@@ -44,12 +44,31 @@ export function enqueueJob(type: JobType, dedupeKey: string, opts: { claimId?: s
   });
 }
 
+/**
+ * Queue claim triage and mark the claim "checking" atomically, only if this is a NEW job.
+ * A replayed submit (same idempotency key) returns { queued: false } and leaves the claim untouched.
+ * Before migration 20261122130000_jobs_fixes.sql is applied, falls back to enqueue + mark_checking (only when queued).
+ */
+export async function enqueueTriage(claimId: string, dedupeKey: string, payload: object) {
+  try {
+    return await callJobs<{ queued: boolean; id?: string }>("enqueue_triage", { claimId, dedupeKey, payload });
+  } catch (error) {
+    if (!(error instanceof ApiError && error.status === 400)) throw error;
+    const queued = await enqueueJob("claim_triage", dedupeKey, { claimId, payload });
+    if (queued.queued) await callJobs("mark_checking", { claimId });
+    return queued;
+  }
+}
+
 async function runEvidenceOcr(job: Job) {
   const input = await callJobs<{ documentId: string; docType: string; image: string | null; notes: string }>(
     "evidence_input", { documentId: job.payload.documentId });
   if (testFailuresEnabled() && input.notes.includes(TEST_FAIL_TOKEN)) throw new Error("Forced test failure (" + TEST_FAIL_TOKEN + ")");
   const fixture = typeof job.payload.fixture === "string" ? job.payload.fixture as Fixture : undefined;
   const analysis = await inspectEvidence(fixture ? { fixture, docType: input.docType } : { image: input.image ?? undefined, docType: input.docType });
+  // A vision outage may be temporary: retry (30s, 60s). If every attempt fails, the job goes dead, the document is
+  // marked check_failed and the claim goes to human review.
+  if (analysis.status === "check_failed") throw new Error("Vision inspection is unavailable");
   await callJobs("evidence_result", { documentId: input.documentId, analysis });
   return { waiting: false };
 }
@@ -81,6 +100,8 @@ export async function runJobs(limit = 5, rounds = 3) {
   const work = (async () => {
     let ran = 0;
     const outcomes: { id: string; type: string; status: string; error?: string }[] = [];
+    // Safety net: re-queue triage for claims stuck in "checking" (needs migration 20261122130000; ignored before).
+    await callJobs("repair").catch(() => null);
     for (let round = 0; round < rounds; round++) {
       const jobs = await callJobs<Job[]>("claim", { limit });
       if (!jobs.length) break;
