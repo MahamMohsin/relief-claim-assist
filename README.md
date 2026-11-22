@@ -107,3 +107,22 @@ Drop screenshots into `docs/screenshots/` using the filenames below — they wil
 ## Judge Demo Guides
 - [Rubric Checklist](docs/rubric-checklist.md) — maps every feature and automated check to the 100-point rubric.
 - [Manual Workflow Test Guide](docs/manual-workflow-test.md) — step-by-step test script and synthetic fixtures.
+
+## Recent Features
+
+### Review Desk and Scheme Budget
+
+- **Repeat-claim review.** Open a claim in **Review Desk** to see a **Possible duplicate claim** warning when the same applicant has other submitted claims. Expand **Other submitted claims** to compare their statuses, see which ones are paid, and open them directly. The list starts collapsed. Each submission still receives an officer decision.
+- **Background checks and review score.** Claim details show background job history and the review score alongside the original AI routing confidence. Officers can see why the score changed when claim details differ from the applicant profile.
+- **Reviewer dashboard.** The current dashboard includes the **Top Claimants** chart, a **Pakistan Claims Hotspot Map**, and a **Scheme Budget** snapshot. Administrators can increase the budget when approved claims show **Awaiting funds**. Once funds are reserved, the officer can issue a separate simulated payment.
+
+### Citizen and Shopkeeper Workflows
+
+- **Multiple evidence attachments.** Save a draft, attach an **Identity card**, then select **Income slip** and attach it separately before reviewing the claim. Use the [synthetic ID card](tests/fixtures/synthetic-id-card.png) and [synthetic income slip](tests/fixtures/synthetic-income.png) to test uploads.
+- **Offline outbox.** The offline fallback page shows actions already queued on the device, with English and Urdu labels. The app attempts to sync when connectivity returns.
+- **Shopkeeper dashboard and role-specific apps.** Tariq's dashboard gives him direct access to **Scam Shield** and **Business Schemes**. The workspace shows apps based on the signed-in role, and personal claim widgets are available to citizens and helpers.
+- **Live notifications.** The top-bar bell shows unread counts, and incoming alerts can appear as toasts for citizens, helpers, reviewers, administrators, and auditors.
+
+### WhatsApp Voice Notes
+
+- The paired WhatsApp gateway transcribes incoming voice notes with **Deepgram Nova-3**. With **Cartesia** configured, it can send a spoken reply alongside the text response. Structured replies use mobile-friendly layouts in WhatsApp.
