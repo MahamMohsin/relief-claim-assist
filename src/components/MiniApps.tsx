@@ -1239,6 +1239,23 @@ function kanbanSummary(claim: Claim) {
   return parts.join(" · ") || claim.handoff_notes || "Relief claim awaiting review";
 }
 
+// Officer-facing review score. Starts from the routing confidence stored on the claim (claims.ai_confidence)
+// and lowers it for signals the officer can see: a suspect/tampered document caps it at 0.65 (below the 0.70
+// "careful review" line), and each registry mismatch (income, household size) takes off 0.10.
+const CAREFUL_REVIEW = 0.70;
+type ReliabilitySignals = { suspect: boolean; incomeMismatch: boolean; householdMismatch: boolean };
+function officerReliability(base: number | null, signals: ReliabilitySignals) {
+  const reasons: string[] = [];
+  if (base === null) return { score: null, reasons };
+  let score = base;
+  if (signals.suspect) { score = Math.min(score, 0.65); reasons.push("Document flagged as suspect"); }
+  if (signals.incomeMismatch) { score -= 0.10; reasons.push("Income differs from profile"); }
+  if (signals.householdMismatch) { score -= 0.10; reasons.push("Household size differs from profile"); }
+  return { score: Math.max(0, Math.min(1, score)), reasons };
+}
+const reliabilityColor = (score: number | null) =>
+  score === null ? "#737373" : score < 0.5 ? "#b91c1c" : score < CAREFUL_REVIEW ? "#b45309" : "#15803d";
+
 function ReviewView({ ctx }: { ctx: ViewContext }) {
   const { data, error, loading } = useActionList<Claim[]>("queue", ctx);
   const [selected, setSelected] = useState("");
@@ -1254,6 +1271,8 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
 
   // AI Summary & Quick Action States
   const [aiSummary, setAiSummary] = useState<ClaimSummaryResult | null>(null);
+  // Registry comparison for the open case, reported by ApplicantProfilePanel once the profile loads.
+  const [registry, setRegistry] = useState<{ claimId: string; income: boolean; household: boolean } | null>(null);
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
   const [quickBusy, setQuickBusy] = useState<Record<string, "approve" | "reject" | "more_proof" | null>>({});
 
@@ -1514,8 +1533,14 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
   if (claim) {
     const docs = claim.documents ?? [];
     const verified = docs.filter(doc => ["genuine", "readable"].includes(doc.verified_status)).length;
-    const confColor = claim.ai_confidence === null ? "#737373" : claim.ai_confidence < 0.5 ? "#b91c1c" : claim.ai_confidence < 0.75 ? "#b45309" : "#15803d";
     const hasSuspect = docs.some(d => d.verified_status === "suspect" || Boolean(d.tamper_reason));
+    const registryForClaim = registry?.claimId === claim.id ? registry : null;
+    const reliability = officerReliability(claim.ai_confidence, {
+      suspect: hasSuspect,
+      incomeMismatch: Boolean(registryForClaim?.income),
+      householdMismatch: Boolean(registryForClaim?.household),
+    });
+    const confColor = reliabilityColor(reliability.score);
 
     return <div className="view-stack claim-detail-view">
     <div className="claim-detail-sticky-bar">
@@ -1539,12 +1564,16 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
       {/* Top Visual Metrics Bar */}
       <div className="claim-detail-metrics-bar">
         <div className="claim-metric-card">
-          <ConfidenceRing value={claim.ai_confidence} />
+          <ConfidenceRing value={reliability.score} />
           <div className="claim-metric-content">
-            <span className="claim-metric-label">Reliability score</span>
+            <span className="claim-metric-label">Review score</span>
             <strong className="claim-metric-val" style={{ color: confColor }}>
-              {claim.ai_confidence !== null ? pc(claim.ai_confidence) : "—"}
+              {reliability.score !== null ? pc(reliability.score) : "—"}
             </strong>
+            {/* The stored routing confidence, as shown in the audit trace. */}
+            <small className="muted">AI confidence at routing: {claim.ai_confidence !== null ? pc(claim.ai_confidence) : "—"}</small>
+            {reliability.score !== null && reliability.score < CAREFUL_REVIEW && <small style={{ color: confColor }}>Needs careful review</small>}
+            {reliability.reasons.map(reason => <small key={reason} className="muted">{reason}</small>)}
           </div>
         </div>
         <div className="claim-metric-card">
@@ -1589,6 +1618,8 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
         claimHousehold={claim.payload_json.household_size}
         offline={ctx.offline}
         version={ctx.version}
+        onRegistryCheck={(income, household) => setRegistry(prev =>
+          prev && prev.claimId === claim.id && prev.income === income && prev.household === household ? prev : { claimId: claim.id, income, household })}
       />
 
       {/* Record Decision */}
@@ -1691,7 +1722,6 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
           </div>
           {claim.documents.map(doc => {
             const isSuspect = doc.verified_status === "suspect" || Boolean(doc.tamper_reason);
-            const fixtureName = doc.fixture || doc.ocr_json?.fixture || (doc.ocr_json?.fields as Record<string, string> | undefined)?.fixture || (["genuine", "readable"].includes(doc.verified_status) ? "clear" : undefined);
             return (
               <div className="claim-evidence-card" key={doc.id}>
                 <div className="claim-evidence-card-top">
@@ -1703,11 +1733,6 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                     {doc.blur_score !== null && (
                       <span className="claim-evidence-chip blur">
                         Blur score {pc(doc.blur_score)}
-                      </span>
-                    )}
-                    {fixtureName && (
-                      <span className="claim-evidence-chip">
-                        Fixture: {fixtureName}
                       </span>
                     )}
                     {isSuspect && (
@@ -1722,9 +1747,10 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                     {doc.tamper_reason ?? doc.ocr_json.summary}
                   </p>
                 )}
-                {doc.ocr_json?.fields && Object.keys(doc.ocr_json.fields).length > 0 && (
+                {doc.ocr_json?.fields && Object.keys(doc.ocr_json.fields).some(field => field !== "fixture") && (
                   <div className="claim-evidence-fields">
-                    {Object.entries(doc.ocr_json.fields).map(([field, value]) => (
+                    {/* Sample/fixture names stay in the audit trace only; they confuse officers next to the tamper result. */}
+                    {Object.entries(doc.ocr_json.fields).filter(([field]) => field !== "fixture").map(([field, value]) => (
                       <span key={field} className="claim-evidence-field-tag">
                         <span>{title(field)}:</span> <strong>{String(value)}</strong>
                       </span>
@@ -1743,6 +1769,9 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
           })}
         </div>
       )}
+
+      {/* Background checks (job queue history) */}
+      <JobHistory claimId={claim.id} ctx={ctx} />
     </Panel>
   </div>;
   }
@@ -1775,10 +1804,10 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
             data-cua="review-sort-btn"
             className="kanban-sort-btn"
             onClick={() => setSortOrder(prev => prev === "desc" ? "asc" : "desc")}
-            title={sortOrder === "desc" ? "Currently showing highest reliability score first. Click to show lowest first." : "Currently showing lowest reliability score first. Click to show highest first."}
+            title={sortOrder === "desc" ? "Currently showing highest review score first. Click to show lowest first." : "Currently showing lowest review score first. Click to show highest first."}
           >
             <ArrowUpDown size={13} />
-            <span>{sortOrder === "desc" ? "Reliability: High → Low" : "Reliability: Low → High"}</span>
+            <span>{sortOrder === "desc" ? "Review score: High → Low" : "Review score: Low → High"}</span>
           </button>
           <div className="kanban-filters" role="tablist" aria-label="Filter by status">
             {([
@@ -1810,8 +1839,10 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
           {activeColumns.map(column => {
             const items = filtered.filter(item => column.statuses.includes(item.status));
             const sortedItems = [...items].sort((a, b) => {
-              const confA = a.ai_confidence ?? 0;
-              const confB = b.ai_confidence ?? 0;
+              // Same adjusted score the cards show (suspect documents capped below the careful-review line).
+              const cardScoreOf = (claim: typeof a) => officerReliability(claim.ai_confidence, { suspect: (claim.documents ?? []).some(d => d.verified_status === "suspect" || Boolean(d.tamper_reason)), incomeMismatch: false, householdMismatch: false }).score ?? 0;
+              const confA = cardScoreOf(a);
+              const confB = cardScoreOf(b);
               return sortOrder === "asc" ? confA - confB : confB - confA;
             });
             return <section className="kanban-col" key={column.key} aria-label={column.label}>
@@ -1825,8 +1856,9 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                   const docs = item.documents ?? [];
                   const verified = docs.filter(doc => ["genuine", "readable"].includes(doc.verified_status)).length;
                   const initials = (item.citizen_name ?? "?").split(" ").map(word => word[0]).slice(0, 2).join("");
-                  const confColor = item.ai_confidence === null ? "#737373" : item.ai_confidence < 0.5 ? "#b91c1c" : item.ai_confidence < 0.75 ? "#b45309" : "#15803d";
                   const hasSuspect = docs.some(d => d.verified_status === "suspect" || Boolean(d.tamper_reason));
+                  const cardScore = officerReliability(item.ai_confidence, { suspect: hasSuspect, incomeMismatch: false, householdMismatch: false }).score;
+                  const confColor = reliabilityColor(cardScore);
                   return <div
                     role="button"
                     tabIndex={0}
@@ -1908,15 +1940,15 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                       <div className="kanban-card-desc">{kanbanSummary(item)}</div>
                     </div>
                     <div className="kanban-progress">
-                      <ConfidenceRing value={item.ai_confidence} />
+                      <ConfidenceRing value={cardScore} />
                       <div className="kanban-progress-details">
                         <span className="kanban-progress-label">
                           {docs.length ? `${verified}/${docs.length} docs verified` : "No evidence attached"}
                         </span>
-                        <span className="kanban-reliability-score" title="AI Verification Reliability Score">
-                          Reliability score:{" "}
+                        <span className="kanban-reliability-score" title={"Review score (AI confidence at routing: " + (item.ai_confidence !== null ? pc(item.ai_confidence) : "—") + ")"}>
+                          Review score:{" "}
                           <strong style={{ color: confColor }}>
-                            {item.ai_confidence !== null ? pc(item.ai_confidence) : "—"}
+                            {cardScore !== null ? pc(cardScore) : "—"}
                           </strong>
                         </span>
                         <span className="kanban-tamper-score" title="Tamper Evaluation">
@@ -2219,23 +2251,36 @@ function AuditView({ ctx }: { ctx: ViewContext }) {
 
 type JobStats = Record<"queued" | "running" | "done" | "failed" | "dead", number>;
 type JobRow = { id: string; type: string; status: string; attempts: number; max_attempts: number; last_error: string | null; updated_at: string };
+const jobLabel: Record<string, string> = { evidence_ocr: "Document check", claim_triage: "Triage", notify: "Notify" };
 
 // Officer case detail: background job history for this claim (shown only when jobs exist).
 function JobHistory({ claimId, ctx }: { claimId: string; ctx: ViewContext }) {
-  const [jobs, setJobs] = useState<JobRow[]>([]);
+  const [jobs, setJobs] = useState<JobRow[] | null>(null);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     if (ctx.offline) return;
     const controller = new AbortController();
-    api<JobRow[]>("job_history", { claimId }, controller.signal).then(rows => setJobs(Array.isArray(rows) ? rows : [])).catch(() => setJobs([]));
+    setFailed(false);
+    api<JobRow[]>("job_history", { claimId }, controller.signal)
+      .then(rows => setJobs(Array.isArray(rows) ? rows : []))
+      .catch(() => { if (!controller.signal.aborted) { setJobs([]); setFailed(true); } });
     return () => controller.abort();
   }, [claimId, ctx.offline, ctx.version]);
-  if (!jobs.length) return null;
-  return <div className="rows">
-    <small className="muted">Background checks</small>
-    {jobs.map(job => <div className="list-row static" key={job.id}><div><strong>{title(job.type)}</strong>
-      <small>Attempts {job.attempts}/{job.max_attempts} · {new Date(job.updated_at).toLocaleString()}</small>
-      {job.last_error && <small>Last error: {job.last_error}</small>}
-    </div><StateTag value={job.status} /></div>)}
+  return <div className="claim-evidence-section">
+    <div className="claim-evidence-head">
+      <h4><FileCheck size={16} /> Background checks</h4>
+    </div>
+    {jobs === null ? <p className="claim-evidence-desc">{ctx.offline ? "Reconnect to load background checks." : "Loading background checks…"}</p>
+      : failed ? <p className="claim-evidence-desc">Background checks could not be loaded.</p>
+      : !jobs.length ? <p className="claim-evidence-desc">No background checks recorded for this claim.</p>
+      : jobs.map(job => <div className="claim-evidence-card" key={job.id}>
+        <div className="claim-evidence-card-top">
+          <div className="claim-evidence-card-title"><span>{jobLabel[job.type] ?? title(job.type)}</span></div>
+          <div className="claim-evidence-meta-chips"><StateTag value={job.status} /></div>
+        </div>
+        <p className="claim-evidence-desc">Attempts {job.attempts}/{job.max_attempts} · {new Date(job.updated_at).toLocaleString()}</p>
+        {job.last_error && <p className="claim-evidence-desc">Last error: {job.last_error}</p>}
+      </div>)}
   </div>;
 }
 

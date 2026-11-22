@@ -6,16 +6,81 @@
 <style>
   :root { color-scheme: light; font: 16px/1.55 system-ui,sans-serif; color: #122f26; background: #f2f7f2 }
   main { max-width: 34rem; margin: 10vh auto; padding: 1.5rem }
-  small { color: #80400d; font-weight: 700 }
   h1 { line-height: 1.12 }
+  h2 { font-size: 1rem; margin: 1.5rem 0 .5rem }
+  ul { list-style: none; padding: 0; margin: 0 0 1.5rem; border-top: 1px solid #cfe0d6 }
+  li { display: flex; justify-content: space-between; gap: 1rem; padding: .55rem 0; border-bottom: 1px solid #cfe0d6 }
+  li time { color: #4a6358; font-size: .9rem; white-space: nowrap }
+  [lang="ur"] { font-family: "Noto Nastaliq Urdu", system-ui, sans-serif; line-height: 2 }
   a { display: inline-block; padding: .7rem 1rem; color: white; background: #134b3f; border-radius: .65rem; text-decoration: none }
   :focus-visible { outline: 3px solid #245785; outline-offset: 4px }
 </style>
 <main>
-  <small>PROTOTYPE · SIMULATED DPI DATA</small>
   <h1>You are offline</h1>
   <p>Drafts and queued changes saved on this device are kept in local storage. Reconnect and open the same persona to continue or sync.</p>
   <p lang="ur" dir="rtl">انٹرنیٹ بحال ہونے پر اسی اکاؤنٹ سے دوبارہ کھولیں۔</p>
+  <section id="outbox" hidden aria-live="polite">
+    <h2 id="outbox-en"></h2>
+    <h2 id="outbox-ur" lang="ur" dir="rtl"></h2>
+    <ul id="outbox-list"></ul>
+  </section>
   <a href="/">Reconnect to your workspace</a>
 </main>
+<script>
+  // Go back to the workspace as soon as the connection returns.
+  window.addEventListener("online", () => location.replace("/"));
+
+  // Show what is waiting in the outbox (IndexedDB "relief-assist", store "mutations").
+  // Read-only: if the database does not exist yet, abort instead of creating an empty one,
+  // so the app can still create it with its stores later.
+  const labels = {
+    draft: ["Draft", "مسودہ"],
+    submit: ["Claim submission", "درخواست جمع کرانا"],
+    evidence: ["Evidence", "ثبوت"],
+    consent: ["Consent", "رضامندی"],
+    correction: ["Correction", "درستی"],
+    report: ["Report", "رپورٹ"],
+    transcribe: ["Voice note", "صوتی پیغام"],
+  };
+  try {
+    const request = indexedDB.open("relief-assist");
+    request.onupgradeneeded = () => request.transaction.abort();
+    request.onerror = event => event.preventDefault();
+    request.onsuccess = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains("mutations")) { db.close(); return; }
+      const read = db.transaction("mutations", "readonly").objectStore("mutations").getAll();
+      read.onsuccess = () => {
+        const items = (read.result || []).sort((a, b) => (a.created || 0) - (b.created || 0));
+        db.close();
+        if (!items.length) return;
+        const count = items.length;
+        document.getElementById("outbox-en").textContent =
+          count + (count === 1 ? " item saved on this device, waiting to send" : " items saved on this device, waiting to send");
+        document.getElementById("outbox-ur").textContent = count + " اندراجات اس آلے پر محفوظ ہیں، بھیجنے کے منتظر";
+        const list = document.getElementById("outbox-list");
+        for (const item of items) {
+          const [en, ur] = labels[item.action] || [item.action, item.action];
+          const row = document.createElement("li");
+          const name = document.createElement("span");
+          name.textContent = en + " · ";
+          const urdu = document.createElement("span");
+          urdu.lang = "ur";
+          urdu.dir = "rtl";
+          urdu.textContent = ur;
+          name.append(urdu);
+          const when = document.createElement("time");
+          if (item.created) {
+            when.dateTime = new Date(item.created).toISOString();
+            when.textContent = new Date(item.created).toLocaleString();
+          }
+          row.append(name, when);
+          list.append(row);
+        }
+        document.getElementById("outbox").hidden = false;
+      };
+      read.onerror = () => db.close();
+    };
+  } catch { /* IndexedDB unavailable: show nothing */ }
+</script>
 </html>

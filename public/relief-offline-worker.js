@@ -1,4 +1,5 @@
-const offlineCache = "relief-public-offline-v1";
+// Bump the version whenever relief-offline.html changes, so installed phones get the new page.
+const offlineCache = "relief-public-offline-v2";
 const offlinePage = "/relief-offline.html";
 
 self.addEventListener("install", event => {
@@ -6,7 +7,9 @@ self.addEventListener("install", event => {
 });
 
 self.addEventListener("activate", event => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(caches.keys()
+    .then(keys => Promise.all(keys.filter(key => key.startsWith("relief-public-offline-") && key !== offlineCache).map(key => caches.delete(key))))
+    .then(() => self.clients.claim()));
 });
 
 self.addEventListener("fetch", event => {

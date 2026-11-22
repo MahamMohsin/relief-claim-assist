@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Briefcase, Expand, IdCard, Receipt } from "lucide-react";
 import { api, HttpError } from "@/src/lib/client";
 import type { CitizenDocument, CitizenProfileData } from "@/src/lib/contracts";
@@ -56,12 +56,15 @@ export function ApplicantProfilePanel({
   claimHousehold,
   offline,
   version,
+  onRegistryCheck,
 }: {
   citizenId: string;
   claimIncome?: number;
   claimHousehold?: number;
   offline: boolean;
   version: number;
+  /** Called once the profile loads: does the claim's income / household differ from the registry profile? */
+  onRegistryCheck?: (incomeDiffers: boolean, householdDiffers: boolean) => void;
 }) {
   const [data, setData] = useState<CitizenProfileData | null>(null);
   const [loading, setLoading] = useState(!offline);
@@ -97,6 +100,17 @@ export function ApplicantProfilePanel({
 
     return () => controller.abort();
   }, [citizenId, offline, version]);
+
+  const onRegistryCheckRef = useRef(onRegistryCheck);
+  onRegistryCheckRef.current = onRegistryCheck;
+  useEffect(() => {
+    const record = data?.citizen;
+    if (!record) return;
+    onRegistryCheckRef.current?.(
+      typeof claimIncome === "number" && claimIncome !== record.monthly_income_mock,
+      typeof claimHousehold === "number" && claimHousehold !== record.household_size,
+    );
+  }, [data, claimIncome, claimHousehold]);
 
   const citizen = data?.citizen;
   const documents = useMemo(() => data?.documents ?? [], [data?.documents]);

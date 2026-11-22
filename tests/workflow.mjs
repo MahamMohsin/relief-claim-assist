@@ -369,7 +369,7 @@ async function testBrowser() {
   await page.getByRole("heading", { name: "You are offline" }).waitFor();
   assert.equal(await page.getByText("Auditor Kamran", { exact: true }).count(), 0);
   await page.context().setOffline(false);
-  await page.getByRole("link", { name: "Reconnect to your workspace" }).click();
+  // The offline page reloads into the workspace by itself when the connection returns.
   await page.getByRole("heading", { name: "Auditor Kamran", exact: true }).waitFor();
   assert.deepEqual(runtimeErrors, []);
   console.log("PASS browser layout, keyboard focus, live and 2G microphone capture, offline queue and cold start, persona switching, and audit UI");
