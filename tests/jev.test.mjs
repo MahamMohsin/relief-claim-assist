@@ -17,6 +17,37 @@ test("Jev mock preserves decisions and abstains on conflicting intents", async (
   assert.equal((await classifyScam("Send your OTP now", "")).label, "scam");
 });
 
+test("Jev mock routes all 11 mini-apps, resolves overlaps, and handles workspace/dashboard queries", async () => {
+  delete process.env.OPENROUTER_API_KEY;
+  process.env.JEV_MOCK_MODE = "true";
+
+  // Every mini-app routes cleanly even when overlapping terms like "claim" or "income cap" appear
+  assert.equal((await routeIntent("Start a new relief claim with income 15000")).app, "claim");
+  assert.equal((await routeIntent("Upload my CNIC photo in my profile")).app, "profile");
+  assert.equal((await routeIntent("Report missing payment for SIM-FATIMA1")).app, "scam");
+  assert.equal((await routeIntent("What is the household income cap?")).app, "policy");
+  assert.equal((await routeIntent("Change my phone number in My Privacy")).app, "privacy");
+  assert.equal((await routeIntent("Switch family to Ahmed")).app, "family");
+  assert.equal((await routeIntent("Approve this claim in Review Desk")).app, "review");
+  assert.equal((await routeIntent("Reject the claim and request more proof")).app, "review");
+  assert.equal((await routeIntent("Change the income cap to 35000 and simulate impact")).app, "rules");
+  assert.equal((await routeIntent("Publish new eligibility rule version")).app, "rules");
+  assert.equal((await routeIntent("Open registered users directory")).app, "users");
+  assert.equal((await routeIntent("Show flagged events in Audit Vault for claims")).app, "audit");
+  assert.equal((await routeIntent("Connect my WhatsApp agent API key")).app, "whatsapp");
+
+  // Workspace controls & persona switching
+  assert.equal((await routeIntent("Switch to officer Bilal")).label, "workspace_control");
+  assert.equal((await routeIntent("Close all windows")).label, "workspace_control");
+  assert.equal((await routeIntent("Turn on 2G lite mode")).label, "workspace_control");
+  assert.equal((await routeIntent("Open persona switcher")).label, "workspace_control");
+
+  // Dashboard & page context queries
+  assert.equal((await routeIntent("What is on my dashboard?")).label, "dashboard");
+  assert.equal((await routeIntent("Set the scheme budget to 50000000")).label, "dashboard");
+  assert.equal((await routeIntent("How many active cases do we have?")).label, "dashboard");
+});
+
 test("Jev live adapter uses typed responses and fails closed on a provider error", async (context) => {
   process.env.OPENROUTER_API_KEY = "fixture-key";
   context.mock.method(globalThis, "fetch", async (_url, options) => {
