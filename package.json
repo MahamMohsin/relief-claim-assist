@@ -9,7 +9,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test:unit": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test tests/jev.test.mjs",
     "test:e2e": "node --env-file=.env.local tests/workflow.mjs",
-    "whatsapp:gateway": "node scripts/whatsapp-gateway.mjs"
+    "whatsapp:gateway": "node scripts/whatsapp-gateway.mjs",
+    "sms:gateway": "node scripts/google-messages-gateway.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
