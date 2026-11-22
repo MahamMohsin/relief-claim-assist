@@ -1,4 +1,10 @@
-import { askMimo } from "@/src/lib/ai/mimo";
+import {
+  askMimo,
+  askMimoWithTools,
+  type MimoContentBlock,
+  type MimoMessage,
+  type MimoToolSpec,
+} from "@/src/lib/ai/mimo";
 import {
   authenticatePhoneWithToken,
   getUserForPhone,
@@ -21,17 +27,69 @@ export type DirectMessageResult = {
 
 export type WhatsAppMessageResult = Omit<DirectMessageResult, "shouldReply">;
 
+// Strictly per-(channel, userId) rolling conversation memory so follow-ups work
+// without EVER crossing data between Fatima, Tariq, Zainab, Bilal, Sana, or Kamran.
+type HistoryEntry = { role: "user" | "assistant"; text: string };
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __rca_messaging_histories: Map<string, HistoryEntry[]> | undefined;
+}
+
+function getHistories() {
+  if (!globalThis.__rca_messaging_histories) {
+    globalThis.__rca_messaging_histories = new Map();
+  }
+  return globalThis.__rca_messaging_histories;
+}
+
+function historyKey(channel: DirectChannel, userId: string) {
+  return `${channel}:${userId}`;
+}
+
+export function clearUserConversationHistory(channel: DirectChannel, userId: string) {
+  getHistories().delete(historyKey(channel, userId));
+}
+
+function appendHistory(channel: DirectChannel, userId: string, entry: HistoryEntry) {
+  const map = getHistories();
+  const key = historyKey(channel, userId);
+  const list = map.get(key) || [];
+  list.push(entry);
+  if (list.length > 14) {
+    list.splice(0, list.length - 14);
+  }
+  map.set(key, list);
+}
+
+function getHistoryMessages(channel: DirectChannel, userId: string): MimoMessage[] {
+  const list = getHistories().get(historyKey(channel, userId)) || [];
+  return list.slice(-10).map(item => ({ role: item.role, content: item.text }));
+}
+
 function formatRoleTitle(role: string): string {
   if (role === "officer") return "Reviewer";
   if (role === "admin") return "Scheme Administrator";
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
+function toMimoToolSpecs(tools: WhatsAppToolDefinition[]): MimoToolSpec[] {
+  return tools.map(t => ({
+    name: t.name,
+    description: t.description,
+    input_schema: {
+      type: "object",
+      properties: t.parameters.properties,
+      required: t.parameters.required,
+    },
+  }));
+}
+
 /**
- * Runs a single AI + role-scoped tool turn strictly isolated to `user`.
- * Used by:
+ * Full multi-step autonomous tool-calling turn strictly isolated to `user`.
+ * Shared identically by:
  *   1. Official Meta WhatsApp Agent pollers (per-user API key)
- *   2. Direct SMS via paired Google Messages (per-phone `/login <key>` session)
+ *   2. Direct SMS via paired Google Messages (`/login <key>` session)
  *   3. In-app Test Chat Console
  */
 export async function runScopedAssistantTurn(
@@ -42,232 +100,237 @@ export async function runScopedAssistantTurn(
   const text = rawText.trim();
   const lower = text.toLowerCase();
   const allowedTools = getToolsForRole(user.role);
+  const roleTitle = formatRoleTitle(user.role);
+
+  if (lower === "/reset" || lower === "/clear") {
+    clearUserConversationHistory(channel, user.userId);
+    return {
+      reply: `Conversation memory cleared for ${user.name} (${roleTitle}).`,
+      toolsUsed: [],
+    };
+  }
+  if (lower === "/whoami" || lower === "whoami") {
+    return {
+      reply: `Connected strictly as ${user.name} (${roleTitle}) with ${allowedTools.length} scoped tools active.`,
+      toolsUsed: [],
+    };
+  }
+  if (lower === "/tools" || lower === "tools" || lower === "/help" || lower === "help") {
+    const list = allowedTools.map(t => `• ${t.name.replaceAll("_", " ")}`).join("\n");
+    return {
+      reply: `Relief Assist (${user.name} · ${roleTitle}) — All ${allowedTools.length} active tools:\n${list}\n\nJust ask naturally in English or Urdu to run any action!`,
+      toolsUsed: [],
+    };
+  }
+
+  const toolByName = new Map(allowedTools.map(t => [t.name, t]));
   const toolsUsed: string[] = [];
 
-  let toolToRun: { tool: WhatsAppToolDefinition; args: Record<string, unknown> } | null = null;
-
-  // Match role-permitted tools strictly for this user's role
-  if (
-    /family|families|household list|assigned|consent/i.test(lower) &&
-    allowedTools.some(x => x.name === "get_families")
-  ) {
-    const t = allowedTools.find(x => x.name === "get_families");
-    if (t) toolToRun = { tool: t, args: {} };
-  } else if (
-    /my profile|cnic|utility bill|documents|my info|who am i/i.test(lower) &&
-    allowedTools.some(x => x.name === "get_my_profile")
-  ) {
-    const t = allowedTools.find(x => x.name === "get_my_profile");
-    if (t) toolToRun = { tool: t, args: {} };
-  } else if (
-    /missing payment|report payment|dispute|didn't receive|not received/i.test(lower) &&
-    allowedTools.some(x => x.name === "report_missing_payment")
-  ) {
-    const t = allowedTools.find(x => x.name === "report_missing_payment");
-    if (t) {
-      const refMatch = text.match(/\b(RAAST[-A-Z0-9]+|TXN[-A-Z0-9]+|REF[-A-Z0-9]+|[A-Z]{2,6}-\d{3,})\b/i);
-      if (refMatch) {
-        toolToRun = { tool: t, args: { reference: refMatch[1], message: text } };
-      }
-    }
-  } else if (
-    /apply|new claim|start claim|draft|need aid|need relief|file a claim/i.test(lower) &&
-    allowedTools.some(x => x.name === "create_claim_draft")
-  ) {
-    const t = allowedTools.find(x => x.name === "create_claim_draft");
-    if (t) {
-      const incomeMatch = text.match(/(\d+[\d,]*)\s*(?:pkr|rupees|income|\/mo)/i);
-      const householdMatch = text.match(/(\d+)\s*(?:people|persons|members|family)/i);
-      toolToRun = {
-        tool: t,
-        args: {
-          monthly_income: incomeMatch ? Number(incomeMatch[1].replace(/,/g, "")) : 15000,
-          household_size: householdMatch ? Number(householdMatch[1]) : 4,
-          notes: text,
-        },
-      };
-    }
-  } else if (
-    /claim|status|payout|payment|application|grant/i.test(lower) &&
-    !/review|queue|approve|reject/i.test(lower) &&
-    allowedTools.some(x => x.name === "get_my_claims")
-  ) {
-    const t = allowedTools.find(x => x.name === "get_my_claims");
-    if (t) toolToRun = { tool: t, args: {} };
-  } else if (/scam|fraud|fake|suspicious|phishing|lottery|raast|sms|link|otp|verify/i.test(lower)) {
-    const t = allowedTools.find(x => x.name === "check_scam");
-    if (t) toolToRun = { tool: t, args: { message: text } };
-  } else if (/policy|rule|criteria|eligible|eligibility|cap|allowed|section/i.test(lower)) {
-    const t = allowedTools.find(x => x.name === "ask_policy");
-    if (t) toolToRun = { tool: t, args: { question: text } };
-  } else if (
-    /approve|reject|more proof/i.test(lower) &&
-    allowedTools.some(x => x.name === "review_claim")
-  ) {
-    const t = allowedTools.find(x => x.name === "review_claim");
-    const idMatch = text.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
-    if (t && idMatch) {
-      const decision = /approve/i.test(lower) ? "approve" : /reject/i.test(lower) ? "reject" : "more_proof";
-      toolToRun = {
-        tool: t,
-        args: { claim_id: idMatch[1], decision, reason: text },
-      };
-    }
-  } else if (
-    /queue|pending|in review|desk/i.test(lower) &&
-    allowedTools.some(x => x.name === "get_review_queue")
-  ) {
-    const t = allowedTools.find(x => x.name === "get_review_queue");
-    if (t) toolToRun = { tool: t, args: {} };
-  } else if (
-    /allocate|set budget|update budget/i.test(lower) &&
-    allowedTools.some(x => x.name === "update_scheme_budget")
-  ) {
-    const t = allowedTools.find(x => x.name === "update_scheme_budget");
-    const amtMatch = text.match(/(\d[\d,]{4,})/);
-    if (t && amtMatch) {
-      toolToRun = {
-        tool: t,
-        args: { total_pkr: Number(amtMatch[1].replace(/,/g, "")), reason: text },
-      };
-    }
-  } else if (
-    /budget|reserve|funds|allocation/i.test(lower) &&
-    allowedTools.some(x => x.name === "get_scheme_budget")
-  ) {
-    const t = allowedTools.find(x => x.name === "get_scheme_budget");
-    if (t) toolToRun = { tool: t, args: {} };
-  }
-
-  let toolResultJson = "";
-  let toolError = "";
-  if (toolToRun) {
-    try {
-      toolsUsed.push(toolToRun.tool.name);
-      const res = await toolToRun.tool.execute(user, toolToRun.args);
-      toolResultJson = JSON.stringify(res);
-    } catch (err) {
-      toolError = err instanceof Error ? err.message : "Tool execution failed.";
-      toolResultJson = JSON.stringify({ error: toolError });
-    }
-  }
-
-  const roleTitle = formatRoleTitle(user.role);
-  const allowedList = allowedTools.map(t => `- ${t.name}: ${t.description}`).join("\n");
   const channelGuidance =
     channel === "sms"
-      ? "The user is texting via direct SMS (Google Messages). Keep replies clear, concise (under 600 chars when possible), plain text without markdown asterisks or heavy formatting."
-      : "The user is chatting on WhatsApp. Use concise paragraphs, *bold* for emphasis, and bullet points (•).";
+      ? "The user is texting via Direct SMS (Google Messages). Keep replies clear, accurate, and concise (ideally under 650 characters unless listing details). Use clean plain text without markdown asterisks."
+      : "The user is chatting on WhatsApp. Format nicely with concise paragraphs, *bold* for key figures/statuses, and bullet points (•).";
 
-  try {
-    const systemPrompt = `You are the Relief Claim Assist AI Assistant for Pakistan's emergency cash relief system.
-STRICT DATA ISOLATION RULE:
-You are ONLY authorized to assist this specific authenticated user:
-- Name: ${user.name}
+  const systemPrompt = `You are the full-capability Relief Claim Assist AI Agent for Pakistan's emergency cash relief system.
+
+STRICT PER-USER DATA ISOLATION:
+- Authenticated User: ${user.name}
 - Role: ${user.role} (${roleTitle})
 - User ID: ${user.userId}
 - Citizen ID: ${user.citizenId || "None (non-citizen role)"}
 
-Permitted tools for ${user.name} (${roleTitle}):
-${allowedList}
+OPERATING RULES:
+1. You have full access to ALL ${allowedTools.length} tools authorized for ${roleTitle} accounts. ALWAYS call the appropriate real tool(s) to read live data or perform actions — NEVER guess, fabricate, or pretend you ran an action.
+2. You may chain multiple tools in one turn when needed (for example: fetch claims or review queue first to get exact UUIDs, then attach evidence / submit / review / disburse / update consent / simulate / publish / adjust budget).
+3. NEVER access, invent, or reveal data belonging to any other user. Only report exact facts returned by tool outputs.
+4. If the user asks for an action outside their role (${roleTitle}), clearly explain what their role is permitted to do instead.
+5. ${channelGuidance}
+6. Reply in English, or in Urdu if the user writes in Urdu. Format PKR amounts with commas (e.g., PKR 25,000).`;
 
-CRITICAL RULES:
-- NEVER discuss, reveal, or invent claims/data belonging to any other user.
-- If the user asks for something outside their role (${roleTitle}), politely explain what ${roleTitle} accounts can do instead.
-- If tool results are provided below, report ONLY the exact facts from the tool results. Never fabricate claims, amounts, or IDs.
-- ${channelGuidance}
-- Reply in English (or Urdu if the user writes in Urdu).`;
+  const toolSpecs = toMimoToolSpecs(allowedTools);
+  const history = getHistoryMessages(channel, user.userId);
+  const conversation: MimoMessage[] = [...history, { role: "user", content: text }];
 
-    const mimoInput = `User (${user.name}, ${roleTitle}) message: "${text}"
-${toolResultJson ? `Tool Executed: ${toolToRun?.tool.name}\nTool Output: ${toolResultJson}` : "No database tool was triggered for this message."}
+  const MAX_TOOL_ROUNDS = 6;
 
-Provide the direct reply to ${user.name}.`;
+  try {
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const response = await askMimoWithTools({
+        system: systemPrompt,
+        messages: conversation,
+        tools: toolSpecs,
+        maxTokens: channel === "sms" ? 750 : 1100,
+      });
 
-    const mimoResponse = await askMimo(systemPrompt, mimoInput);
-    if (mimoResponse && mimoResponse.trim().length > 0) {
-      return { reply: mimoResponse.trim(), toolsUsed };
+      const toolUses = response.content.filter(
+        (b): b is Extract<MimoContentBlock, { type: "tool_use" }> => b.type === "tool_use",
+      );
+      const textParts = response.content
+        .filter((b): b is Extract<MimoContentBlock, { type: "text" }> => b.type === "text")
+        .map(b => b.text.trim())
+        .filter(Boolean);
+
+      if (toolUses.length === 0) {
+        const finalReply =
+          textParts.join("\n\n").trim() ||
+          `Completed your request for ${user.name} (${roleTitle}).`;
+        appendHistory(channel, user.userId, { role: "user", text });
+        appendHistory(channel, user.userId, { role: "assistant", text: finalReply });
+        return { reply: finalReply, toolsUsed };
+      }
+
+      // Append assistant's tool_use turn
+      conversation.push({ role: "assistant", content: response.content });
+
+      // Execute every requested tool strictly within this user's isolated role & Supabase JWT
+      const toolResults: MimoContentBlock[] = [];
+      for (const call of toolUses) {
+        const toolDef = toolByName.get(call.name);
+        if (!toolDef) {
+          toolResults.push({
+            type: "tool_result",
+            tool_use_id: call.id,
+            is_error: true,
+            content: JSON.stringify({
+              error: `Tool '${call.name}' is not permitted for role '${user.role}'.`,
+            }),
+          });
+          continue;
+        }
+
+        if (!toolsUsed.includes(call.name)) {
+          toolsUsed.push(call.name);
+        }
+
+        try {
+          const output = await toolDef.execute(user, call.input || {});
+          const serialized = JSON.stringify(output);
+          toolResults.push({
+            type: "tool_result",
+            tool_use_id: call.id,
+            content: serialized.length > 12000 ? serialized.slice(0, 12000) + "...(truncated)" : serialized,
+          });
+        } catch (toolErr) {
+          toolResults.push({
+            type: "tool_result",
+            tool_use_id: call.id,
+            is_error: true,
+            content: JSON.stringify({
+              error: toolErr instanceof Error ? toolErr.message : "Tool execution failed.",
+            }),
+          });
+        }
+      }
+
+      conversation.push({ role: "user", content: toolResults });
     }
-  } catch {
-    // Graceful deterministic fallback below
+
+    // Safety final synthesis if MAX_TOOL_ROUNDS hit
+    const wrapUp = await askMimoWithTools({
+      system: systemPrompt,
+      messages: [
+        ...conversation,
+        { role: "user", content: "Summarize all tool results above clearly for the user now." },
+      ],
+      tools: [],
+      maxTokens: channel === "sms" ? 600 : 900,
+    });
+    const finalText = wrapUp.content
+      .filter((b): b is Extract<MimoContentBlock, { type: "text" }> => b.type === "text")
+      .map(b => b.text.trim())
+      .filter(Boolean)
+      .join("\n\n");
+
+    const reply = finalText || `Done! Executed: ${toolsUsed.join(", ")}.`;
+    appendHistory(channel, user.userId, { role: "user", text });
+    appendHistory(channel, user.userId, { role: "assistant", text: reply });
+    return { reply, toolsUsed };
+  } catch (err) {
+    console.warn(
+      `[messaging-agent] Multi-tool loop fallback for ${user.name}:`,
+      err instanceof Error ? err.message : String(err),
+    );
+    return runFallbackTurn(user, text, channel, allowedTools);
+  }
+}
+
+/**
+ * Fallback single-tool + deterministic handler if MiMo tool-calling endpoint is temporarily unavailable
+ */
+async function runFallbackTurn(
+  user: ScopedUserIdentity,
+  text: string,
+  channel: DirectChannel,
+  allowedTools: WhatsAppToolDefinition[],
+): Promise<{ reply: string; toolsUsed: string[] }> {
+  const lower = text.toLowerCase();
+  const toolsUsed: string[] = [];
+  let toolToRun: { tool: WhatsAppToolDefinition; args: Record<string, unknown> } | null = null;
+
+  const find = (name: string) => allowedTools.find(x => x.name === name);
+
+  if (/family|families/i.test(lower) && find("get_families")) {
+    toolToRun = { tool: find("get_families")!, args: {} };
+  } else if (/privacy|consent|correction/i.test(lower) && find("get_privacy_status")) {
+    toolToRun = { tool: find("get_privacy_status")!, args: {} };
+  } else if (/my profile|cnic|utility bill|job proof/i.test(lower) && find("get_my_profile")) {
+    toolToRun = { tool: find("get_my_profile")!, args: {} };
+  } else if (/audit/i.test(lower) && find("get_audit_logs")) {
+    toolToRun = { tool: find("get_audit_logs")!, args: { limit: 10 } };
+  } else if (/safety/i.test(lower) && find("get_safety_metrics")) {
+    toolToRun = { tool: find("get_safety_metrics")!, args: {} };
+  } else if (/queue|pending|in review/i.test(lower) && find("get_review_queue")) {
+    toolToRun = { tool: find("get_review_queue")!, args: {} };
+  } else if (/overview|stats|metrics/i.test(lower) && find("get_overview_metrics")) {
+    toolToRun = { tool: find("get_overview_metrics")!, args: {} };
+  } else if (/budget|reserve|funds/i.test(lower) && find("get_scheme_budget")) {
+    toolToRun = { tool: find("get_scheme_budget")!, args: {} };
+  } else if (/claim|status|payout/i.test(lower) && find("get_my_claims")) {
+    toolToRun = { tool: find("get_my_claims")!, args: {} };
+  } else if (/scam|fraud|fake|phishing|otp|raast/i.test(lower) && find("check_scam")) {
+    toolToRun = { tool: find("check_scam")!, args: { message: text } };
+  } else if (/policy|rule|eligible|cap/i.test(lower) && find("ask_policy")) {
+    toolToRun = { tool: find("ask_policy")!, args: { question: text } };
   }
 
-  // Deterministic fallback if LLM is temporarily unreachable
-  if (toolToRun && toolResultJson) {
-    const data = JSON.parse(toolResultJson) as Record<string, unknown>;
-    if (data.error) {
+  let outputJson = "";
+  if (toolToRun) {
+    toolsUsed.push(toolToRun.tool.name);
+    try {
+      const out = await toolToRun.tool.execute(user, toolToRun.args);
+      outputJson = JSON.stringify(out);
+    } catch (e) {
       return {
-        reply: `Could not complete ${toolToRun.tool.name}: ${String(data.error)}`,
+        reply: `Could not run ${toolToRun.tool.name}: ${e instanceof Error ? e.message : "Failed"}`,
         toolsUsed,
       };
     }
-    if (toolToRun.tool.name === "get_my_claims") {
-      const list = (data.claims as Array<Record<string, unknown>>) || [];
-      if (list.length === 0) {
-        return {
-          reply: `No relief claims found for ${String(data.owner || user.name)}.`,
-          toolsUsed,
-        };
-      }
-      const lines = list.map(
-        (c, i) =>
-          `${i + 1}. ${String(c.notes || "Relief Grant")} - ${String(c.status).toUpperCase()} - PKR ${new Intl.NumberFormat("en-PK").format(Number(c.amount_pkr || 0))} (Ref #${String(c.id).slice(0, 8)})`,
-      );
-      return {
-        reply: `Relief Claims for ${String(data.owner || user.name)} (${list.length}):\n${lines.join("\n")}`,
-        toolsUsed,
-      };
-    }
-    if (toolToRun.tool.name === "get_my_profile") {
-      return {
-        reply: `Profile for ${String(data.full_name)}: Area ${String(data.village_area)}, Household ${String(data.household_size)}, Monthly income PKR ${new Intl.NumberFormat("en-PK").format(Number(data.monthly_income_mock || 0))}, Docs uploaded: ${String(data.documents_count)}.`,
-        toolsUsed,
-      };
-    }
-    if (toolToRun.tool.name === "get_families") {
-      const fams = (data.families as Array<Record<string, unknown>>) || [];
-      return {
-        reply: fams.length
-          ? `Assigned families for ${user.name} (${fams.length}):\n` +
-            fams.map(f => `- ${String(f.full_name)} (${String(f.village_area)}) · Consent: ${String(f.consent)}`).join("\n")
-          : `No families are currently assigned to ${user.name}.`,
-        toolsUsed,
-      };
-    }
-    if (toolToRun.tool.name === "ask_policy") {
-      return { reply: `Policy (${String(data.version || "current")}): ${String(data.answer)}`, toolsUsed };
-    }
-    if (toolToRun.tool.name === "check_scam") {
-      return {
-        reply: `Scam Shield verdict: ${String(data.classification).toUpperCase()} (${String(data.confidence)}% confidence). ${String(data.explanation || "")}`,
-        toolsUsed,
-      };
-    }
-    if (toolToRun.tool.name === "get_review_queue") {
-      const claims = (data.claims as Array<Record<string, unknown>>) || [];
-      return {
-        reply: `Review Queue (${String(data.count)}):\n` +
-          claims.map(c => `- ${String(c.applicant)} · PKR ${new Intl.NumberFormat("en-PK").format(Number(c.amount_pkr || 0))} · ${String(c.status)} (#${String(c.id).slice(0, 8)})`).join("\n"),
-        toolsUsed,
-      };
-    }
-    if (toolToRun.tool.name === "get_scheme_budget") {
-      return {
-        reply: `Scheme Budget: Total PKR ${new Intl.NumberFormat("en-PK").format(Number(data.total_budget_pkr || 0))}, Available PKR ${new Intl.NumberFormat("en-PK").format(Number(data.available_pkr || 0))}, Reserved PKR ${new Intl.NumberFormat("en-PK").format(Number(data.reserved_pkr || 0))}, Paid PKR ${new Intl.NumberFormat("en-PK").format(Number(data.paid_pkr || 0))}.`,
-        toolsUsed,
-      };
-    }
-    return { reply: String(data.message || JSON.stringify(data)), toolsUsed };
+  }
+
+  try {
+    const simpleReply = await askMimo(
+      `You are Relief Assist (${formatRoleTitle(user.role)} assistant for ${user.name}). ${channel === "sms" ? "Reply concisely in plain SMS text." : "Reply concisely for WhatsApp."}`,
+      `User asked: "${text}"\n${outputJson ? `Tool ${toolToRun?.tool.name} output: ${outputJson}` : ""}`,
+    );
+    if (simpleReply) return { reply: simpleReply, toolsUsed };
+  } catch {}
+
+  if (outputJson) {
+    return {
+      reply: `${toolToRun?.tool.name} result: ${outputJson.slice(0, 500)}`,
+      toolsUsed,
+    };
   }
 
   return {
-    reply: `Hello ${user.name} (${roleTitle})! I am your Relief Assist assistant. Ask me a question or send /help to see what your ${roleTitle} account can do.`,
+    reply: `Hello ${user.name} (${formatRoleTitle(user.role)})! Send /help or /tools to see everything I can do for your account.`,
     toolsUsed,
   };
 }
 
 /**
  * Processes an inbound direct message (Google Messages SMS or WhatsApp gateway)
- * with `/login <key>`, `/logout`, `/whoami`, `/help`, and per-user isolated tools.
+ * with `/login <key>`, `/logout`, `/whoami`, `/reset`, `/tools`, `/help`, and full multi-tool execution.
  */
 export async function processDirectChannelMessage(
   fromSender: string,
@@ -309,23 +372,13 @@ export async function processDirectChannelMessage(
       };
     }
 
+    clearUserConversationHistory(channel, auth.user.userId);
     const roleName = formatRoleTitle(auth.user.role);
-    const roleHints =
-      auth.user.role === "citizen"
-        ? "Check your claims, check your profile, draft a new claim, ask policy rules, or verify suspicious SMS."
-        : auth.user.role === "helper"
-          ? "View assigned families, check family claims, draft aid applications, ask policy rules, or check scams."
-          : auth.user.role === "shopkeeper"
-            ? "Verify suspicious SMS/Raast alerts, report missing payments, or ask official relief policy rules."
-            : auth.user.role === "officer"
-              ? "Inspect review queue, check scheme budget, review claims, or ask policy rules."
-              : auth.user.role === "admin"
-                ? "Check or update scheme budget, inspect review queue, view families, or ask policy rules."
-                : "Inspect review queue, check scheme budget, or ask policy rules.";
+    const toolsCount = getToolsForRole(auth.user.role).length;
 
     return {
       shouldReply: true,
-      reply: `Relief Assist ${channelLabel}: Logged in as ${auth.user.name} (${roleName}).\nYour chat is privately scoped to your account.\nYou can: ${roleHints}\nSend your question anytime, or /logout to disconnect.`,
+      reply: `Relief Assist ${channelLabel}: Logged in as ${auth.user.name} (${roleName}).\nYour session is privately scoped to your account with all ${toolsCount} ${roleName} tools active.\nAsk anything or tell me what to do (send /tools to see every action, /logout to disconnect).`,
       user: auth.user,
       toolsUsed: ["authenticate_session"],
       isAuthenticated: true,
@@ -334,7 +387,11 @@ export async function processDirectChannelMessage(
 
   // 2. Handle /logout
   if (lower === "/logout" || lower === "logout") {
+    const prevUser = getUserForPhone(fromSender);
     const wasLinked = unlinkPhone(fromSender);
+    if (prevUser) {
+      clearUserConversationHistory(channel, prevUser.userId);
+    }
     return {
       shouldReply: true,
       reply: wasLinked
@@ -346,10 +403,9 @@ export async function processDirectChannelMessage(
     };
   }
 
-  // 3. Check if this sender is authenticated
+  // 3. Check authentication
   const user = getUserForPhone(fromSender);
   if (!user) {
-    // Safety guard for real paired Google Messages phone: don't auto-reply to unrelated personal/OTP SMS!
     const isExplicitPrompt =
       lower === "/start" ||
       lower === "/help" ||
@@ -375,31 +431,45 @@ export async function processDirectChannelMessage(
     };
   }
 
-  // 4. Handle /whoami
+  // 4. Handle /reset
+  if (lower === "/reset" || lower === "/clear") {
+    clearUserConversationHistory(channel, user.userId);
+    return {
+      shouldReply: true,
+      reply: `Conversation memory cleared for ${user.name}. Start a fresh request anytime!`,
+      user,
+      toolsUsed: [],
+      isAuthenticated: true,
+    };
+  }
+
+  // 5. Handle /whoami
   if (lower === "/whoami" || lower === "whoami") {
+    const toolsCount = getToolsForRole(user.role).length;
     return {
       shouldReply: true,
-      reply: `Connected as ${user.name} (${formatRoleTitle(user.role)}). Send /logout to switch accounts.`,
+      reply: `Connected as ${user.name} (${formatRoleTitle(user.role)}) with ${toolsCount} scoped tools. Send /tools, /reset, or /logout.`,
       user,
       toolsUsed: [],
       isAuthenticated: true,
     };
   }
 
-  // 5. Handle /help
-  if (lower === "/help" || lower === "help") {
+  // 6. Handle /help or /tools
+  if (lower === "/help" || lower === "help" || lower === "/tools" || lower === "tools") {
     const roleTitle = formatRoleTitle(user.role);
-    const tools = getToolsForRole(user.role).map(t => `- ${t.name.replaceAll("_", " ")}`).join("\n");
+    const tools = getToolsForRole(user.role);
+    const list = tools.map(t => `- ${t.name.replaceAll("_", " ")}`).join("\n");
     return {
       shouldReply: true,
-      reply: `Relief Assist ${channelLabel} (${user.name} · ${roleTitle}):\nAvailable actions:\n${tools}\nCommands: /whoami, /logout`,
+      reply: `Relief Assist ${channelLabel} (${user.name} · ${roleTitle})\nAll ${tools.length} active tools:\n${list}\nCommands: /whoami, /reset, /logout`,
       user,
       toolsUsed: [],
       isAuthenticated: true,
     };
   }
 
-  // 6. Execute strictly scoped AI + tool turn for this authenticated user
+  // 7. Execute full multi-tool scoped assistant turn
   const scopedIdentity: ScopedUserIdentity = {
     userId: user.userId,
     name: user.name,
