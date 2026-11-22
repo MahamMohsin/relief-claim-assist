@@ -28,6 +28,7 @@ import { Banner } from "@astryxdesign/core/Banner";
 import { HStack } from "@astryxdesign/core/HStack";
 import { VStack } from "@astryxdesign/core/VStack";
 import type { ViewContext } from "./MiniApps";
+import { WhatsAppAgentKeySection } from "./WhatsAppAgentKeySection";
 
 type TokenData = {
   userId: string;
@@ -258,6 +259,9 @@ function AdminWhatsAppManagementView({ ctx }: { ctx: ViewContext }) {
               variant={isConnected ? "success" : "warning"}
             />
           </div>
+
+          {/* Official WhatsApp Agent Platform (Direct Meta 3P Agent API Key) */}
+          <WhatsAppAgentKeySection personaId="kamran" roleTitle="Scheme Administrator" />
 
           {/* Section 1: Device Setup & Paired Device Management */}
           <div style={{
@@ -811,6 +815,9 @@ function CitizenWhatsAppLinkView({ ctx }: { ctx: ViewContext }) {
               <p>Connect your WhatsApp to apply for aid, query policy, or review claims directly from chat.</p>
             </VStack>
           </div>
+
+          {/* Official WhatsApp Agent Platform (Direct Meta 3P Agent API Key) */}
+          <WhatsAppAgentKeySection personaId={ctx.profile.id} roleTitle={roleDisplay} />
 
           {/* Session Token Card */}
           <div style={{ background: "rgba(37, 211, 102, 0.08)", border: "1px solid rgba(37, 211, 102, 0.35)", borderRadius: "16px", padding: "1.25rem", width: "100%" }}>

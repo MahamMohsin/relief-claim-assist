@@ -419,10 +419,8 @@ export function WhatsAppTokenWidget({
         paddingTop: "0.2rem",
       }}>
         <div style={{ fontSize: "0.76rem", color: "var(--color-text-secondary, #64748b)" }}>
-          Message the Admin bot line on WhatsApp and send{" "}
-          <code style={{ background: "#e2e8f0", padding: "1px 5px", borderRadius: "4px", color: "#0f172a" }}>
-            /login &lt;your-key&gt;
-          </code>
+          Message the Admin bot line or connect your{" "}
+          <strong style={{ color: "#059669" }}>Official WhatsApp Agent API Key</strong> in the mini-app.
         </div>
         {onOpenApp && (
           <button
@@ -442,7 +440,7 @@ export function WhatsAppTokenWidget({
             }}
           >
             <MessageSquare size={13} />
-            Open WhatsApp Mini-App & Simulator
+            Connect WhatsApp Agent / Link Mini-App
           </button>
         )}
       </div>

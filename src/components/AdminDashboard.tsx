@@ -219,6 +219,7 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
   const [showQr, setShowQr] = useState(false);
   const [phoneInput, setPhoneInput] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [agentInfo, setAgentInfo] = useState<{ isConfigured: boolean; agentName: string | null; maskedKey: string | null } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -226,12 +227,19 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
       if (offline) return;
       try {
         setLoading(true);
-        const res = await fetch("/api/whatsapp/admin");
+        const [res, agentRes] = await Promise.all([
+          fetch("/api/whatsapp/admin"),
+          fetch("/api/whatsapp/agent-key?persona=kamran"),
+        ]);
         if (!res.ok) throw new Error("Could not load WhatsApp admin status");
         const json = (await res.json()) as WhatsAppState;
         if (active) {
           setState(json);
           if (json.adminPhone) setPhoneInput(json.adminPhone);
+        }
+        if (agentRes.ok) {
+          const aJson = await agentRes.json();
+          if (active) setAgentInfo(aJson);
         }
       } catch {
         if (active) {
@@ -469,10 +477,12 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
         <dl className="admin-claim-kpis" style={{ margin: "0.25rem 0" }}>
           <dt>Admin WhatsApp</dt>
           <dd>{state?.adminPhone || "Not paired yet"}</dd>
+          <dt>Meta Agent API</dt>
+          <dd style={{ color: agentInfo?.isConfigured ? "#34d399" : "rgba(255, 255, 255, 0.7)" }}>
+            {agentInfo?.isConfigured ? `${agentInfo.agentName || "Ali"} (Active)` : "Not linked (Use Link App)"}
+          </dd>
           <dt>Linked Citizens</dt>
           <dd>{state?.activeUsersCount || 0} active</dd>
-          <dt>Supported Commands</dt>
-          <dd>/login, /help, claims, policy, scam</dd>
           <dt>LLM Engine</dt>
           <dd>MiMo Flash + Scoped Tools</dd>
         </dl>
