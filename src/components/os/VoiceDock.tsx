@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from "react";
-import { ChevronDown, MessageSquare, Mic, Send, Volume2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Mic, Send, Volume2, X } from "lucide-react";
 import type { MiniApp, Profile, UIAction } from "@/src/lib/contracts";
 import { transcribe } from "@/src/lib/client";
 import { useVoiceStream } from "@/src/lib/useVoiceStream";
@@ -522,18 +522,17 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   const lastAssistantId = [...filledTurns].reverse().find(turn => turn.role === "assistant")?.id;
 
   return <section className={"voice-dock-glass" + (hasEngagedVoice ? " voice-revealed" : "") + (recording ? " is-recording" : "") + (working ? " is-working" : "") + (clarify ? " clarifying" : "")} aria-label="Relief voice assistant">
-    {/* If chat has messages and is hidden by the user, show top-right "Bring chat back" pill */}
+    {/* If chat has messages and is hidden by the user, show simple up button with white circle bg */}
     {chatHidden && filledTurns.length > 0 && (
       <div className="voice-bring-back-bar">
         <button
           type="button"
-          className="voice-bring-back-btn"
+          className="voice-chat-restore-btn"
           onClick={() => setChatHidden(false)}
-          aria-label="Bring chat back"
-          title="Bring chat back"
+          aria-label="Show conversation"
+          title="Show conversation"
         >
-          <MessageSquare size={13} />
-          <span>Bring chat back ({filledTurns.length})</span>
+          <ChevronUp size={16} strokeWidth={2.6} />
         </button>
       </div>
     )}
