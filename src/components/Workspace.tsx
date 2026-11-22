@@ -102,7 +102,9 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   const desktopBoundsRef = useRef<HTMLDivElement>(null);
   const motionDisabled = useReducedMotion() || lite;
   const offline = !browserOnline || !fixtureOnline;
-  const citizen = profile?.role === "helper" ? family?.id ?? null : profile?.citizen_id ?? null;
+  const citizen = profile && ["helper", "officer", "admin"].includes(profile.role)
+    ? (family?.id ?? profile.citizen_id ?? null)
+    : (profile?.citizen_id ?? null);
   const scope = citizen ?? "self";
   const owner = profile?.id;
   const available = profile ? tools.filter(tool => canOpen(profile.role, tool)) : [];
@@ -424,8 +426,47 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   openAppRef.current = openAppWindow;
   const focusAppRef = useRef(focusApp);
   focusAppRef.current = focusApp;
+  const closeAppRef = useRef(closeAppWindow);
+  closeAppRef.current = closeAppWindow;
+  const minimizeAppRef = useRef(minimizeAppWindow);
+  minimizeAppRef.current = minimizeAppWindow;
+  const resizeAppRef = useRef(setAppSizePreset);
+  resizeAppRef.current = setAppSizePreset;
+  const signInRef = useRef(signIn);
+  signInRef.current = signIn;
+  const syncNowRef = useRef(synchronize);
+  syncNowRef.current = synchronize;
   const minimizedAppsRef = useRef(minimizedApps);
   minimizedAppsRef.current = minimizedApps;
+
+  const desktopSnapRef = useRef({
+    profile,
+    available,
+    minimizedApps,
+    offline,
+    lite,
+    pendingCount: pending.length,
+    family,
+    overview,
+    unreadAlertsCount: officerAlerts.filter(a => a.unread).length,
+    auditLogs,
+    auditSafety,
+    pastClaims,
+  });
+  desktopSnapRef.current = {
+    profile,
+    available,
+    minimizedApps,
+    offline,
+    lite,
+    pendingCount: pending.length,
+    family,
+    overview,
+    unreadAlertsCount: officerAlerts.filter(a => a.unread).length,
+    auditLogs,
+    auditSafety,
+    pastClaims,
+  };
 
   useEffect(() => {
     cuaEngine.bridge = {
@@ -434,7 +475,91 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
       getActiveApp: () => activeAppRef.current,
       openApp: app => openAppRef.current(app),
       focusApp: app => focusAppRef.current(app),
+      closeApp: app => closeAppRef.current(app),
+      closeAllApps: () => {
+        setOpenApps([]);
+        setMinimizedApps([]);
+        setZOrder([]);
+        setActiveApp(null);
+      },
+      minimizeApp: app => minimizeAppRef.current(app),
+      resizeApp: (app, preset) => resizeAppRef.current(app, preset),
+      switchPersona: async persona => {
+        await signInRef.current(persona);
+      },
+      toggleLite: () => setLite(prev => !prev),
+      toggleNetworkDrop: () => setFixtureOnline(prev => !prev),
+      setPanel: (panel, open) => {
+        if (panel === "account_menu") {
+          setUserDropdownOpen(prev => open ?? !prev);
+        } else if (panel === "persona_switcher") {
+          setChooser(prev => open ?? !prev);
+        } else if (panel === "notifications") {
+          setAlertsOpen(prev => open ?? !prev);
+        }
+      },
+      syncNow: async () => {
+        await syncNowRef.current(true);
+      },
       refresh: () => setVersion(value => value + 1),
+      getDesktopSnapshot: () => {
+        const s = desktopSnapRef.current;
+        const confRows = s.auditLogs.filter(row => row.confidence !== null);
+        const avgConf = confRows.length
+          ? Math.round((confRows.reduce((acc, row) => acc + (row.confidence ?? 0), 0) / confRows.length) * 100)
+          : undefined;
+        const strict = s.auditSafety.find(item => item.threshold === 0.9) ?? s.auditSafety[0];
+        const relaxed = s.auditSafety.find(item => item.threshold !== 0.9);
+        return {
+          persona: s.profile ? { id: s.profile.id, role: s.profile.role, name: s.profile.full_name } : undefined,
+          availableApps: s.available,
+          minimizedApps: s.minimizedApps,
+          offline: s.offline,
+          lite: s.lite,
+          pendingSyncCount: s.pendingCount,
+          activeFamily: s.family ? { id: s.family.id, name: s.family.full_name, villageArea: s.family.village_area } : null,
+          overview: s.overview ? {
+            active: s.overview.active,
+            review: s.overview.review,
+            proof: s.overview.proof,
+            approved: s.overview.approved,
+            rejected: s.overview.rejected,
+            closed: s.overview.closed,
+            paid: s.overview.paid,
+            newThisMonth: s.overview.new_this_month,
+            priority: s.overview.priority,
+            unreadAlertsCount: s.unreadAlertsCount,
+          } : undefined,
+          audit: s.auditLogs.length > 0 ? {
+            totalLogs: s.auditLogs.length,
+            safetyScoreAverage: avgConf,
+            recentEvents: s.auditLogs.slice(0, 5).map(r => ({
+              eventType: r.event_type,
+              actorRole: r.actor_role,
+              outcome: r.outcome,
+            })),
+            ...(strict ? {
+              safetySummary: {
+                strictBadApprovals: strict.bad_approvals ?? 0,
+                strictOfficerReviewPct: Math.round((strict.officer_review_rate ?? 1) * 100),
+                relaxedBadApprovals: relaxed?.bad_approvals ?? 0,
+              },
+            } : {}),
+          } : undefined,
+          claimSummaryList: s.pastClaims.length > 0 ? s.pastClaims.slice(0, 8).map(item => ({
+            id: item.id,
+            status: item.status,
+            amountPkr: item.amount_pkr,
+            monthlyIncome: item.payload_json?.monthly_income,
+            householdSize: item.payload_json?.household_size,
+            notes: item.payload_json?.notes,
+            paymentStatus: item.payment_status,
+            fundingStatus: item.funding_status,
+            raastRef: item.payment?.raast_ref,
+            reasonEn: item.citizen_reason_en,
+          })) : undefined,
+        };
+      },
     };
     return () => {
       cuaEngine.bridge = null;
@@ -449,18 +574,6 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
     }
     if (action.type === "show_jev_badge" || action.type === "ask_clarification") {
       return;
-    }
-    // Guaranteed window opening for any app-specific action
-    if (action.type === "open_mini_app") {
-      openAppWindow(action.app);
-    } else if (action.type === "ask_policy_visual") {
-      openAppWindow("policy");
-    } else if (action.type === "check_scam_visual") {
-      openAppWindow("scam");
-    } else if (action.type === "start_new_claim" || action.type === "prefill_fields" || action.type === "claim_back_to_list" || action.type === "advance_claim_step") {
-      openAppWindow("claim");
-    } else if (action.type === "privacy_correction_visual" || action.type === "privacy_helper_consent_visual") {
-      openAppWindow("privacy");
     }
     cuaEngine.dispatch(action);
   }
@@ -1024,6 +1137,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                         <div className="window-traffic-lights">
                           <button
                             type="button"
+                            data-cua={`window-close-${appId}`}
                             className="traffic-light close"
                             onClick={e => { e.stopPropagation(); closeAppWindow(appId); }}
                             title="Close window"
@@ -1031,6 +1145,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                           />
                           <button
                             type="button"
+                            data-cua={`window-minimize-${appId}`}
                             className="traffic-light minimize"
                             onClick={e => { e.stopPropagation(); minimizeAppWindow(appId); }}
                             title="Minimize window"
