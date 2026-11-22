@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { AlertCircle, ArrowLeft, AudioLines, CalendarDays, Check, ChevronRight, CircleDollarSign, Flag, LoaderCircle, LockKeyhole, MessageSquare, Paperclip, Plus, Search, UsersRound } from "lucide-react";
-import { api, HttpError } from "@/src/lib/client";
+import { api, HttpError, isRetryable } from "@/src/lib/client";
+import { compressImage } from "@/src/lib/offline/compressImage";
 import { getDraft, resolveDraft, saveDraft, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
 import type { Action, Audit, Claim, Family, MiniApp, Payload, Privacy, Profile, Rule, RuleConfig, UIAction } from "@/src/lib/contracts";
 import { speakText } from "./os/speech";
@@ -69,7 +70,7 @@ function Notice({ text, warning = false }: { text: string; warning?: boolean }) 
 }
 function StateTag({ value }: { value: string }) {
   const color = ["approved", "paid", "granted", "genuine", "readable"].includes(value) ? "green"
-    : ["rejected", "scam", "suspect", "failed"].includes(value) ? "red"
+    : ["rejected", "scam", "suspect", "failed", "dead"].includes(value) ? "red"
     : ["needs_proof", "revoked", "unreadable", "pending"].includes(value) ? "amber" : "neutral";
   return <span className={"pill " + color}>{title(value)}</span>;
 }
@@ -103,6 +104,43 @@ function useActionList<T>(action: Action, ctx: ViewContext, withFamily = false) 
 }
 
 const clean: Payload = { monthly_income: 14500, household_size: 3, notes: "" };
+const claimIsChecking = (claim: Claim) => claim.ai_route === "checking" || Boolean(claim.documents?.some(doc => doc.verified_status === "processing"));
+// Citizen-facing stage: Received → Checking documents → Checked / Needs proof / With officer.
+function claimStage(claim: Claim) {
+  if (claim.status === "draft") return null;
+  if (claimIsChecking(claim)) return "Checking documents";
+  if (claim.ai_route === "human_review") return "With officer (automatic check failed)";
+  if (claim.status === "needs_proof") return "Needs proof";
+  if (claim.status === "submitted" || claim.status === "in_review") return "Checked · With officer";
+  return title(claim.status);
+}
+// Status banner after submit / evidence upload, driven by the live (polled) claim.
+type ClaimTone = "processing" | "needs_proof" | "in_review" | "approved" | "rejected";
+function claimTone(claim: Claim): ClaimTone | null {
+  if (claimIsChecking(claim)) return "processing";
+  if (claim.status === "needs_proof") return "needs_proof";
+  if (claim.status === "submitted" || claim.status === "in_review") return "in_review";
+  if (claim.status === "approved") return "approved";
+  if (claim.status === "rejected") return "rejected";
+  if (claim.status === "draft" && ["unreadable", "incomplete", "unverified"].includes(claim.documents?.at(-1)?.verified_status ?? "")) return "needs_proof";
+  return null;
+}
+const evidenceTone = (status: string): ClaimTone | null =>
+  status === "processing" ? "processing" : ["unreadable", "incomplete", "unverified"].includes(status) ? "needs_proof" : null;
+const toneText: Record<ClaimTone, { en: string; ur: string }> = {
+  processing: { en: "Received. Checking your documents…", ur: "درخواست موصول ہو گئی۔ آپ کے کاغذات کی جانچ ہو رہی ہے۔" },
+  needs_proof: { en: "Your documents need attention. Please update your evidence.", ur: "آپ کے کاغذات پر توجہ درکار ہے۔ براہ کرم اپنا ثبوت اپ ڈیٹ کریں۔" },
+  in_review: { en: "Checks done. An officer is reviewing your claim.", ur: "جانچ مکمل ہو گئی۔ ایک افسر آپ کی درخواست کا جائزہ لے رہا ہے۔" },
+  approved: { en: "Approved.", ur: "منظور ہو گئی۔" },
+  rejected: { en: "Your claim was not approved.", ur: "آپ کی درخواست منظور نہیں ہوئی۔" },
+};
+const toneStatus: Record<ClaimTone, "success" | "warning" | "info" | "error"> = {
+  processing: "success", needs_proof: "warning", in_review: "info", approved: "success", rejected: "error",
+};
+const savedOnPhone = {
+  en: "Saved on this phone. Will send when signal returns.",
+  ur: "یہ اس فون پر محفوظ ہے۔ سگنل واپس آنے پر بھیج دیا جائے گا۔",
+} as const;
 const progressSteps = ["Household", "Evidence", "Review & submit"];
 const claimStepHelp = {
   en: [
@@ -119,6 +157,15 @@ const claimStepHelp = {
 
 function ClaimView({ ctx }: { ctx: ViewContext }) {
   const { data: claims, error, loading } = useActionList<Claim[]>("claims", ctx, true);
+  // While background checks run, refresh the claim status (every 10s, or 30s in 2G Lite).
+  const checking = Boolean(claims?.some(claimIsChecking));
+  const refreshRef = useRef(ctx.refresh);
+  refreshRef.current = ctx.refresh;
+  useEffect(() => {
+    if (!checking || ctx.offline) return;
+    const timer = window.setInterval(() => refreshRef.current(), ctx.lite ? 30_000 : 10_000);
+    return () => window.clearInterval(timer);
+  }, [checking, ctx.offline, ctx.lite]);
   const [editing, setEditing] = useState(false);
   const [step, setStep] = useState(0);
   const [details, setDetails] = useState<Payload>(clean);
@@ -133,6 +180,23 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
   const [message, setMessage] = useState("");
   const [fault, setFault] = useState("");
   const [opened, setOpened] = useState<string>();
+  // Claim whose status the banner follows. `live` turns on once the polled list has shown a status for it,
+  // after which only the live status is used (the one-time response is just the first frame).
+  const [tracked, setTracked] = useState<{ id: string; fallback: ClaimTone | null; live: boolean } | null>(null);
+  const trackedLive = tracked ? claims?.find(item => item.id === tracked.id) : undefined;
+  const liveTone = trackedLive ? claimTone(trackedLive) : null;
+  const tone = tracked ? (tracked.live ? liveTone : liveTone ?? tracked.fallback) : null;
+  useEffect(() => {
+    if (tracked && !tracked.live && liveTone) setTracked({ ...tracked, live: true });
+  }, [tracked, liveTone]);
+  useEffect(() => {
+    if (!tracked) return;
+    if (tracked.live && !tone) { setTracked(null); return; }
+    // Only in_review / approved auto-hide (6s). needs_proof and rejected stay until the status changes or × is tapped.
+    if (tone !== "in_review" && tone !== "approved") return;
+    const timer = window.setTimeout(() => setTracked(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [tracked, tone]);
   const previousPrefill = useRef<ViewContext["prefill"]>(null);
   const scope = ctx.citizen ?? "self";
   const editingRef = useRef(editing);
@@ -269,12 +333,14 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
     setEditing(true);
     setFault("");
     setMessage("");
+    setTracked(null);
   }
 
   async function run(action: "draft" | "submit" | "evidence") {
     setBusy(true);
     setFault("");
     setMessage("");
+    setTracked(null);
     const key = crypto.randomUUID();
     try {
       const currentId = claimId ?? (pendingDraft && !ctx.offline ? await resolveDraft(ctx.profile.id, pendingDraft) : null);
@@ -283,30 +349,42 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
         ? { ...base, docType, ...(image ? { image } : { fixture }) }
         : { ...base, payload: details };
       if (action === "evidence" && !currentId && !pendingDraft) throw new Error("Save the draft before attaching evidence.");
-      if (ctx.offline || (!currentId && pendingDraft)) {
+      // Queue in the outbox (same idempotency key) when offline, or when the request cannot get through.
+      const queueInOutbox = async () => {
         await ctx.enqueue(action, body, { key, dependsOn: !currentId ? pendingDraft : undefined });
         if (action === "draft" && !currentId && !pendingDraft) setPendingDraft(key);
         if (action === "evidence") setAttached("Queued evidence");
         if (action === "submit") {
           setEditing(false);
           await wipeDraft(ctx.profile.id, scope).catch(() => {});
-          setMessage("Claim queued. It will be sent when you reconnect.");
-        } else setMessage("Saved to the offline queue.");
+        }
+        setMessage(savedOnPhone[ctx.voiceLang] ?? savedOnPhone.en);
+      };
+      if (ctx.offline || (!currentId && pendingDraft)) {
+        await queueInOutbox();
         return;
       }
+      const send = async <T,>() => {
+        try { return await api<T>(action, { ...body, key }); }
+        catch (error) { if (isRetryable(error)) { await queueInOutbox(); return null; } throw error; }
+      };
 
       if (action === "evidence") {
-        const evidence = await api<{ verified_status: string }>(action, { ...body, key });
+        const evidence = await send<{ verified_status: string }>();
+        if (!evidence) return;
         setAttached(title(evidence.verified_status));
-        setMessage("Evidence attached · " + title(evidence.verified_status));
+        const first = evidenceTone(evidence.verified_status);
+        if (first && currentId) setTracked({ id: currentId, fallback: first, live: false });
+        else setMessage("Evidence attached · " + title(evidence.verified_status));
       } else {
-        const saved = await api<Claim>(action, { ...body, key });
+        const saved = await send<Claim>();
+        if (!saved) return;
         setClaimId(saved.id);
         if (action === "submit") {
           setEditing(false);
           await wipeDraft(ctx.profile.id, scope).catch(() => {});
           setOpened(saved.id);
-          setMessage(saved.status === "needs_proof" ? "Evidence needs attention. Open the claim to continue." : "Your claim is now with an officer.");
+          setTracked({ id: saved.id, fallback: claimTone(saved), live: false });
         } else setMessage("Draft saved.");
       }
       ctx.refresh();
@@ -320,12 +398,14 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
 
   async function readImage(file: File | undefined) {
     if (!file) return;
-    if (file.size > 2_000_000) { setFault("Choose a synthetic image under 2 MB."); return; }
+    if (file.size > 8_000_000) { setFault("Choose a synthetic image under 8 MB."); return; }
     setFault("");
-    const reader = new FileReader();
-    reader.onload = () => setImage(typeof reader.result === "string" ? reader.result : null);
-    reader.onerror = () => setFault("The file could not be opened.");
-    reader.readAsDataURL(file);
+    try {
+      // Compress before upload (smaller in 2G Lite) so weak connections can finish the upload.
+      setImage(await compressImage(file, ctx.lite));
+    } catch {
+      setFault("The file could not be opened.");
+    }
   }
 
   const badge = (status: string) => ["approved", "paid", "granted", "genuine", "readable"].includes(status)
@@ -336,7 +416,11 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
 
   return <div className="view-stack">
     {(error || fault) && <Banner status="error" title="Something went wrong" description={error || fault} />}
-    {message && <Banner status="success" title={message} />}
+    {tracked && tone
+      ? <section key={tracked.id + tone} className="claim-status" data-tone={tone} lang={ctx.voiceLang} dir={ctx.voiceLang === "ur" ? "rtl" : "ltr"}>
+          <Banner status={toneStatus[tone]} title={toneText[tone][ctx.voiceLang] ?? toneText[tone].en} isDismissable dismissLabel="Dismiss" onDismiss={() => setTracked(null)} />
+        </section>
+      : message && <Banner status="success" title={message} />}
     {editing ? <Card padding={6}>
       <HStack justify="between" hAlign="start" gap={4} wrap="wrap">
         <VStack gap={0.5}>
@@ -431,9 +515,10 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
             <VStack gap={2}>
               <HStack gap={2} justify="between" wrap="wrap">
                 <HStack gap={2} wrap="wrap"><strong>Claim {short(item.id)}</strong><Badge label={title(item.status)} variant={badge(item.status)} /></HStack>
-                <Button variant="ghost" size="sm" label={opened === item.id ? "Hide details" : "View details"} onClick={() => setOpened(opened === item.id ? undefined : item.id)} />
+                <Button variant="ghost" size="sm" label={opened === item.id ? "Hide details" : "View details"} onClick={() => { if (tracked && tracked.id !== item.id) setTracked(null); setOpened(opened === item.id ? undefined : item.id); }} />
               </HStack>
               <small>{new Date(item.updated_at).toLocaleDateString()} · {item.amount_pkr ? currency(item.amount_pkr) : "Draft amount pending"}</small>
+              {claimStage(item) && <small className="muted">Received → {claimStage(item)}</small>}
               {opened === item.id && <VStack gap={2}>
                 <ol className="timeline"><li>Draft created</li>{item.status !== "draft" && <li>Submitted to the relief scheme</li>}<li>{title(item.status)}{item.rule_version_used ? " · Rule v" + item.rule_version_used : ""}</li>{item.payment && <li>Payment {item.payment.status}</li>}</ol>
                 {item.citizen_reason_en && <p>{item.citizen_reason_en}</p>}
@@ -520,13 +605,15 @@ function PrivacyView({ ctx }: { ctx: ViewContext }) {
     setBusy(true); setProblem(""); setMessage("");
     try {
       const args = { ...body, citizenId: ctx.citizen };
-      if (ctx.offline) {
-        await ctx.enqueue(action, args);
-        setMessage("Change queued. Permissions update on the server when you reconnect.");
-      } else {
-        await api(action, { ...args, key: crypto.randomUUID() });
-        setMessage(action === "correction" ? "Correction request recorded." : "Helper access updated.");
-        ctx.refresh();
+      const key = crypto.randomUUID();
+      const queued = async () => { await ctx.enqueue(action, args, { key }); setMessage(savedOnPhone[ctx.voiceLang] ?? savedOnPhone.en); };
+      if (ctx.offline) await queued();
+      else {
+        try {
+          await api(action, { ...args, key });
+          setMessage(action === "correction" ? "Correction request recorded." : "Helper access updated.");
+          ctx.refresh();
+        } catch (error) { if (isRetryable(error)) await queued(); else throw error; }
       }
     } catch (error) { setProblem(getMessage(error)); }
     finally { setBusy(false); }
@@ -663,6 +750,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
         {doc.ocr_json.fields && <small>{Object.entries(doc.ocr_json.fields).map(([field, value]) => title(field) + ": " + value).join(" · ")}</small>}
         {doc.file_url && <a className="text-link" href={doc.file_url} target="_blank" rel="noreferrer">Open synthetic image</a>}
       </div><StateTag value={doc.verified_status} /></div>)}</div>
+      <JobHistory claimId={claim.id} ctx={ctx} />
       <Notice text={problem} warning /><Notice text={notice} />
       {claim.status !== "closed" && <form onSubmit={event => { event.preventDefault(); void update("review"); }}>
         <label>Officer action<select value={decision} onChange={event => setDecision(event.target.value as keyof typeof reviewOptions)}>
@@ -855,7 +943,33 @@ function StaffApprovals({ ctx }: { ctx: ViewContext }) {
 function AuditView({ ctx }: { ctx: ViewContext }) {
   const logs = useActionList<Audit[]>("audit", ctx);
   const safety = useActionList<SafetyMetric[]>("safety", ctx);
-  return <AuditVaultView ctx={ctx} logs={logs} safety={safety} />;
+  const jobs = useActionList<JobStats | null>("job_stats", ctx);
+  return <>
+    {jobs.data && <p className="muted">Background jobs · {(["queued", "running", "done", "failed", "dead"] as const).map(key => title(key) + " " + jobs.data![key]).join(" · ")}</p>}
+    <AuditVaultView ctx={ctx} logs={logs} safety={safety} />
+  </>;
+}
+
+type JobStats = Record<"queued" | "running" | "done" | "failed" | "dead", number>;
+type JobRow = { id: string; type: string; status: string; attempts: number; max_attempts: number; last_error: string | null; updated_at: string };
+
+// Officer case detail: background job history for this claim (shown only when jobs exist).
+function JobHistory({ claimId, ctx }: { claimId: string; ctx: ViewContext }) {
+  const [jobs, setJobs] = useState<JobRow[]>([]);
+  useEffect(() => {
+    if (ctx.offline) return;
+    const controller = new AbortController();
+    api<JobRow[]>("job_history", { claimId }, controller.signal).then(rows => setJobs(Array.isArray(rows) ? rows : [])).catch(() => setJobs([]));
+    return () => controller.abort();
+  }, [claimId, ctx.offline, ctx.version]);
+  if (!jobs.length) return null;
+  return <div className="rows">
+    <small className="muted">Background checks</small>
+    {jobs.map(job => <div className="list-row static" key={job.id}><div><strong>{title(job.type)}</strong>
+      <small>Attempts {job.attempts}/{job.max_attempts} · {new Date(job.updated_at).toLocaleString()}</small>
+      {job.last_error && <small>Last error: {job.last_error}</small>}
+    </div><StateTag value={job.status} /></div>)}
+  </div>;
 }
 
 const REGISTERED_USERS = [

@@ -1,4 +1,6 @@
-import { actions, type Action } from "@/src/lib/contracts";
+import { after } from "next/server";
+import { actions, type Action, type Profile } from "@/src/lib/contracts";
+import { callJobs, enqueueJob, jobsAvailable, runJobs } from "@/src/lib/jobs";
 import { apiError, ApiError, gateway, readJson } from "@/src/lib/server";
 import { answerPolicy } from "@/src/lib/ai/rag";
 import { inspectEvidence } from "@/src/lib/ai/ocr";
@@ -20,7 +22,10 @@ export async function POST(request: Request, context: RouteContext<"/api/relief/
     const { action } = await context.params;
     if (!Object.hasOwn(actions, action)) throw new ApiError(404, "Unknown relief operation.");
     const operation = action as Action;
-    const body = await readJson(request, ["evidence", "check", "citizen_doc_upload"].includes(operation) ? 3000000 : 20000);
+    const raw = await readJson(request, ["evidence", "check", "citizen_doc_upload"].includes(operation) ? 3000000 : 20000);
+    // Writes accept the idempotency key as an Idempotency-Key header or as body.key (the database replays repeats).
+    const headerKey = request.headers.get("idempotency-key");
+    const body = headerKey && raw && typeof raw === "object" && !("key" in raw) ? { ...raw, key: headerKey } : raw;
     const checked = actions[operation].safeParse(body);
     if (!checked.success) throw new ApiError(400, checked.error.issues[0]?.message ?? "Invalid fields.");
 
@@ -34,9 +39,19 @@ export async function POST(request: Request, context: RouteContext<"/api/relief/
         // Verify the current family grant before sending an image to a provider.
         await gateway("nadra", { citizenId: evidence.citizenId });
         if (evidence.image) validateImage(evidence.image);
-        const analysis = await inspectEvidence(evidence);
         const { image, ...fields } = evidence;
-        result = await gateway(operation, { ...fields, image, imageDigest: image ? await hashImage(image) : null, analysis });
+        const imageDigest = image ? await hashImage(image) : null;
+        if (await jobsAvailable()) {
+          // Fast path: store the document as "processing" and run OCR / blur / tamper checks in the background.
+          const queued = { status: "processing", summary: "Checking document…", model: "queued", fields: {} };
+          const doc = await gateway<{ id: string; claim_id: string }>(operation, { ...fields, image, imageDigest, analysis: queued });
+          await enqueueJob("evidence_ocr", doc.id, { claimId: doc.claim_id, payload: { documentId: doc.id, fixture: evidence.fixture ?? null } });
+          after(() => runJobs().catch(() => {}));
+          result = doc;
+        } else {
+          const analysis = await inspectEvidence(evidence);
+          result = await gateway(operation, { ...fields, image, imageDigest, analysis });
+        }
         break;
       }
       case "citizen_doc_upload": {
@@ -66,6 +81,32 @@ export async function POST(request: Request, context: RouteContext<"/api/relief/
       case "review": {
         const args = actions.review.parse(body);
         result = await gateway(operation, { ...args, reasonUr: args.reasonUr || reviewUrdu[args.decision] });
+        break;
+      }
+      case "submit": {
+        const args = actions.submit.parse(body);
+        const claim = await gateway<{ id: string; status: string; ai_route: string | null; citizen_reason_en: string | null; citizen_reason_ur: string | null }>(operation, args);
+        if (await jobsAvailable() && ["submitted", "in_review", "needs_proof"].includes(claim.status)) {
+          // Triage re-runs eligibility / registry / evidence routing once background document checks finish.
+          await callJobs("mark_checking", { claimId: claim.id });
+          await enqueueJob("claim_triage", "submit:" + args.key, { claimId: claim.id, payload: { notes: args.payload.notes } });
+          after(() => runJobs().catch(() => {}));
+          claim.ai_route = "checking";
+          claim.citizen_reason_en = "Received. Checking your documents…";
+          claim.citizen_reason_ur = "درخواست موصول ہو گئی۔ آپ کے کاغذات کی جانچ ہو رہی ہے۔";
+        }
+        result = claim;
+        break;
+      }
+      case "job_history":
+      case "job_stats": {
+        const profile = await gateway<Profile>("profile");
+        const allowed = operation === "job_history" ? ["officer", "admin", "auditor"] : ["admin", "auditor"];
+        if (!allowed.includes(profile.role)) throw new ApiError(403, "Your role does not have access to this operation.");
+        if (!(await jobsAvailable())) { result = operation === "job_history" ? [] : null; break; }
+        result = operation === "job_history"
+          ? await callJobs("history", { claimId: actions.job_history.parse(body).claimId })
+          : await callJobs("stats");
         break;
       }
       case "safety":

@@ -75,6 +75,8 @@ export const actions = {
   }).refine(data => Boolean(data.image) || data.useSample, "Upload a synthetic document image or choose a sample."),
   scheme: z.object({}),
   raast: z.object({ reference: z.string().trim().min(1).max(80) }),
+  job_history: z.object({ claimId: uuid }),
+  job_stats: z.object({}),
 };
 export type Action = keyof typeof actions;
 export type Payload = z.infer<typeof payloadSchema>;

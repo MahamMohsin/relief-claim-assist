@@ -105,13 +105,13 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
     try { setPending(await queued(owner, scope)); } catch { setHeadMessage("Offline storage is unavailable in this browser."); }
   }, [owner, scope]);
 
-  const synchronize = useCallback(async (manual = false) => {
+  const synchronize = useCallback(async (manual = false, flush = false) => {
     if (!owner || offline || activeCall.current) return;
     const controller = new AbortController();
     activeCall.current = controller;
     setSyncing(true);
     try {
-      const count = await syncQueue({ owner, citizen: scope, manual, signal: controller.signal, onTranscript: setTranscript });
+      const count = await syncQueue({ owner, citizen: scope, manual, flush, signal: controller.signal, onTranscript: setTranscript });
       if (count && !controller.signal.aborted) {
         setVersion(value => value + 1);
         setHeadMessage(count + (count === 1 ? " queued item synced." : " queued items synced."));
@@ -127,9 +127,23 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
     }
   }, [owner, scope, offline, reloadQueue]);
 
+  // Flush the outbox as soon as the connection returns or the app regains focus.
+  useEffect(() => {
+    const flushNow = () => { if (!offline) void synchronize(false, true); };
+    const onVisible = () => { if (document.visibilityState === "visible") flushNow(); };
+    window.addEventListener("online", flushNow);
+    window.addEventListener("focus", flushNow);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("online", flushNow);
+      window.removeEventListener("focus", flushNow);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [offline, synchronize]);
+
   useEffect(() => {
     void reloadQueue();
-    if (!offline) void synchronize();
+    if (!offline) void synchronize(false, true);
     const interval = window.setInterval(() => { if (!offline) void synchronize(); }, 4500);
     return () => {
       window.clearInterval(interval);
@@ -638,7 +652,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                             <div className="liquid-status-section">
                               <div className="liquid-status-head">
                                 <span className={"liquid-net-pill" + (offline ? " is-offline" : "")} role="status">
-                                  {offline ? "Offline" : "Online"}{pending.length > 0 ? " · " + pending.length + " queued" : ""}
+                                  {offline ? "Offline" : "Online"}{pending.length > 0 ? " · " + pending.length + " waiting to send" : ""}
                                 </span>
                               </div>
                               <div className="liquid-action-buttons">

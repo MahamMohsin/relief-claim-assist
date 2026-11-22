@@ -5069,3 +5069,10 @@ button.persona-card, button.kanban-card { background: var(--surface); }
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
+
+/* Claim status banner (citizen claim view): colors follow the live claim status. */
+.claim-status[data-tone="approved"] .astryx-banner { background: var(--success-bg); color: var(--success-text); }
+.claim-status[data-tone="needs_proof"] .astryx-banner { background: var(--pending-bg); color: var(--pending-text); }
+.claim-status[data-tone="in_review"] .astryx-banner { background: var(--review-bg); color: var(--review-text); }
+.claim-status[data-tone="rejected"] .astryx-banner { background: var(--error-bg); color: var(--error-text); }
+.claim-status .astryx-banner-icon { color: inherit; }

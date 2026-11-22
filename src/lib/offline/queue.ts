@@ -76,10 +76,15 @@ export async function complete(item: Mutation, claimId?: string) {
   await tx.done;
 }
 
+// Outbox retry policy: exponential backoff 2s, 4s, 8s, 16s … capped at 60s, at most 8 attempts.
+export const MAX_ATTEMPTS = 8;
+export const backoffMs = (retries: number) => Math.min(60000, 2000 * 2 ** retries);
+
 export async function markRetry(item: Mutation, message?: string) {
+  const retries = item.retries + 1;
   await (await database()).put("mutations", {
-    ...item, retries: item.retries + 1,
-    nextAttempt: Date.now() + Math.min(60000, 1000 * 2 ** item.retries),
-    failure: message,
+    ...item, retries,
+    nextAttempt: Date.now() + backoffMs(item.retries),
+    failure: message ?? (retries >= MAX_ATTEMPTS ? "Could not send after " + MAX_ATTEMPTS + " attempts. Tap Sync now to try again." : undefined),
   });
 }
