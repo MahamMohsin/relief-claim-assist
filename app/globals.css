@@ -7463,6 +7463,50 @@ button.active-cases-card:hover {
   font-weight: 650;
 }
 
+/* ========================================================
+   INVISIBLE SCROLLBARS (scroll smoothly, zero visible bars)
+   ======================================================== */
+.workspace,
+.content,
+.dashboard-canvas,
+.ios-top-hero-row,
+.ios-top-widgets-group,
+.desktop-window-body,
+.kanban-board,
+.kanban-col,
+.officer-alerts-popover,
+.officer-alerts-list,
+.minimized-tray,
+.voice-chat-history,
+.voice-transcript-box,
+.table-scroll,
+.modal,
+.pip-login-card {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.workspace::-webkit-scrollbar,
+.content::-webkit-scrollbar,
+.dashboard-canvas::-webkit-scrollbar,
+.ios-top-hero-row::-webkit-scrollbar,
+.ios-top-widgets-group::-webkit-scrollbar,
+.desktop-window-body::-webkit-scrollbar,
+.kanban-board::-webkit-scrollbar,
+.kanban-col::-webkit-scrollbar,
+.officer-alerts-popover::-webkit-scrollbar,
+.officer-alerts-list::-webkit-scrollbar,
+.minimized-tray::-webkit-scrollbar,
+.voice-chat-history::-webkit-scrollbar,
+.voice-transcript-box::-webkit-scrollbar,
+.table-scroll::-webkit-scrollbar,
+.modal::-webkit-scrollbar,
+.pip-login-card::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 
 /* Claim status banner (citizen claim view): colors follow the live claim status. */
 .claim-status[data-tone="approved"] .astryx-banner { background: var(--success-bg); color: var(--success-text); }
