@@ -1038,64 +1038,128 @@ function PrivacyView({ ctx }: { ctx: ViewContext }) {
     finally { setBusy(false); }
   }
   changeRef.current = change;
+  const helpersList = data?.helpers ?? [];
+  const grantedCount = helpersList.filter(h => h.status === "granted").length;
+  const shieldScore = helpersList.length === 0 ? 100 : Math.round(((helpersList.length - grantedCount) / helpersList.length) * 100);
+
   return <div className="view-stack">
     {(problem || error) && <Banner status="error" title={problem || error} />}
     {message && <Banner status="success" title={message} />}
-    <Card padding={6}>
-      <VStack gap={1}><h2>Who has access</h2><p>Helper changes apply to this family’s next server request.</p></VStack>
-      {loading && !data ? <Spinner /> : <VStack gap={1} paddingBlockStart={3}>
-        {data?.helpers.map(helper => <Card key={helper.id} variant="muted" padding={3}>
-          <HStack justify="between" gap={2} wrap="wrap">
-            <VStack gap={0.5}><strong>{helper.name}</strong><small>Community helper</small></VStack>
-            <HStack gap={2}>
-              <Badge label={title(helper.status)} variant={helper.status === "granted" ? "success" : "warning"} />
-              {ctx.profile.role === "citizen" && (
-                <span
-                  data-cua="privacy-helper-btn"
-                  data-cua-consent={helper.status}
-                  data-helper-id={helper.id}
-                  data-helper-name={helper.name}
-                  style={{ display: "inline-flex" }}
-                >
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    label={helper.status === "granted" ? "Revoke" : "Grant"}
-                    isDisabled={busy}
-                    onClick={() => void change("consent", { helperId: helper.id, consent: helper.status === "granted" ? "revoked" : "granted" })}
-                  />
-                </span>
-              )}
-            </HStack>
+    <Card padding={5}>
+      <VStack gap={3} width="100%">
+        <HStack justify="between" vAlign="center" gap={2} wrap="wrap" width="100%">
+          <HStack gap={2} vAlign="center">
+            <LockKeyhole size={20} color="#0f766e" />
+            <VStack gap={0.5}>
+              <h2 style={{ margin: 0 }}>Who has access</h2>
+              <small style={{ color: "#6b7280" }}>
+                {grantedCount === 0 ? "Locked down · only you" : `${grantedCount} of ${helpersList.length} helper active`}
+              </small>
+            </VStack>
           </HStack>
-        </Card>)}
-        {data?.officers.map(name => <Card key={name} variant="muted" padding={3}><VStack gap={0.5}><strong>{name}</strong><small>Assigned relief officer</small></VStack></Card>)}
-        <Card variant="muted" padding={3}>
-          <HStack justify="between" gap={2}><VStack gap={0.5}><strong>Simulated public rails</strong><small>Identity, scheme registry, and mock payment services</small></VStack><LockKeyhole size={18} /></HStack>
-        </Card>
-      </VStack>}
+          <Badge
+            label={grantedCount === 0 ? "Private" : `${grantedCount} shared`}
+            variant={grantedCount === 0 ? "success" : "info"}
+          />
+        </HStack>
+        <ProgressBar
+          label="Privacy lock level"
+          value={Math.max(18, shieldScore)}
+          max={100}
+          variant={grantedCount === 0 ? "success" : "accent"}
+          isLabelHidden
+        />
+        {loading && !data ? <Spinner /> : <VStack gap={1.5} width="100%">
+          {helpersList.map(helper => {
+            const isGranted = helper.status === "granted";
+            return (
+              <Card key={helper.id} variant={isGranted ? "green" : "muted"} padding={3}>
+                <HStack justify="between" vAlign="center" gap={2} wrap="wrap">
+                  <HStack gap={2} vAlign="center">
+                    {isGranted ? <CheckCircle2 size={18} color="#16a34a" /> : <LockKeyhole size={18} color="#d97706" />}
+                    <VStack gap={0.5}>
+                      <strong>{helper.name}</strong>
+                      <small style={{ color: "#6b7280" }}>Community helper</small>
+                    </VStack>
+                  </HStack>
+                  <HStack gap={2} vAlign="center">
+                    <Badge label={title(helper.status)} variant={isGranted ? "success" : "warning"} />
+                    {ctx.profile.role === "citizen" && (
+                      <span
+                        data-cua="privacy-helper-btn"
+                        data-cua-consent={helper.status}
+                        data-helper-id={helper.id}
+                        data-helper-name={helper.name}
+                        style={{ display: "inline-flex" }}
+                      >
+                        <Button
+                          variant={isGranted ? "secondary" : "primary"}
+                          size="sm"
+                          label={isGranted ? "Revoke" : "Grant"}
+                          isDisabled={busy}
+                          onClick={() => void change("consent", { helperId: helper.id, consent: isGranted ? "revoked" : "granted" })}
+                        />
+                      </span>
+                    )}
+                  </HStack>
+                </HStack>
+              </Card>
+            );
+          })}
+          <HStack gap={2} wrap="wrap">
+            {data?.officers.map(name => (
+              <Card key={name} variant="muted" padding={3}>
+                <HStack gap={1.5} vAlign="center">
+                  <FileCheck size={16} color="#0f766e" />
+                  <VStack gap={0.5}><strong>{name}</strong><small>Reviewer</small></VStack>
+                </HStack>
+              </Card>
+            ))}
+            <Card variant="muted" padding={3}>
+              <HStack gap={1.5} vAlign="center">
+                <LockKeyhole size={16} color="#4b5563" />
+                <VStack gap={0.5}><strong>Simulated DPI Rails</strong><small>NADRA · Raast · Scheme</small></VStack>
+              </HStack>
+            </Card>
+          </HStack>
+        </VStack>}
+      </VStack>
     </Card>
-    <Card padding={6}>
-      <h2>Request a correction</h2>
-      <form onSubmit={event => { event.preventDefault(); void change("correction", { field, value }); }}>
-        <VStack gap={3} paddingBlockStart={3}>
-          <HStack gap={3} wrap="wrap">
-            <div data-cua="privacy-field" style={{ flex: 1, minWidth: 180 }}>
-              <Selector label="Field" value={field} onChange={selected => setField(selected ?? "full_name")} options={[
-                { value: "full_name", label: "Name" }, { value: "phone", label: "Mock phone" }, { value: "village_area", label: "Demo area" },
-                { value: "household_size", label: "Household size" }, { value: "monthly_income_mock", label: "Monthly income" },
-              ]} />
-            </div>
-            <div data-cua="privacy-value" style={{ flex: 1, minWidth: 180 }}>
-              <TextInput label="Proposed synthetic value" value={value} onChange={setValue} isRequired />
-            </div>
-          </HStack>
-          <HStack><span data-cua="privacy-submit" style={{ display: "inline-flex" }}><Button type="submit" variant="primary" label="Request correction" isDisabled={busy || !value.trim()} /></span></HStack>
-        </VStack>
-      </form>
-      {data?.corrections.map(request => <Card key={request.id} variant="muted" padding={3}>
-        <HStack justify="between" gap={2}><VStack gap={0.5}><strong>{title(request.field_name)}</strong><small>{request.proposed_value}</small></VStack><Badge label={title(request.status)} /></HStack>
-      </Card>)}
+    <Card padding={5}>
+      <VStack gap={3} width="100%">
+        <HStack justify="between" vAlign="center" gap={2} wrap="wrap">
+          <h2 style={{ margin: 0 }}>Fix a record</h2>
+          {(data?.corrections.length ?? 0) > 0 && <Badge label={`${data!.corrections.length} logged`} variant="neutral" />}
+        </HStack>
+        <form onSubmit={event => { event.preventDefault(); void change("correction", { field, value }); }}>
+          <VStack gap={3}>
+            <HStack gap={3} wrap="wrap">
+              <div data-cua="privacy-field" style={{ flex: 1, minWidth: 180 }}>
+                <Selector label="Field" value={field} onChange={selected => setField(selected ?? "full_name")} options={[
+                  { value: "full_name", label: "Name" }, { value: "phone", label: "Mock phone" }, { value: "village_area", label: "Demo area" },
+                  { value: "household_size", label: "Household size" }, { value: "monthly_income_mock", label: "Monthly income" },
+                ]} />
+              </div>
+              <div data-cua="privacy-value" style={{ flex: 1, minWidth: 180 }}>
+                <TextInput label="New value" value={value} onChange={setValue} isRequired />
+              </div>
+            </HStack>
+            <HStack><span data-cua="privacy-submit" style={{ display: "inline-flex" }}><Button type="submit" variant="primary" label="Submit fix" isDisabled={busy || !value.trim()} /></span></HStack>
+          </VStack>
+        </form>
+        {(data?.corrections.length ?? 0) > 0 && (
+          <VStack gap={1.5} width="100%">
+            {data!.corrections.map(request => (
+              <Card key={request.id} variant="muted" padding={3}>
+                <HStack justify="between" vAlign="center" gap={2}>
+                  <VStack gap={0.5}><strong>{title(request.field_name)}</strong><small>{request.proposed_value}</small></VStack>
+                  <Badge label={title(request.status)} variant={request.status === "approved" ? "success" : "info"} />
+                </HStack>
+              </Card>
+            ))}
+          </VStack>
+        )}
+      </VStack>
     </Card>
   </div>;
 }
