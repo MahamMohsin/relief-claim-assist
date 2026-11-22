@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { cuaEngine } from "./os/cuaEngine";
 import {
   Check,
   CheckCircle2,
@@ -214,10 +215,11 @@ export function GoogleMessagesSection({
     }
   }
 
-  async function handleSimulateSms() {
-    const text = simText.trim();
-    const from = simPhone.trim();
+  async function handleSimulateSms(overridePhone?: string, overrideText?: string) {
+    const text = (overrideText ?? simText).trim();
+    const from = (overridePhone ?? simPhone).trim();
     if (!text || !from || simBusy) return;
+    if (overridePhone !== undefined) setSimPhone(from);
     setSimBusy(true);
     setSimText("");
 
@@ -254,6 +256,74 @@ export function GoogleMessagesSection({
   const isStarting = gmStatus?.status === "starting" || gmStatus?.status === "waiting_auth";
   const isQrReady = gmStatus?.status === "qr_ready" && Boolean(gmStatus?.qrDataUrl);
   const loginCommand = tokenInfo?.token ? `/login ${tokenInfo.token}` : "";
+
+  const smsSnapRef = useRef({
+    gmStatus,
+    tokenInfo,
+    isPaired,
+    loginCommand,
+    smsFeedCount: smsFeed.length,
+    isAdmin,
+  });
+  smsSnapRef.current = {
+    gmStatus,
+    tokenInfo,
+    isPaired,
+    loginCommand,
+    smsFeedCount: smsFeed.length,
+    isAdmin,
+  };
+  const smsHandlersRef = useRef({
+    handleRegenerateKey,
+    callAdminAction,
+    handleSimulateSms,
+  });
+  smsHandlersRef.current = { handleRegenerateKey, callAdminAction, handleSimulateSms };
+
+  useEffect(() => {
+    cuaEngine.sms = {
+      getSnapshot: () => {
+        const s = smsSnapRef.current;
+        return {
+          smsStatus: s.gmStatus?.status,
+          smsPaired: s.isPaired,
+          smsAdminPhone: s.gmStatus?.adminPhone ?? null,
+          smsLinked: Boolean(s.tokenInfo?.isLinked),
+          smsLinkedPhone: s.tokenInfo?.linkedPhone ?? null,
+          smsLoginCommand: s.loginCommand || undefined,
+          smsActiveSessions: s.gmStatus?.activeSmsSessions,
+          smsFeedCount: s.smsFeedCount,
+        };
+      },
+      runAction: async (action, opts) => {
+        if (action === "regenerate_key") {
+          await smsHandlersRef.current.handleRegenerateKey();
+          return;
+        }
+        if (action === "simulate_sms") {
+          if (opts?.text) {
+            await smsHandlersRef.current.handleSimulateSms(opts.phone, opts.text);
+          }
+          return;
+        }
+        if (action === "set_phone" && opts?.phone) {
+          setPhoneInput(opts.phone);
+          await smsHandlersRef.current.callAdminAction("set_phone", { phone: opts.phone });
+          return;
+        }
+        if (action === "toggle_auto_prompt") {
+          await smsHandlersRef.current.callAdminAction("toggle_auto_prompt", {
+            autoPromptUnknown: !smsSnapRef.current.gmStatus?.autoPromptUnknown,
+          });
+          return;
+        }
+        await smsHandlersRef.current.callAdminAction(action);
+      },
+    };
+    return () => {
+      if (cuaEngine.sms) cuaEngine.sms = null;
+    };
+  }, []);
 
   const statusBadgeLabel = isPaired
     ? "Paired & Live"
