@@ -7581,6 +7581,25 @@ button.active-cases-card:hover {
   font-variant-numeric: tabular-nums;
 }
 
+/* Ensure Officer, Admin, Auditor & Citizen dashboards always scroll smoothly (no dead zones) */
+.dashboard-canvas {
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ios-top-hero-row {
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  max-height: calc(100dvh - 104px);
+  padding-bottom: 4.5rem;
+}
+
+.ios-top-hero-row > * {
+  flex-shrink: 0;
+}
+
 
 /* Claim status banner (citizen claim view): colors follow the live claim status. */
 .claim-status[data-tone="approved"] .astryx-banner { background: var(--success-bg); color: var(--success-text); }
