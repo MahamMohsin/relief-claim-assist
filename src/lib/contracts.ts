@@ -176,6 +176,7 @@ export const appRoles = {
   users: ["admin", "officer", "auditor"],
   audit: ["admin", "auditor", "officer"],
   whatsapp: ["citizen", "helper", "shopkeeper", "officer", "admin", "auditor"],
+  schemes: ["shopkeeper", "admin"],
 } satisfies Record<string, Role[]>;
 export type MiniApp = keyof typeof appRoles;
 export function canOpen(role: Role, app: MiniApp) {
@@ -217,6 +218,7 @@ export type UIAction = { type: "open_mini_app"; app: MiniApp }
   | { type: "whatsapp_disconnect" }
   | { type: "whatsapp_send_test"; text: string }
   | { type: "google_messages_action"; action: "regenerate_key" | "pair" | "open_window" | "refresh_qr" | "set_phone" | "toggle_auto_prompt" | "disconnect" | "simulate_sms"; phone?: string; text?: string }
+  | { type: "schemes_match_visual"; size?: "all" | "small" | "large"; query?: string; businessType?: string; monthlyRevenuePkr?: number; employees?: number; floodAffected?: boolean; hasRaast?: boolean; needsGrantOnly?: boolean; recommendedId?: string; openApplyId?: string }
   | { type: "close_window"; app: MiniApp }
   | { type: "close_all_windows" }
   | { type: "minimize_window"; app: MiniApp }

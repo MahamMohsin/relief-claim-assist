@@ -112,6 +112,9 @@ export function createReliefExtension(context: PiContext, locale: "en" | "ur"): 
       if (sc?.whatsapp) {
         screenLines.push(`WhatsApp & Direct SMS: WhatsApp configured=${sc.whatsapp.configured}${sc.whatsapp.agentName ? `, agent=${sc.whatsapp.agentName}` : ""}, WA messages=${sc.whatsapp.recentMessagesCount ?? 0}${sc.whatsapp.smsStatus ? `, Google Messages SMS status=${sc.whatsapp.smsStatus}` : ""}${sc.whatsapp.smsAdminPhone ? `, adminPhone=${sc.whatsapp.smsAdminPhone}` : ""}${sc.whatsapp.smsLinked !== undefined ? `, userSmsLinked=${sc.whatsapp.smsLinked}` : ""}${sc.whatsapp.smsLoginCommand ? `, personalLoginCmd="${sc.whatsapp.smsLoginCommand}"` : ""}${sc.whatsapp.smsActiveSessions !== undefined ? `, activeSmsSessions=${sc.whatsapp.smsActiveSessions}` : ""}.`);
       }
+      if (sc?.schemes) {
+        screenLines.push(`Business Schemes: tab=${sc.schemes.sizeTab ?? "all"}, visible=${sc.schemes.visibleCount ?? 0}${sc.schemes.businessType ? `, businessType=${sc.schemes.businessType}` : ""}${sc.schemes.monthlyRevenuePkr !== undefined ? `, monthlySales=PKR ${sc.schemes.monthlyRevenuePkr}` : ""}${sc.schemes.employees !== undefined ? `, staff=${sc.schemes.employees}` : ""}${sc.schemes.topRecommendedName ? `, topMatch="${sc.schemes.topRecommendedName}"` : ""}.`);
+      }
 
       const liveScreenBlock = " LIVE SCREEN STATE: " + screenLines.join(" ");
 
@@ -137,7 +140,8 @@ export function createReliefExtension(context: PiContext, locale: "en" | "ur"): 
           + "• Rule Studio (rules): Use rules_configure_and_simulate to edit rule values and run Digital Twin simulation, rules_publish_version to publish live, and rules_staff_approval to approve/reject pending staff by name or ID. "
           + "• Scheme Budget (admin): Use scheme_budget_adjust (admin only) with totalPkr and reason (>=5 chars). "
           + "• Audit Vault (audit): Use audit_vault_control to switch tabs (events/eval), filter category (all/claims/ai/consent/blocked), search query, inspect an event row, or refresh. "
-          + "• WhatsApp & Direct SMS (whatsapp): Use whatsapp_configure_agent to connect an API key, disconnect, send a test simulator message, or search live messages; use sms_gateway_control to regenerate a user's personal /login SMS key or (admin only) pair/refresh QR/set phone/toggle safe mode/disconnect/simulate Direct SMS via Google Messages. "
+          + "• WhatsApp & Direct SMS (whatsapp): Use whatsapp_configure_agent to connect an API key, disconnect, send a test simulator message, or search live messages; use sms_gateway_control to regenerate a user's personal /login key or (admin only) pair/refresh QR/set phone/toggle safe mode/disconnect/simulate Direct SMS via Google Messages. "
+          + "• Business Schemes (schemes): When a shopkeeper or admin asks about small or large business schemes/grants/loans or shares their shop details on the fly (sales/turnover, staff count, karyana/wholesale/factory, flood impact, Raast QR, grant-only), ALWAYS call business_scheme_recommend so the matching scheme is highlighted on screen, and clearly tell them which scheme to apply to (set openApply=true if they ask to start applying). "
           + "• Window & Workspace Controls: Use window_manage to close, close_all, minimize, restore, resize (compact/default/wide), open_account_menu, open_persona_switcher, open_notifications, sync_now, toggle_lite, or toggle_network_drop. "
           + "Keep your final reply concise (1–2 short sentences) summarizing what you did or read from the screen so it sounds natural spoken aloud. "
           + "Reply in " + (locale === "ur" ? "Urdu, unless the request is clearly English." : "English."),
@@ -155,6 +159,7 @@ export function createReliefExtension(context: PiContext, locale: "en" | "ur"): 
         const rulesTool = ["rules_configure_and_simulate", "rules_publish_version", "rules_staff_approval"].includes(event.toolName);
         const budgetTool = event.toolName === "scheme_budget_adjust";
         const auditTool = event.toolName === "audit_vault_control";
+        const schemesTool = event.toolName === "business_scheme_recommend";
         const familySwitchTool = event.toolName === "family_switch_select";
         const requestedApp = event.toolName === "ui_control" ? resolveApp(event.input.app) : null;
         const unknownApp = event.toolName === "ui_control" && !requestedApp;
@@ -164,13 +169,14 @@ export function createReliefExtension(context: PiContext, locale: "en" | "ur"): 
         const rulesDenied = rulesTool && !canOpen(context.profile.role, "rules");
         const budgetDenied = budgetTool && context.profile.role !== "admin";
         const auditDenied = auditTool && !canOpen(context.profile.role, "audit");
+        const schemesDenied = schemesTool && !canOpen(context.profile.role, "schemes");
         const familySwitchDenied = familySwitchTool && !canOpen(context.profile.role, "family");
         const needsFamilySelection = (familyTool || privacyTool || profileTool) && !context.citizenId;
         const claimRoleDenied = familyTool && !canOpen(context.profile.role, "claim");
         const privacyRoleDenied = privacyTool && !canOpen(context.profile.role, "privacy");
         const profileRoleDenied = profileTool && !canOpen(context.profile.role, "profile");
 
-        if (!names.includes(event.toolName) || unknownApp || navigationDenied || scamDenied || reviewDenied || rulesDenied || budgetDenied || auditDenied || familySwitchDenied
+        if (!names.includes(event.toolName) || unknownApp || navigationDenied || scamDenied || reviewDenied || rulesDenied || budgetDenied || auditDenied || schemesDenied || familySwitchDenied
             || claimRoleDenied || privacyRoleDenied || profileRoleDenied || needsFamilySelection
             || (event.toolName === "claim_draft_upsert" && context.confidence < context.threshold)) {
           await trace("tool_blocked", "denied", { tool: event.toolName, toolCallId: event.toolCallId, app: requestedApp ?? String((event.input as Record<string, unknown>)?.app ?? "") });

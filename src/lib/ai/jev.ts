@@ -28,6 +28,7 @@ const routing = {
   users: "Open or search the registered users directory",
   audit: "Inspect audit vault events, filters, or decision safety evaluation metrics",
   whatsapp: "Connect, configure, test or inspect the WhatsApp AI Agent platform and live messages",
+  schemes: "Browse small and large business relief schemes, grants, or SME loans and get a personalized recommendation for a shop or business",
   workspace_control: "Switch demo persona/role, close/minimize/resize windows, toggle 2G Lite or offline mode, sync queue, or open desktop menus",
   dashboard: "Ask about what is currently visible on the desktop/dashboard, active stats, available apps, or current page context",
   none: "General guidance or an unclear request",
@@ -98,6 +99,7 @@ const cues: [MiniApp, RegExp][] = [
   ["users", /registered users|users list|user directory|accounts list|open users|users app|search users/i],
   ["audit", /audit|safety eval|decision safety|threshold comparison|forensic|compliance log/i],
   ["whatsapp", /whatsapp|whats app|wa agent|meta agent|agent api key|bot api key|whatsapp key|connect whatsapp|disconnect whatsapp|test whatsapp|google messages|sms hub|whatsapp\s*&\s*sms/i],
+  ["schemes", /business scheme|small business|large business|\bsme\b|karyana|shopkeeper scheme|business grant|business loan|working capital|merchant incentive|cold storage|export facility|which scheme|recommend.*scheme|scheme.*shop|my shop|my store|turnover|monthly sales|employees|staff count/i],
   ["policy", /policy|eligib|qualify|income cap|who can|which document|what document|what proof|how much (?:aid|money|payout|is)|how do (?:i|raast)|can (?:a |we |i )?apply|widow|پالیسی|اہلیت|بیوہ|بیواؤں/i],
   ["claim", /claims?|clains?|relief|relife|apply|application|draft|attach evidence|back to claims?|submit (?:my |the )?claim|monthly income|my income|income is|household|family size|\b\d+\s*(?:people|members|persons)\b|درخواست/i],
 ];
@@ -138,6 +140,9 @@ export async function routeIntent(input: string) {
     candidates = candidates.filter(app => app !== "claim" && app !== "review");
   }
   if (candidates.includes("whatsapp")) {
+    candidates = candidates.filter(app => app !== "claim" && app !== "policy");
+  }
+  if (candidates.includes("schemes")) {
     candidates = candidates.filter(app => app !== "claim" && app !== "policy");
   }
   if (candidates.includes("family")) {

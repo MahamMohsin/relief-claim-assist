@@ -1,4 +1,4 @@
-import { BookOpen, ClipboardCheck, FileText, Fingerprint, IdCard, MessageSquareShare, Scale, ShieldCheck, SlidersHorizontal, Users, UsersRound } from "lucide-react";
+import { BookOpen, ClipboardCheck, FileText, Fingerprint, IdCard, MessageSquareShare, Scale, ShieldCheck, SlidersHorizontal, Store, Users, UsersRound } from "lucide-react";
 import type { MiniApp, Role } from "@/src/lib/contracts";
 import { appText, pick, type Lang } from "@/src/lib/i18n";
 
@@ -117,5 +117,14 @@ export const apps = {
     color: "ios-green",
     gradient: "from-[#25D366] to-[#128C7E]",
     bg: "#E8F8F0"
+  },
+  schemes: {
+    title: "Business Schemes",
+    note: "Small & large business grants",
+    badge: "SME Relief",
+    icon: Store,
+    color: "ios-amber",
+    gradient: "from-[#C2552D] to-[#A8441F]",
+    bg: "#FBEDE6"
   },
 } satisfies Record<MiniApp, { title: string; note: string; badge?: string; icon: typeof FileText; image?: string; color: string; gradient: string; bg: string }>;

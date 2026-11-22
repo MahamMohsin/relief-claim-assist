@@ -5,6 +5,7 @@ import { actions, canOpen, personas, type Claim, type Payload, type Persona, typ
 import { ApiError, gateway } from "@/src/lib/server";
 import { classifyScam } from "@/src/lib/ai/jev";
 import { answerPolicy } from "@/src/lib/ai/rag";
+import { matchBusinessSchemes } from "@/src/lib/businessSchemes";
 
 export const names = [
   "ui_control",
@@ -34,9 +35,10 @@ export const names = [
   "audit_vault_control",
   "whatsapp_configure_agent",
   "sms_gateway_control",
+  "business_scheme_recommend",
   "window_manage",
 ];
-const appKeys = ["claim", "profile", "scam", "policy", "privacy", "family", "review", "rules", "users", "audit", "whatsapp"] as const;
+const appKeys = ["claim", "profile", "scam", "policy", "privacy", "family", "review", "rules", "users", "audit", "whatsapp", "schemes"] as const;
 export const miniApp = z.enum(appKeys);
 
 // Map whatever the model sends ("Scam Shield", "scam_shield", "open the scam app") to a canonical key.
@@ -54,6 +56,7 @@ Object.assign(appAliases, {
   registeredusers: "users", userdirectory: "users",
   auditvault: "audit",
   whatsapp: "whatsapp", whatsapplink: "whatsapp", walink: "whatsapp", whatsap: "whatsapp", watsapp: "whatsapp", whatsappsms: "whatsapp", googlemessages: "whatsapp", messaging: "whatsapp", smshub: "whatsapp",
+  schemes: "schemes", businessschemes: "schemes", smallbusiness: "schemes", largebusiness: "schemes", sme: "schemes", shopschemes: "schemes", grants: "schemes",
 } satisfies Record<string, (typeof appKeys)[number]>);
 
 export function resolveApp(value: unknown): (typeof appKeys)[number] | null {
@@ -263,6 +266,17 @@ export type ScreenContext = {
     smsLoginCommand?: string;
     smsActiveSessions?: number;
     smsFeedCount?: number;
+  };
+  schemes?: {
+    sizeTab?: "all" | "small" | "large";
+    query?: string;
+    businessType?: string;
+    monthlyRevenuePkr?: number;
+    employees?: number;
+    topRecommendedName?: string;
+    topRecommendedId?: string;
+    visibleCount?: number;
+    appliedCount?: number;
   };
 };
 
@@ -887,6 +901,73 @@ export function registerTools(pi: ExtensionAPI, context: PiContext) {
         text: input.text?.trim() || undefined,
       });
       return textResult({ smsAction: input.action, phone: input.phone, text: input.text });
+    },
+  });
+
+  pi.registerTool({
+    name: "business_scheme_recommend",
+    label: "Match & recommend business schemes",
+    description: "Open Business Schemes, evaluate a shopkeeper or business owner's on-the-fly details (size: small/large/all, businessType, monthlyRevenuePkr, employees, floodAffected, hasRaast, needsGrantOnly), highlight the best-matching scheme on screen, and return ranked recommendations telling them which scheme to apply to.",
+    parameters: Type.Object({
+      size: Type.Optional(Type.Union([Type.Literal("all"), Type.Literal("small"), Type.Literal("large")])),
+      query: Type.Optional(Type.String({ maxLength: 100 })),
+      businessType: Type.Optional(Type.String({ maxLength: 100 })),
+      monthlyRevenuePkr: Type.Optional(Type.Number({ minimum: 0, maximum: 500000000 })),
+      employees: Type.Optional(Type.Integer({ minimum: 1, maximum: 10000 })),
+      floodAffected: Type.Optional(Type.Boolean()),
+      hasRaast: Type.Optional(Type.Boolean()),
+      needsGrantOnly: Type.Optional(Type.Boolean()),
+      openApply: Type.Optional(Type.Boolean()),
+    }),
+    async execute(_id, input) {
+      if (!canOpen(profile.role, "schemes")) throw new ApiError(403, "Your role cannot open Business Schemes.");
+      const ranked = matchBusinessSchemes({
+        size: input.size ?? "all",
+        businessType: input.businessType,
+        monthlyRevenuePkr: input.monthlyRevenuePkr,
+        employees: input.employees,
+        floodAffected: input.floodAffected,
+        hasRaast: input.hasRaast,
+        needsGrantOnly: input.needsGrantOnly,
+      });
+      const eligible = ranked.filter(r => r.fit !== "not_eligible");
+      const top = eligible[0] ?? ranked[0];
+      emit({ type: "open_mini_app", app: "schemes" });
+      emit({
+        type: "schemes_match_visual",
+        size: input.size,
+        query: input.query,
+        businessType: input.businessType,
+        monthlyRevenuePkr: input.monthlyRevenuePkr,
+        employees: input.employees,
+        floodAffected: input.floodAffected,
+        hasRaast: input.hasRaast,
+        needsGrantOnly: input.needsGrantOnly,
+        recommendedId: top?.scheme.id,
+        openApplyId: input.openApply && top ? top.scheme.id : undefined,
+      });
+      return textResult({
+        recommended: top
+          ? {
+              id: top.scheme.id,
+              code: top.scheme.code,
+              name: top.scheme.name,
+              size: top.scheme.size,
+              fundingType: top.scheme.fundingType,
+              maxAmountPkr: top.scheme.maxAmountPkr,
+              fit: top.fit,
+              score: top.score,
+              reasons: top.reasons,
+              requiredDocs: top.scheme.requiredDocs,
+            }
+          : null,
+        alternatives: eligible.slice(1, 3).map(r => ({
+          name: r.scheme.name,
+          fundingType: r.scheme.fundingType,
+          maxAmountPkr: r.scheme.maxAmountPkr,
+          score: r.score,
+        })),
+      });
     },
   });
 

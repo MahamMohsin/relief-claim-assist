@@ -130,6 +130,17 @@ export type ScreenContextSnapshot = {
       fundingStatus?: string | null;
     }[];
   };
+  schemes?: {
+    sizeTab: "all" | "small" | "large";
+    query: string;
+    businessType: string;
+    monthlyRevenuePkr?: number;
+    employees?: number;
+    topRecommendedName?: string;
+    topRecommendedId?: string;
+    visibleCount: number;
+    appliedCount: number;
+  };
   family?: {
     activeFamilyId: string | null;
     activeFamilyName?: string;
@@ -309,6 +320,22 @@ export type SmsCuaHandler = {
   runAction: (action: "regenerate_key" | "pair" | "open_window" | "refresh_qr" | "set_phone" | "toggle_auto_prompt" | "disconnect" | "simulate_sms", opts?: { phone?: string; text?: string }) => Promise<void>;
 };
 
+export type SchemesCuaHandler = {
+  getSnapshot: () => NonNullable<ScreenContextSnapshot["schemes"]>;
+  applyQuery: (next: {
+    size?: "all" | "small" | "large";
+    query?: string;
+    businessType?: string;
+    monthlyRevenuePkr?: number;
+    employees?: number;
+    floodAffected?: boolean;
+    hasRaast?: boolean;
+    needsGrantOnly?: boolean;
+    recommendedId?: string;
+  }) => void;
+  openApply: (schemeId: string) => void;
+};
+
 export type AdminCuaHandler = {
   getSnapshot: () => {
     overview?: ScreenContextSnapshot["overview"];
@@ -391,6 +418,7 @@ class CuaEngine {
   public audit: AuditCuaHandler | null = null;
   public whatsapp: WhatsAppCuaHandler | null = null;
   public sms: SmsCuaHandler | null = null;
+  public schemes: SchemesCuaHandler | null = null;
   public admin: AdminCuaHandler | null = null;
   public search: Partial<Record<"family" | "review" | "users" | "audit" | "whatsapp", (query: string) => void>> = {};
 
@@ -443,6 +471,7 @@ class CuaEngine {
       ...(auditSnap ? { audit: auditSnap } : {}),
       ...(claimSnap ? { claim: claimSnap } : {}),
       ...(this.policy ? { policy: this.policy.getSnapshot() } : {}),
+      ...(this.schemes ? { schemes: this.schemes.getSnapshot() } : {}),
       ...(this.scam ? { scam: this.scam.getSnapshot() } : {}),
       ...(this.privacy ? { privacy: this.privacy.getSnapshot() } : {}),
       ...(this.review ? { review: this.review.getSnapshot() } : {}),
@@ -1534,6 +1563,28 @@ class CuaEngine {
         const handler = await this.waitForHandler(() => this.sms, gen);
         if (!handler) return;
         await handler.runAction(action.action, { phone: action.phone, text: action.text });
+        return;
+      }
+
+      case "schemes_match_visual": {
+        if (!(await this.ensureAppOpen("schemes", gen, true))) return;
+        const handler = await this.waitForHandler(() => this.schemes, gen);
+        if (!handler) return;
+        handler.applyQuery({
+          size: action.size,
+          query: action.query,
+          businessType: action.businessType,
+          monthlyRevenuePkr: action.monthlyRevenuePkr,
+          employees: action.employees,
+          floodAffected: action.floodAffected,
+          hasRaast: action.hasRaast,
+          needsGrantOnly: action.needsGrantOnly,
+          recommendedId: action.recommendedId,
+        });
+        if (action.openApplyId) {
+          await this.sleep(250, gen);
+          handler.openApply(action.openApplyId);
+        }
         return;
       }
 
