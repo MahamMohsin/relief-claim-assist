@@ -2275,86 +2275,83 @@ function UsersView() {
       if (cuaEngine.users) cuaEngine.users = null;
     };
   }, []);
-  const allChecked = filtered.length > 0 && filtered.every(u => selected.includes(u.id));
+  const roleVariant = (role: string): "success" | "info" | "warning" | "neutral" => {
+    if (role === "Citizen" || role === "Helper") return "success";
+    if (role === "Officer" || role === "Admin") return "info";
+    if (role === "Shopkeeper") return "warning";
+    return "neutral";
+  };
 
   return <Panel>
-    <div className="panel-head">
-      <div><h2>Registered users</h2><p>{filtered.length} synthetic accounts across all roles.</p></div>
-      <input
-        data-cua="users-search"
-        value={query}
-        onChange={e => setQuery(e.target.value)}
-        placeholder="Search name, role, or ID…"
-        style={{ maxWidth: 220 }}
+    <VStack gap={3} width="100%">
+      <div className="panel-head">
+        <div>
+          <h2>Registered users</h2>
+          <p>{filtered.length} of {REGISTERED_USERS.length} accounts · {selected.length > 0 ? `${selected.length} selected` : "6 DPI roles"}</p>
+        </div>
+        <input
+          data-cua="users-search"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Search name, role, or ID…"
+          style={{ maxWidth: 220 }}
+        />
+      </div>
+
+      <ProgressBar
+        label="Directory filter coverage"
+        value={REGISTERED_USERS.length > 0 ? Math.round((filtered.length / REGISTERED_USERS.length) * 100) : 0}
+        max={100}
+        variant="accent"
+        isLabelHidden
       />
-    </div>
-    <div className="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th style={{ width: 32 }}>
-              <input
-                type="checkbox"
-                aria-label="Select all users"
-                checked={allChecked}
-                onChange={() => setSelected(allChecked ? [] : filtered.map(u => u.id))}
-              />
-            </th>
-            <th>USER</th>
-            <th>TYPE</th>
-            <th>LINKED TO</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filtered.map(user => {
-            const isChecked = selected.includes(user.id);
-            return <tr
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "0.75rem", width: "100%" }}>
+        {filtered.map(user => {
+          const isChecked = selected.includes(user.id);
+          return (
+            <Card
               key={user.id}
-              onClick={() => setSelected(prev => isChecked ? prev.filter(id => id !== user.id) : [...prev, user.id])}
-              style={{ cursor: "pointer" }}
+              variant={isChecked ? "green" : "muted"}
+              padding={3}
             >
-              <td onClick={e => e.stopPropagation()}>
-                <input
-                  type="checkbox"
-                  aria-label={`Select ${user.name}`}
-                  checked={isChecked}
-                  onChange={() => setSelected(prev => isChecked ? prev.filter(id => id !== user.id) : [...prev, user.id])}
-                />
-              </td>
-              <td>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                  <img
-                    src={user.avatar}
-                    alt={user.name}
-                    style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }}
-                  />
-                  <div>
-                    <div style={{ fontWeight: 600 }}>{user.name}</div>
-                    <div style={{ fontSize: "0.75rem", opacity: 0.65 }}>{user.code} · {user.id}</div>
-                  </div>
-                </div>
-              </td>
-              <td>
-                <span style={{
-                  display: "inline-block",
-                  padding: "0.2rem 0.65rem",
-                  borderRadius: 999,
-                  border: "1px solid currentColor",
-                  fontSize: "0.75rem",
-                  fontWeight: 500,
-                  opacity: 0.85,
-                }}>
-                  {user.role}
-                </span>
-              </td>
-              <td>
-                <div style={{ fontWeight: 500 }}>{user.linkedTitle}</div>
-                <div style={{ fontSize: "0.75rem", opacity: 0.65 }}>{user.linkedSub}</div>
-              </td>
-            </tr>;
-          })}
-        </tbody>
-      </table>
-    </div>
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelected(prev => isChecked ? prev.filter(id => id !== user.id) : [...prev, user.id])}
+                onKeyDown={e => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelected(prev => isChecked ? prev.filter(id => id !== user.id) : [...prev, user.id]);
+                  }
+                }}
+                style={{ cursor: "pointer", width: "100%" }}
+              >
+                <VStack gap={2} width="100%">
+                  <HStack justify="between" vAlign="center" gap={2} width="100%">
+                    <HStack gap={2} vAlign="center">
+                      <img
+                        src={user.avatar}
+                        alt={user.name}
+                        style={{ width: 42, height: 42, borderRadius: 12, objectFit: "cover", flexShrink: 0 }}
+                      />
+                      <VStack gap={0.5}>
+                        <strong style={{ fontSize: "0.94rem" }}>{user.name}</strong>
+                        <small style={{ color: "#6b7280", fontSize: "0.74rem" }}>{user.code}</small>
+                      </VStack>
+                    </HStack>
+                    <Badge label={user.role} variant={roleVariant(user.role)} />
+                  </HStack>
+                  <HStack justify="between" vAlign="center" gap={2} width="100%">
+                    <small style={{ fontWeight: 500, color: "#374151" }}>{user.linkedTitle}</small>
+                    <small style={{ color: "#6b7280" }}>{user.linkedSub}</small>
+                  </HStack>
+                </VStack>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+    </VStack>
   </Panel>;
 }
