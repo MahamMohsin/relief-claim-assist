@@ -103,15 +103,16 @@ async function launchBrowserContext() {
     "--disable-notifications",
   ];
 
-  // If not explicitly visible, launch off-screen headed so Google Messages SPA renders reliably
-  // without popping over the user's desktop, OR use Chromium new headless if needed.
-  const windowFlags = VISIBLE_MODE
-    ? ["--window-size=1100,820"]
-    : ["--window-position=-32000,-32000", "--window-size=1100,820"];
+  // Launch visibly in view on the user's desktop (explicitly setting on-screen coordinates
+  // overrides any previously persisted off-screen window position in the Chromium profile).
+  const windowFlags =
+    process.env.GM_OFFSCREEN === "1" && !VISIBLE_MODE
+      ? ["--window-position=-32000,-32000", "--window-size=1020,760"]
+      : ["--window-position=80,60", "--window-size=1020,760"];
 
   const commonOptions = {
     headless: false,
-    viewport: { width: 1100, height: 800 },
+    viewport: { width: 1000, height: 720 },
     userAgent: USER_AGENT,
     args: [...stealthFlags, ...windowFlags],
     locale: "en-US",
