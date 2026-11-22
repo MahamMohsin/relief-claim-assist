@@ -7296,6 +7296,103 @@ button.active-cases-card:hover {
   }
 }
 
+/* ========================================================
+   COMPACT MULTI-COLUMN DASHBOARD WIDGETS (All Roles)
+   Makes widgets tighter and places lightweight cards side-by-side
+   ======================================================== */
+.ios-top-hero-row {
+  max-width: 780px;
+}
+
+.ios-hero-name .liquid-user-pill {
+  max-width: 390px;
+}
+
+.ios-top-widgets-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 0.7rem;
+}
+
+.relief-stats-widget,
+.ios-history-widget.compact {
+  padding: 0.78rem 0.92rem;
+  border-radius: 18px;
+}
+
+.audit-glass-suite.is-compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.audit-glass-suite.is-compact .audit-glass-card {
+  padding: 0.68rem 0.82rem;
+  gap: 0.42rem;
+  border-radius: 18px;
+}
+
+.officer-glass-suite .officer-budget-card {
+  grid-column: 1 / -1;
+}
+
+.officer-budget-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.officer-donut-wrap {
+  width: 82px;
+  height: 82px;
+}
+
+.officer-donut-row {
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 0.6rem;
+}
+
+.officer-donut-center strong {
+  font-size: 1.15rem;
+}
+
+.officer-big-stat {
+  font-size: 1.45rem;
+}
+
+.officer-mid-stat {
+  font-size: 1rem;
+}
+
+.officer-spark-svg {
+  height: 32px;
+}
+
+.admin-dashboard.audit-glass-suite.is-compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.admin-dashboard .admin-claim-kpis .audit-score-num {
+  font-size: 1.45rem;
+}
+
+@media (max-width: 640px) {
+  .ios-top-widgets-group,
+  .admin-dashboard.audit-glass-suite.is-compact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ios-hero-name .liquid-user-pill {
+    max-width: none;
+  }
+
+  .officer-budget-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.35rem;
+  }
+}
+
 
 /* Claim status banner (citizen claim view): colors follow the live claim status. */
 .claim-status[data-tone="approved"] .astryx-banner { background: var(--success-bg); color: var(--success-text); }

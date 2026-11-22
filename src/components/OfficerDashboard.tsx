@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { ArrowUpRight } from "lucide-react";
-import type { Claim, Overview } from "@/src/lib/contracts";
+import type { Claim, Overview, SchemeBudget } from "@/src/lib/contracts";
 
 const formatCompactPkr = (amount: number) => {
   if (amount >= 1_000_000) return `PKR ${(amount / 1_000_000).toFixed(1)}M`;
@@ -13,11 +13,13 @@ const formatCompactPkr = (amount: number) => {
 export function OfficerDashboard({
   overview,
   queue,
+  budget,
   offline,
   onOpenReview,
 }: {
   overview: Overview | null;
   queue: Claim[];
+  budget: SchemeBudget | null;
   offline: boolean;
   onOpenReview: () => void;
 }) {
@@ -317,6 +319,62 @@ export function OfficerDashboard({
           </div>
         )}
       </article>
+
+      {/* CARD 3: Compact Overall Scheme Budget Strip (shared across Admin & Reviewer) */}
+      {(() => {
+        const reservedFallback = queue
+          .filter(c => c.status === "approved" && c.payment_status !== "paid" && c.funding_status !== "awaiting_funds")
+          .reduce((acc, c) => acc + (c.amount_pkr || 0), 0);
+        const awaitingFallback = queue.filter(c => c.status === "approved" && c.funding_status === "awaiting_funds").length;
+        const paidTotal = budget?.paid_pkr ?? analytics.paidPkr;
+        const reservedTotal = budget?.reserved_pkr ?? reservedFallback;
+        const totalPool = budget?.total_pkr ?? Math.max(paidTotal + reservedTotal + analytics.pendingPkr, 1);
+        const availableTotal = budget?.available_pkr ?? Math.max(0, totalPool - paidTotal - reservedTotal);
+        const awaitingCount = budget?.awaiting_claims ?? awaitingFallback;
+        const usedPct = totalPool > 0 ? Math.min(100, Math.round(((paidTotal + reservedTotal) / totalPool) * 100)) : 0;
+
+        return (
+          <article
+            className="audit-glass-card officer-glass-card officer-budget-card"
+            onClick={onOpenReview}
+            role="button"
+            tabIndex={0}
+            onKeyDown={e => { if (e.key === "Enter" || e.key === " ") onOpenReview(); }}
+          >
+            <header className="audit-glass-head">
+              <div className="audit-glass-title-group">
+                <span className="audit-glass-dot green" />
+                <span className="audit-glass-kicker">Scheme budget</span>
+                <strong className="audit-glass-title">{budget ? formatCompactPkr(totalPool) : "Live payouts"}</strong>
+              </div>
+              <span className="officer-meta-chip">
+                {awaitingCount > 0 ? `${awaitingCount} awaiting funds` : `${usedPct}% allocated`}
+              </span>
+            </header>
+
+            <div className="officer-budget-kpis">
+              <div className="officer-kpi-cell">
+                <span className="officer-kpi-label"><i style={{ background: "#34d399" }} />Available</span>
+                <strong>{formatCompactPkr(availableTotal)}</strong>
+              </div>
+              <div className="officer-kpi-cell">
+                <span className="officer-kpi-label"><i style={{ background: "#fbbf24" }} />Reserved</span>
+                <strong>{formatCompactPkr(reservedTotal)}</strong>
+              </div>
+              <div className="officer-kpi-cell">
+                <span className="officer-kpi-label"><i style={{ background: "#64c4ff" }} />Paid</span>
+                <strong>{formatCompactPkr(paidTotal)}</strong>
+              </div>
+            </div>
+
+            <div className="audit-prop-bar" role="img" aria-label="Scheme budget utilization">
+              {paidTotal > 0 && <span className="audit-prop-seg" style={{ flexGrow: paidTotal, background: "#64c4ff" }} />}
+              {reservedTotal > 0 && <span className="audit-prop-seg" style={{ flexGrow: reservedTotal, background: "#fbbf24" }} />}
+              {availableTotal > 0 && <span className="audit-prop-seg" style={{ flexGrow: availableTotal, background: "#34d399" }} />}
+            </div>
+          </article>
+        );
+      })()}
     </section>
   );
 }

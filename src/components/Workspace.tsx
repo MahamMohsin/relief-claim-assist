@@ -6,7 +6,7 @@ import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Award, Bell, CheckCircle2, ChevronDown, Clock, Cloud, CloudOff, Fingerprint, HandHeart, House,
   LoaderCircle, LogOut, Maximize2, MessageSquare, Minimize2, Minus, Radio, ShieldCheck, Trophy, UserPlus, UserRound, Users, Wifi, X } from "lucide-react";
-import { canOpen, personas, type Audit, type Claim, type Family, type MiniApp, type Overview, type Persona, type Profile } from "@/src/lib/contracts";
+import { canOpen, personas, type Audit, type Claim, type Family, type MiniApp, type Overview, type Persona, type Profile, type SchemeBudget } from "@/src/lib/contracts";
 import { api, jsonRequest } from "@/src/lib/client";
 import { pick, strings, useLang, waitingToSend } from "@/src/lib/i18n";
 import { countByCitizen, queued, queuedForOwner, pushMutation, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
@@ -120,6 +120,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   const [pastClaims, setPastClaims] = useState<Claim[]>([]);
   const [claimsLoading, setClaimsLoading] = useState(false);
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [officerBudget, setOfficerBudget] = useState<SchemeBudget | null>(null);
   const [officerQueue, setOfficerQueue] = useState<Claim[]>([]);
   const [officerAlerts, setOfficerAlerts] = useState<WorkspaceAlert[]>([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
@@ -287,6 +288,9 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
       activeController = controller;
       api<Overview>("overview", {}, controller.signal)
         .then(res => { if (!controller.signal.aborted) setOverview(res); })
+        .catch(() => {});
+      api<SchemeBudget>("scheme_budget", {}, controller.signal)
+        .then(res => { if (!controller.signal.aborted && res) setOfficerBudget(res); })
         .catch(() => {});
       api<Claim[]>("queue", {}, controller.signal)
         .then(cases => {
@@ -1056,6 +1060,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                   <OfficerDashboard
                     overview={overview}
                     queue={officerQueue}
+                    budget={officerBudget}
                     offline={offline}
                     onOpenReview={() => openAppWindow("review")}
                   />
