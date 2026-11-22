@@ -77,7 +77,7 @@ async function startGateway() {
     version,
     logger: makeSilentLogger(),
     printQRInTerminal: false,
-    browser: ["Relief Assist Admin Bot", "Chrome", "131.0.0.0"],
+    browser: ["Mac OS", "Desktop", "14.4.1"],
     syncFullHistory: false,
     generateHighQualityLinkPreview: true,
   });
@@ -206,18 +206,15 @@ async function startGateway() {
           try {
             fs.rmSync(AUTH_DIR, { recursive: true, force: true });
           } catch {}
-          writeState({
-            status: "qr_ready",
-            adminPhone: null,
-            qrData: null,
-            qrDataUrl: null,
-          });
-          setTimeout(startGateway, 1500);
+          setTimeout(startGateway, 1000);
         } else if (cmd.action === "refresh_qr") {
           console.log("[wa-gateway] Received refresh QR command from UI.");
           clearInterval(commandChecker);
           sock.end(undefined);
-          setTimeout(startGateway, 1000);
+          try {
+            fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+          } catch {}
+          setTimeout(startGateway, 800);
         }
       } catch (err) {
         console.error("[wa-gateway] Command processing error:", err);

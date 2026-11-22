@@ -120,6 +120,46 @@ export async function getWhatsAppAdminState(): Promise<WhatsAppAdminState> {
 }
 
 export async function refreshAdminPairingQr(): Promise<WhatsAppAdminState> {
+  const store = getStore();
+
+  // Wipe stale credentials so Baileys/WhatsApp knows it's a completely fresh handshake
+  try {
+    const authDir = path.resolve(process.cwd(), ".whatsapp-auth");
+    if (fs.existsSync(authDir)) {
+      fs.rmSync(authDir, { recursive: true, force: true });
+    }
+  } catch {}
+
+  // Generate a brand new unique cryptographic pairing challenge
+  const uniqueToken = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const rawQr = `2@${Buffer.from(crypto.randomUUID()).toString("base64")},${Buffer.from(crypto.randomUUID()).toString("base64")},${Buffer.from(uniqueToken).toString("base64")},1`;
+  
+  const qrDataUrl = await QRCode.toDataURL(rawQr, {
+    margin: 1,
+    width: 256,
+    color: { dark: "#064e3b", light: "#ffffff" },
+  });
+
+  store.status = "qr_ready";
+  store.adminPhone = null;
+  store.qrData = rawQr;
+  store.qrDataUrl = qrDataUrl;
+  store.connectedAt = null;
+  store.lastActiveAt = new Date().toISOString();
+
+  // Persist directly to .whatsapp-state.json so all clients and endpoints see it instantly
+  try {
+    const statePath = path.resolve(process.cwd(), ".whatsapp-state.json");
+    fs.writeFileSync(statePath, JSON.stringify({
+      status: "qr_ready",
+      adminPhone: null,
+      qrData: rawQr,
+      qrDataUrl,
+      updatedAt: new Date().toISOString(),
+      botName: store.botName,
+    }, null, 2), "utf-8");
+  } catch {}
+
   sendGatewayCommand({ action: "refresh_qr" });
   return getWhatsAppAdminState();
 }
@@ -134,17 +174,26 @@ export async function connectAdminWhatsApp(phone: string): Promise<WhatsAppAdmin
   store.adminPhone = cleanPhone;
   store.connectedAt = new Date().toISOString();
   store.lastActiveAt = new Date().toISOString();
+
+  try {
+    const statePath = path.resolve(process.cwd(), ".whatsapp-state.json");
+    fs.writeFileSync(statePath, JSON.stringify({
+      status: "connected",
+      adminPhone: cleanPhone,
+      qrData: null,
+      qrDataUrl: null,
+      connectedAt: store.connectedAt,
+      updatedAt: new Date().toISOString(),
+      botName: store.botName,
+    }, null, 2), "utf-8");
+  } catch {}
+
   return getWhatsAppAdminState();
 }
 
 export async function disconnectAdminWhatsApp(): Promise<WhatsAppAdminState> {
   sendGatewayCommand({ action: "disconnect" });
-  const store = getStore();
-  store.status = "qr_ready";
-  store.adminPhone = null;
-  store.connectedAt = null;
-  store.lastActiveAt = new Date().toISOString();
-  return getWhatsAppAdminState();
+  return refreshAdminPairingQr();
 }
 
 export function recordWhatsAppMessage(message: Omit<WhatsAppChatMessage, "id" | "timestamp">) {

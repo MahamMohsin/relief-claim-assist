@@ -384,6 +384,7 @@ function AdminWhatsAppManagementView({ ctx }: { ctx: ViewContext }) {
                       </strong>
                       {adminState?.qrDataUrl ? (
                         <img
+                          key={adminState.qrDataUrl.slice(-24)}
                           src={adminState.qrDataUrl}
                           alt="Pairing QR Code"
                           style={{ width: "160px", height: "160px", margin: "0 auto", borderRadius: "8px" }}
@@ -398,10 +399,25 @@ function AdminWhatsAppManagementView({ ctx }: { ctx: ViewContext }) {
                       </small>
                       <button
                         type="button"
+                        disabled={busy}
                         onClick={() => void handleRefreshQr()}
-                        style={{ marginTop: "0.4rem", background: "none", border: "none", color: "#059669", fontSize: "0.75rem", cursor: "pointer", textDecoration: "underline" }}
+                        style={{
+                          marginTop: "0.4rem",
+                          background: "#f1f5f9",
+                          border: "1px solid #cbd5e1",
+                          color: "#059669",
+                          padding: "0.3rem 0.65rem",
+                          borderRadius: "6px",
+                          fontSize: "0.76rem",
+                          fontWeight: 600,
+                          cursor: busy ? "not-allowed" : "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
                       >
-                        Refresh QR code
+                        <RefreshCw size={12} className={busy ? "animate-spin" : ""} />
+                        <span>{busy ? "Generating…" : "Generate New QR Code"}</span>
                       </button>
                     </div>
 

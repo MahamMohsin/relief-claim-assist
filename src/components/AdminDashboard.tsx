@@ -361,6 +361,7 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
               Scan with WhatsApp on Admin Phone
             </span>
             <img
+              key={state.qrDataUrl.slice(-24)}
               src={state.qrDataUrl}
               alt="WhatsApp Web Pairing QR Code"
               style={{ width: "160px", height: "160px", borderRadius: "8px", border: "1px solid #e5e7eb" }}
