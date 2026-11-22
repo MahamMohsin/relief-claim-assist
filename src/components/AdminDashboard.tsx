@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowUpRight, CheckCircle2, MessageSquare, Power, QrCode, RefreshCw, Smartphone } from "lucide-react";
 import { api } from "@/src/lib/client";
 import type { MiniApp, Overview, RuleConfig, SchemeBudget } from "@/src/lib/contracts";
+import { cuaEngine } from "./os/cuaEngine";
 
 type Scheme = { version: number; name: string; config: RuleConfig };
 type Summary = { claims: Overview | null; scheme: Scheme | null; staffCount: number | null; budget: SchemeBudget | null };
@@ -19,6 +20,54 @@ export function AdminDashboard({ offline, version, onOpen }: {
   const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(!offline);
   const [refresh, setRefresh] = useState(0);
+  const summaryRef = useRef(summary);
+  summaryRef.current = summary;
+
+  useEffect(() => {
+    cuaEngine.admin = {
+      getSnapshot: () => {
+        const s = summaryRef.current;
+        return {
+          overview: s.claims ? {
+            active: s.claims.active,
+            review: s.claims.review,
+            proof: s.claims.proof,
+            approved: s.claims.approved,
+            rejected: s.claims.rejected,
+            closed: s.claims.closed,
+            paid: s.claims.paid,
+            newThisMonth: s.claims.new_this_month,
+            priority: s.claims.priority,
+          } : undefined,
+          budget: s.budget ? {
+            totalPkr: s.budget.total_pkr,
+            availablePkr: s.budget.available_pkr,
+            reservedPkr: s.budget.reserved_pkr,
+            paidPkr: s.budget.paid_pkr,
+            awaitingClaims: s.budget.awaiting_claims,
+          } : undefined,
+          rules: s.scheme ? {
+            activeVersion: s.scheme.version,
+            activeName: s.scheme.name,
+            config: { ...s.scheme.config },
+            pendingStaffCount: s.staffCount ?? undefined,
+          } : undefined,
+        };
+      },
+      updateBudget: async (totalPkr, reason) => {
+        const current = summaryRef.current.budget ?? await api<SchemeBudget>("scheme_budget");
+        const updated = await api<SchemeBudget>("set_scheme_budget", {
+          totalPkr,
+          expectedTotalPkr: current.total_pkr,
+          reason,
+        }, AbortSignal.timeout(15000));
+        setSummary(previous => ({ ...previous, budget: updated }));
+      },
+    };
+    return () => {
+      if (cuaEngine.admin) cuaEngine.admin = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (offline) return;
@@ -172,7 +221,7 @@ function BudgetCard({ budget, offline, loading, onSaved }: {
       <h2 className="audit-glass-title-group audit-glass-title" id="admin-budget-heading">
         <i className="audit-glass-dot green" aria-hidden="true" /> Scheme budget
       </h2>
-      {budget && !editing && <button type="button" className="audit-glass-open-btn" disabled={offline || loading} onClick={() => {
+      {budget && !editing && <button type="button" data-cua="admin-budget-edit" className="audit-glass-open-btn" disabled={offline || loading} onClick={() => {
         setTotal(String(budget.total_pkr)); setExpectedTotal(budget.total_pkr); setReason("");
         setMessage(""); setError(""); setEditing(true);
       }}>Edit budget</button>}
