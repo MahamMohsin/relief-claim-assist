@@ -184,30 +184,42 @@ export function canOpen(role: Role, app: MiniApp) {
 export type UIAction = { type: "open_mini_app"; app: MiniApp }
   | { type: "start_new_claim"; fields?: Partial<Payload> }
   | { type: "claim_back_to_list" }
+  | { type: "claim_inspect_or_edit"; claimId?: string; mode: "details" | "edit" }
   | { type: "prefill_fields"; fields: Partial<Payload>; claimId?: string; saved?: boolean }
   | { type: "advance_claim_step"; step: "household" | "evidence" | "review" | "submit" | "list"; docType?: "identity" | "income"; fixture?: "clear" | "blurred" | "altered" | "incomplete"; attachEvidence?: boolean }
   | { type: "ask_policy_visual"; question: string }
   | { type: "check_scam_visual"; message: string; reference?: string }
-  | { type: "privacy_correction_visual"; field: "full_name" | "phone" | "village_area" | "household_size" | "monthly_income_mock"; value: string }
+  | { type: "scam_report_missing_visual"; reference?: string }
+  | { type: "chat_reset_visual"; app: "policy" | "scam" }
+  | { type: "privacy_correction_visual"; field: "full_name" | "phone" | "village_area" | "household_size" | "monthly_income_mock"; value: string; submit?: boolean }
   | { type: "privacy_helper_consent_visual"; consent: "revoked" | "granted"; helperId?: string; helperName?: string }
-  | { type: "search_app_visual"; app: "family" | "review" | "users"; query: string }
-  | { type: "profile_add_sample_visual"; docType?: "cnic" | "utility" | "job" }
+  | { type: "search_app_visual"; app: "family" | "review" | "users" | "audit" | "whatsapp"; query: string }
+  | { type: "profile_add_sample_visual"; docType?: "cnic" | "utility" | "job" | "utility_bill" | "job_proof" }
+  | { type: "profile_view_document"; docType?: "cnic" | "utility_bill" | "job_proof" }
   | { type: "switch_persona"; persona: Persona }
   | { type: "switch_family_action"; citizenId?: string; familyName?: string }
   | { type: "review_select_claim"; claimId?: string; citizenName?: string }
-  | { type: "review_produce_summary"; claimId?: string }
-  | { type: "review_decide_claim"; claimId?: string; decision: "approve" | "reject" | "more_proof"; reason?: string; reasonUr?: string }
-  | { type: "review_disburse"; claimId?: string; outcome?: "paid" | "failed" }
+  | { type: "review_back_to_board" }
+  | { type: "review_produce_summary"; claimId?: string; citizenName?: string }
+  | { type: "review_decide_claim"; claimId?: string; citizenName?: string; decision: "approve" | "reject" | "more_proof"; reason?: string; reasonUr?: string }
+  | { type: "review_disburse"; claimId?: string; citizenName?: string; outcome?: "paid" | "failed" }
   | { type: "review_filter"; filter: "all" | "accepted" | "rejected"; sort?: "asc" | "desc" }
   | { type: "rules_update_config"; config: Partial<RuleConfig>; name?: string }
   | { type: "rules_simulate"; config?: Partial<RuleConfig> }
-  | { type: "rules_publish"; config: RuleConfig; name?: string }
-  | { type: "rules_staff_decision"; userId: string; decision: "active" | "rejected" }
+  | { type: "rules_publish"; config?: Partial<RuleConfig>; name?: string }
+  | { type: "rules_staff_decision"; userId?: string; staffName?: string; decision: "active" | "rejected" }
   | { type: "budget_update"; totalPkr: number; reason: string }
-  | { type: "whatsapp_set_key"; key: string }
+  | { type: "audit_control"; tab?: "events" | "eval"; category?: "all" | "claims" | "ai" | "consent" | "blocked"; query?: string; selectIndex?: number; refresh?: boolean }
+  | { type: "whatsapp_set_key"; key: string; agentName?: string }
+  | { type: "whatsapp_disconnect" }
+  | { type: "whatsapp_send_test"; text: string }
   | { type: "close_window"; app: MiniApp }
+  | { type: "close_all_windows" }
   | { type: "minimize_window"; app: MiniApp }
+  | { type: "window_resize"; app: MiniApp; preset: "compact" | "default" | "wide" }
+  | { type: "workspace_ui_panel"; panel: "account_menu" | "persona_switcher" | "notifications"; open?: boolean }
+  | { type: "workspace_sync" }
   | { type: "toggle_feature"; feature: "lite" | "network_drop" }
-  | { type: "show_jev_badge"; label: string; confidence: number; route: MiniApp | "clarification"; model: string }
+  | { type: "show_jev_badge"; label: string; confidence: number; route: MiniApp | "clarification" | "general"; model: string }
   | { type: "ask_clarification"; question: string; options: MiniApp[] }
   | { type: "highlight_alert"; severity: "warning" | "info"; message: string };
