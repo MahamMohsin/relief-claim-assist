@@ -41,12 +41,12 @@ export const waitingToSend: Record<Lang, (count: number) => string> = {
 export const claimStepHelp: Record<Lang, string[]> = {
   en: [
     "Enter your total monthly household income and the number of people in your household. Then continue to evidence.",
-    "Attach a readable synthetic document. You can pick a sample or upload an image. Then select Review claim.",
+    "Pick a sample or upload a readable synthetic image. To attach both an identity card and an income slip, add them one at a time before selecting Review claim.",
     "Check the details and evidence. Select Submit claim when you are ready. An officer will review it.",
   ],
   ur: [
     "گھر کی کل ماہانہ آمدنی اور گھر کے افراد کی تعداد درج کریں۔ پھر ثبوت کے مرحلے پر جائیں۔",
-    "واضح فرضی دستاویز منسلک کریں۔ آپ نمونہ منتخب کر سکتے ہیں یا تصویر لگا سکتے ہیں۔ پھر درخواست کا جائزہ لیں۔",
+    "نمونہ منتخب کریں یا واضح فرضی تصویر اپ لوڈ کریں۔ شناختی کارڈ اور آمدنی کی پرچی دونوں منسلک کرنے کے لیے انہیں ایک ایک کر کے شامل کریں، پھر درخواست کا جائزہ لیں۔",
     "تفصیلات اور ثبوت دیکھ لیں، پھر درخواست جمع کریں۔ ایک افسر اس کا جائزہ لے گا۔",
   ],
 };

@@ -597,7 +597,7 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
       {step === 1 && <VStack gap={3} paddingBlockStart={3}>
         <HStack gap={3} wrap="wrap">
           <div data-cua="claim-doc-type" style={{ flex: 1, minWidth: 180 }}>
-            <Selector label="Document type" value={docType} onChange={value => setDocType((value ?? "identity") as typeof docType)} options={[{ value: "identity", label: "Mock identity card" }, { value: "income", label: "Mock income slip" }]} />
+            <Selector label="Document type" value={docType} onChange={value => setDocType((value ?? "identity") as typeof docType)} options={[{ value: "identity", label: "Identity card" }, { value: "income", label: "Income slip" }]} />
           </div>
           <div data-cua="claim-fixture" style={{ flex: 1, minWidth: 180 }}>
             <Selector label="Sample document" value={fixture} onChange={value => { setImage(null); setFile(null); setFixture(value ?? "clear"); }} options={[{ value: "clear", label: "Readable sample" }, { value: "blurred", label: "Blurry sample" }, { value: "altered", label: "Altered sample" }, { value: "incomplete", label: "Incomplete sample" }]} />
@@ -627,7 +627,7 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
                       )}
                       <VStack gap={0.5}>
                         <HStack gap={1.5} vAlign="center" wrap="wrap">
-                          <strong>{doc.doc_type === "identity" ? "Mock identity card" : doc.doc_type === "income" ? "Mock income slip" : title(doc.doc_type)}</strong>
+                          <strong>{doc.doc_type === "identity" ? "Identity card" : doc.doc_type === "income" ? "Income slip" : title(doc.doc_type)}</strong>
                           {sampleTag && <small style={{ color: "#6b7280" }}>· {title(sampleTag)} sample</small>}
                         </HStack>
                         {(doc.tamper_reason || doc.ocr_json?.summary) && (
@@ -702,7 +702,7 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
                       )}
                       <VStack gap={0.5}>
                         <HStack gap={1.5} vAlign="center" wrap="wrap">
-                          <strong>{doc.doc_type === "identity" ? "Mock identity card" : doc.doc_type === "income" ? "Mock income slip" : title(doc.doc_type)}</strong>
+                          <strong>{doc.doc_type === "identity" ? "Identity card" : doc.doc_type === "income" ? "Income slip" : title(doc.doc_type)}</strong>
                           {sampleTag && <small style={{ color: "#6b7280" }}>· {title(sampleTag)} sample</small>}
                         </HStack>
                         {(doc.tamper_reason || doc.ocr_json?.summary) && (
