@@ -271,7 +271,7 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
       if (offline) return;
       try {
         setLoading(true);
-        const res = await fetch("/api/whatsapp/agent-key?persona=kamran");
+        const res = await fetch("/api/whatsapp/agent-key", { cache: "no-store" });
         if (res.ok) {
           const json = await res.json();
           if (active) setAgentInfo(json);

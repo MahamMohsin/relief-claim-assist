@@ -42,10 +42,12 @@ export type WhatsAppKeyBridge = {
 
 export function WhatsAppAgentKeySection({
   personaId,
+  userName,
   roleTitle,
   bridgeRef,
 }: {
   personaId: string;
+  userName?: string;
   roleTitle: string;
   bridgeRef?: React.MutableRefObject<WhatsAppKeyBridge | null>;
 }) {
@@ -63,24 +65,36 @@ export function WhatsAppAgentKeySection({
   const [testBusy, setTestBusy] = useState(false);
   const [testReplies, setTestReplies] = useState<Array<{ sender: "user" | "agent"; text: string; time: string }>>([]);
 
-  async function loadKeyInfo() {
-    try {
-      setLoading(true);
-      const res = await fetch(`/api/whatsapp/agent-key?persona=${encodeURIComponent(personaId)}`);
-      if (res.ok) {
-        const json = (await res.json()) as AgentKeyInfo;
-        setInfo(json);
-        if (json.agentName) setAgentNameInput(json.agentName);
-      }
-    } catch {
-      // Ignored
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
+    // Immediately reset state on persona change so switching Fatima -> Tariq -> Zainab never flashes stale keys or chat
+    let active = true;
+    setInfo(null);
+    setApiKeyInput("");
+    setAgentNameInput("Ali");
+    setTestReplies([]);
+    setNotice("");
+    setError("");
+    setLoading(true);
+
+    async function loadKeyInfo() {
+      try {
+        const res = await fetch("/api/whatsapp/agent-key", { cache: "no-store" });
+        if (res.ok && active) {
+          const json = (await res.json()) as AgentKeyInfo;
+          setInfo(json);
+          if (json.agentName) setAgentNameInput(json.agentName);
+        }
+      } catch {
+        // Ignored
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
     void loadKeyInfo();
+    return () => {
+      active = false;
+    };
   }, [personaId]);
 
   async function handleConnect(overrideKey?: string, overrideAgentName?: string) {
@@ -169,11 +183,11 @@ export function WhatsAppAgentKeySection({
     setTestReplies(prev => [...prev, { sender: "user", text, time: now }]);
 
     try {
-      const res = await fetch("/api/whatsapp/webhook", {
+      const res = await fetch("/api/whatsapp/agent-key", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          from: `user:${personaId}`,
+          action: "test_chat",
           text,
         }),
       });
@@ -182,7 +196,7 @@ export function WhatsAppAgentKeySection({
         ...prev,
         {
           sender: "agent",
-          text: data.reply || "Agent responded successfully.",
+          text: data.reply || data.error || "Agent responded successfully.",
           time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
       ]);
@@ -270,7 +284,7 @@ export function WhatsAppAgentKeySection({
                 </span>
               </div>
               <small style={{ color: "#64748b", fontSize: "0.76rem" }}>
-                Connect your custom WhatsApp Agent with your API key — no pairing QR needed.
+                Dedicated private agent for <strong>{userName || "your account"}</strong> ({roleTitle}) — completely separate from other users.
               </small>
             </div>
           </div>

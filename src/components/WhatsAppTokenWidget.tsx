@@ -25,10 +25,11 @@ export function WhatsAppTokenWidget({
 
   useEffect(() => {
     let active = true;
+    setData(null);
     async function fetchAgentStatus() {
       try {
         setLoading(true);
-        const res = await fetch(`/api/whatsapp/agent-key?persona=${encodeURIComponent(personaId)}`);
+        const res = await fetch("/api/whatsapp/agent-key", { cache: "no-store" });
         if (res.ok) {
           const json = (await res.json()) as AgentKeyInfo;
           if (active) setData(json);
