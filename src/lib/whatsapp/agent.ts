@@ -14,9 +14,13 @@ import {
 } from "./session";
 import { getToolsForRole, type WhatsAppToolDefinition } from "./tools";
 import type { ScopedUserIdentity } from "./scoped-gateway";
-import { convertMarkdownTablesToMobileText } from "./audio";
+import {
+  convertMarkdownTablesToMobileText,
+  formatToolOutputToPlainText,
+  sanitizePlainText,
+} from "./audio";
 
-export { convertMarkdownTablesToMobileText };
+export { convertMarkdownTablesToMobileText, formatToolOutputToPlainText, sanitizePlainText };
 
 export type DirectChannel = "sms" | "whatsapp";
 
@@ -190,7 +194,8 @@ OPERATING RULES:
         const rawReply =
           textParts.join("\n\n").trim() ||
           `Completed your request for ${user.name} (${roleTitle}).`;
-        const finalReply = convertMarkdownTablesToMobileText(rawReply, channel);
+        const converted = convertMarkdownTablesToMobileText(rawReply, channel);
+        const finalReply = sanitizePlainText(converted, user.name);
         appendHistory(channel, user.userId, { role: "user", text });
         appendHistory(channel, user.userId, { role: "assistant", text: finalReply });
         return { reply: finalReply, toolsUsed };
@@ -259,7 +264,8 @@ OPERATING RULES:
       .join("\n\n");
 
     const rawReply = finalText || `Done! Executed: ${toolsUsed.join(", ")}.`;
-    const reply = convertMarkdownTablesToMobileText(rawReply, channel);
+    const converted = convertMarkdownTablesToMobileText(rawReply, channel);
+    const reply = sanitizePlainText(converted, user.name);
     appendHistory(channel, user.userId, { role: "user", text });
     appendHistory(channel, user.userId, { role: "assistant", text: reply });
     return { reply, toolsUsed };
@@ -311,37 +317,55 @@ async function runFallbackTurn(
     toolToRun = { tool: find("ask_policy")!, args: { question: text } };
   }
 
+  let toolOutputData: any = null;
   let outputJson = "";
   if (toolToRun) {
     toolsUsed.push(toolToRun.tool.name);
     try {
-      const out = await toolToRun.tool.execute(user, toolToRun.args);
-      outputJson = JSON.stringify(out);
+      toolOutputData = await toolToRun.tool.execute(user, toolToRun.args);
+      outputJson = JSON.stringify(toolOutputData);
     } catch (e) {
       return {
-        reply: `Could not run ${toolToRun.tool.name}: ${e instanceof Error ? e.message : "Failed"}`,
+        reply: `Could not check ${toolToRun.tool.name.replace(/_/g, " ")}: ${e instanceof Error ? e.message : "Failed"}`,
         toolsUsed,
       };
     }
   }
 
+  // Deterministic plain-text formatting (100% human-readable, no raw JSON, no colons recited)
+  const deterministicText = toolToRun && toolOutputData
+    ? formatToolOutputToPlainText(toolToRun.tool.name, toolOutputData, user.name)
+    : "";
+
   try {
+    // Only query askMimo with clean plain text facts (never a huge 50KB JSON)
+    const summaryContext = deterministicText || (outputJson ? outputJson.slice(0, 400) : "");
     const simpleReply = await askMimo(
-      `You are Relief Assist (${formatRoleTitle(user.role)} assistant for ${user.name}). ${channel === "sms" ? "Reply concisely in plain SMS text." : "Reply concisely for WhatsApp."}`,
-      `User asked: "${text}"\n${outputJson ? `Tool ${toolToRun?.tool.name} output: ${outputJson}` : ""}`,
+      `You are Relief Assist for ${user.name} (${formatRoleTitle(user.role)}). Messaging channel: ${channel === "sms" ? "SMS" : "WhatsApp"}.
+CRITICAL PLAIN TEXT RULES:
+- Output simple plain conversational text only.
+- NEVER use markdown tables (never use | pipes).
+- NEVER dump raw JSON or curly brackets.
+- NEVER recite technical keys or colons.
+- Answer the user concisely:`,
+      `User asked: "${text}"\nFacts:\n${summaryContext}`,
     );
-    if (simpleReply) return { reply: simpleReply, toolsUsed };
+
+    if (simpleReply && simpleReply.trim()) {
+      const sanitized = sanitizePlainText(simpleReply, user.name);
+      return { reply: sanitized, toolsUsed };
+    }
   } catch {}
 
-  if (outputJson) {
+  if (deterministicText) {
     return {
-      reply: `${toolToRun?.tool.name} result: ${outputJson.slice(0, 500)}`,
+      reply: deterministicText,
       toolsUsed,
     };
   }
 
   return {
-    reply: `Hello ${user.name} (${formatRoleTitle(user.role)})! Send /help or /tools to see everything I can do for your account.`,
+    reply: `Hello ${user.name} (${formatRoleTitle(user.role)})! How can I assist you today? Send /help or /tools to see all available actions.`,
     toolsUsed,
   };
 }
