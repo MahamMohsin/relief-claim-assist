@@ -10,12 +10,12 @@ import type { AgentEvent } from "@/src/components/os/UIActionBus";
 
 export const runtime = "nodejs";
 const screenContextSchema = z.object({
-  activeApp: z.string().max(30).nullish(),
-  openApps: z.array(z.string().max(30)).max(12).optional(),
+  activeApp: z.string().max(60).nullish(),
+  openApps: z.array(z.string().max(40)).max(20).optional(),
   persona: z.object({
-    id: z.string().max(30),
-    role: z.string().max(30),
-    name: z.string().max(100),
+    id: z.string().max(80),
+    role: z.string().max(40),
+    name: z.string().max(120),
   }).optional(),
   claim: z.object({
     editing: z.boolean(),
@@ -113,7 +113,7 @@ const active = new Map<string, { id: string; citizen: string | null; abort: () =
 
 export async function POST(request: Request) {
   try {
-    const input = streamSchema.safeParse(await readJson(request));
+    const input = streamSchema.safeParse(await readJson(request, 64000));
     if (!input.success) throw new ApiError(400, "Provide a short assistant command.");
     const profile = await gateway<Profile>("profile");
     const citizenId = ["helper", "officer", "admin"].includes(profile.role)
