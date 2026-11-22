@@ -11,6 +11,75 @@ export interface VoiceSynthesisResult {
 }
 
 /**
+ * Automatically converts raw Markdown tables into clean, readable mobile cards for WhatsApp & SMS.
+ * Prevents garbled multi-column pipe (|---|---|) text from rendering on mobile screens.
+ */
+export function convertMarkdownTablesToMobileText(text: string, channel: "whatsapp" | "sms" = "whatsapp"): string {
+  if (!text || !text.includes("|")) return text;
+
+  // Regex matching a markdown table: header line, separator line (|---|---|), and row lines
+  const tableRegex = /((?:\|[^\n\r]+\|[\r\n]+)(?:\|[-:\s|]+\|[\r\n]+)(?:\|[^\n\r]+\|(?:[\r\n]+|$))+)/g;
+
+  return text.replace(tableRegex, (fullTable) => {
+    const lines = fullTable.trim().split(/\r?\n/).filter(l => l.trim().startsWith("|"));
+    if (lines.length < 3) return fullTable;
+
+    const rawHeaders = lines[0]
+      .split("|")
+      .map(s => s.trim().replace(/^[*_`]+|[*_`]+$/g, ""))
+      .filter(Boolean);
+
+    const cards: string[] = [];
+    for (let i = 2; i < lines.length; i++) {
+      const rowCells = lines[i].split("|").map(s => s.trim());
+      if (rowCells[0] === "") rowCells.shift();
+      if (rowCells[rowCells.length - 1] === "") rowCells.pop();
+
+      const item: Record<string, string> = {};
+      rawHeaders.forEach((h, idx) => {
+        item[h.toLowerCase()] = rowCells[idx] || "";
+      });
+
+      const num = item["#"] || item["no"] || item["num"] || `${i - 1}`;
+      const status = item["status"] || item["state"] || "";
+      const amount = item["amount"] || item["pkr"] || "";
+      const date = item["date"] || item["created"] || item["updated"] || "";
+      const notes = item["notes"] || item["description"] || item["reason"] || "";
+
+      const secondary: string[] = [];
+      for (const [k, v] of Object.entries(item)) {
+        if (!v || ["#", "no", "num", "status", "state", "amount", "pkr", "date", "created", "updated", "notes", "description"].includes(k)) {
+          continue;
+        }
+        const capKey = k.charAt(0).toUpperCase() + k.slice(1);
+        secondary.push(`${capKey}: ${v}`);
+      }
+
+      let card = `${num}. `;
+      if (status) card += `${status} `;
+      if (amount) card += `— *${amount.replace(/\*/g, "")}* `;
+      if (date) card += `(${date.replace(/\*/g, "")})`;
+      card = card.trim();
+
+      if (notes) {
+        card += `\n   • ${notes}`;
+      }
+      if (secondary.length > 0) {
+        card += `\n   • ${secondary.join(" · ")}`;
+      }
+
+      cards.push(card);
+    }
+
+    let result = "\n" + cards.join("\n\n") + "\n";
+    if (channel === "sms") {
+      result = result.replace(/\*/g, ""); // Strip bold asterisks for SMS
+    }
+    return result;
+  });
+}
+
+/**
  * Strips markdown markup, table borders, and URLs to ensure clean, natural speech synthesis via Cartesia.
  */
 export function cleanTextForVoice(raw: string): string {
@@ -178,6 +247,65 @@ export async function transcribeWhatsAppAudio(
 }
 
 /**
+ * Creates a natural, concise spoken voice summary (1-3 conversational sentences, ~150-320 chars)
+ * suitable for ultra-fast Cartesia voice note synthesis (< 1.5 seconds) with zero timeouts.
+ */
+export function generateVoiceSummary(rawText: string): string {
+  if (!rawText) return "";
+
+  // 1. If text has a summary section like "*Summary:*"
+  const summaryMatch = rawText.match(/\*?Summary:?\*?\s*([\s\S]*?)(?:\n\n[A-Z]|\n\nWould|$)/i);
+  const closingMatch = rawText.match(/(?:Would you like|Do you want|Let me know|آپ کو|کیا آپ)[\s\S]*?\?/i);
+
+  // 2. Extract intro lines before any table or listings
+  const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  let intro = "";
+  for (const l of lines) {
+    if (l.startsWith("|") || l.startsWith("1.") || l.startsWith("•") || /^\*?Summary/i.test(l)) break;
+    intro += " " + l.replace(/[*_~`]/g, "");
+  }
+  intro = intro.trim();
+
+  let summary = "";
+  if (summaryMatch) {
+    summary = summaryMatch[1]
+      .split(/\r?\n/)
+      .map(l => l.replace(/^[•*\-\s]+/, "").trim())
+      .filter(Boolean)
+      .slice(0, 3)
+      .join(", ")
+      .replace(/[*_~`]/g, "");
+  }
+
+  let closing = "";
+  if (closingMatch) {
+    closing = closingMatch[0].replace(/[*_~`]/g, "").trim();
+  }
+
+  let spoken = "";
+  if (intro) {
+    spoken += intro + ". ";
+  }
+  if (summary) {
+    spoken += "Summary: " + summary + ". ";
+  }
+  if (closing && (spoken + closing).length < 280) {
+    spoken += closing + " ";
+  }
+
+  spoken += "I have also sent you the complete details in chat!";
+
+  // If intro/summary matching wasn't applicable (e.g. short conversational message)
+  if (spoken.length < 60) {
+    const clean = cleanTextForVoice(rawText);
+    spoken = clean.slice(0, 260).trim();
+    if (!spoken.endsWith(".") && !spoken.endsWith("!")) spoken += ".";
+  }
+
+  return cleanTextForVoice(spoken);
+}
+
+/**
  * Synthesize voice audio reply using Cartesia Sonic-3.6 (outputs MP3 binary).
  */
 export async function synthesizeVoiceReply(
@@ -196,10 +324,11 @@ export async function synthesizeVoiceReply(
       ? process.env.CARTESIA_VOICE_UR || "a86bc28d-c3a1-405b-ad29-6a07417250f3"
       : process.env.CARTESIA_VOICE_EN || "55f006ff-520f-4413-8c01-b37d4555b194";
 
-  const spokenText = cleanTextForVoice(text);
+  const spokenText = generateVoiceSummary(text);
   if (!spokenText) return null;
 
   try {
+    const t0 = Date.now();
     const res = await fetch("https://api.cartesia.ai/tts/bytes", {
       method: "POST",
       headers: {
@@ -214,7 +343,7 @@ export async function synthesizeVoiceReply(
         voice: { mode: "id", id: voiceId },
         output_format: { container: "mp3", sample_rate: 44100, bit_rate: 128000 },
       }),
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(15000),
     });
 
     if (!res.ok) {
@@ -224,6 +353,7 @@ export async function synthesizeVoiceReply(
     }
 
     const arrayBuffer = await res.arrayBuffer();
+    console.log(`[wa-audio] Synthesized spoken voice in ${Date.now() - t0}ms (${arrayBuffer.byteLength} bytes)`);
     return {
       audioBuffer: Buffer.from(arrayBuffer),
       locale,

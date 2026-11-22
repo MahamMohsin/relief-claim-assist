@@ -14,6 +14,9 @@ import {
 } from "./session";
 import { getToolsForRole, type WhatsAppToolDefinition } from "./tools";
 import type { ScopedUserIdentity } from "./scoped-gateway";
+import { convertMarkdownTablesToMobileText } from "./audio";
+
+export { convertMarkdownTablesToMobileText };
 
 export type DirectChannel = "sms" | "whatsapp";
 
@@ -128,8 +131,21 @@ export async function runScopedAssistantTurn(
 
   const channelGuidance =
     channel === "sms"
-      ? "The user is texting via Direct SMS (Google Messages). Keep replies clear, accurate, and concise (ideally under 650 characters unless listing details). Use clean plain text without markdown asterisks."
-      : "The user is chatting on WhatsApp. Format nicely with concise paragraphs, *bold* for key figures/statuses, and bullet points (•).";
+      ? `The user is texting via Direct SMS (Google Messages).
+CRITICAL SMS FORMATTING RULES:
+- NEVER use markdown tables or pipe characters (|). They break on SMS screens.
+- Format lists cleanly as numbered cards:
+  1. Status — Amount (Date)
+     Details/Notes
+- Keep text concise, plain, and easy to read.`
+      : `The user is chatting on WhatsApp.
+CRITICAL WHATSAPP FORMATTING RULES:
+- NEVER output markdown tables (| col | col | or |---|---|). WhatsApp does NOT support markdown tables and displays them as ugly garbled raw pipes on phone screens.
+- Instead of tables, format listings as clean numbered or bulleted mobile cards:
+  1. *[Status Emoji]* *Amount or Title* — Date
+     • Note or detail
+- Use WhatsApp formatting: *bold* for key numbers, amounts, dates, and statuses. Use bullet points (•) for summaries.
+- Keep the tone friendly, helpful, and formatted like a natural WhatsApp mobile chat message.`;
 
   const systemPrompt = `You are the full-capability Relief Claim Assist AI Agent for Pakistan's emergency cash relief system.
 
@@ -171,9 +187,10 @@ OPERATING RULES:
         .filter(Boolean);
 
       if (toolUses.length === 0) {
-        const finalReply =
+        const rawReply =
           textParts.join("\n\n").trim() ||
           `Completed your request for ${user.name} (${roleTitle}).`;
+        const finalReply = convertMarkdownTablesToMobileText(rawReply, channel);
         appendHistory(channel, user.userId, { role: "user", text });
         appendHistory(channel, user.userId, { role: "assistant", text: finalReply });
         return { reply: finalReply, toolsUsed };
@@ -241,7 +258,8 @@ OPERATING RULES:
       .filter(Boolean)
       .join("\n\n");
 
-    const reply = finalText || `Done! Executed: ${toolsUsed.join(", ")}.`;
+    const rawReply = finalText || `Done! Executed: ${toolsUsed.join(", ")}.`;
+    const reply = convertMarkdownTablesToMobileText(rawReply, channel);
     appendHistory(channel, user.userId, { role: "user", text });
     appendHistory(channel, user.userId, { role: "assistant", text: reply });
     return { reply, toolsUsed };

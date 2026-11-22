@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cleanTextForVoice, detectLocale } from "../src/lib/whatsapp/audio.ts";
+import {
+  cleanTextForVoice,
+  convertMarkdownTablesToMobileText,
+  detectLocale,
+  generateVoiceSummary,
+} from "../src/lib/whatsapp/audio.ts";
 
 test("cleanTextForVoice strips markdown, tables, links, and code cleanly for Cartesia TTS", () => {
   const markdown = "Hello **Fatima**! Your claim `CLM-001` is [approved](https://relief.pk). | Amount | Status |\n|---|---|\n| 12,000 | Paid |";
@@ -13,6 +18,55 @@ test("cleanTextForVoice strips markdown, tables, links, and code cleanly for Car
   assert(cleaned.includes("Hello Fatima"));
   assert(cleaned.includes("approved"));
   assert(cleaned.includes("Amount"));
+});
+
+test("convertMarkdownTablesToMobileText formats markdown tables into clean mobile cards for WhatsApp & SMS", () => {
+  const tableText = `Here are your most recent relief claims, Fatima:
+
+| # | Status | Amount | Household | Income/Mo | Notes | Date |
+|---|--------|--------|-----------|-----------|-------|------|
+| 1 | ⚠️ *Needs Proof* | PKR 25,000 | 3 | PKR 14,500 | Demo claim | Nov 22, 2026 |
+| 2 | ✅ *Approved & Paid* | PKR 25,000 | 2 | PKR 10,000 | Emergency Relief Aid | Nov 22, 2026 |
+
+*Summary:*
+• *1 claim paid* — PKR 25,000 disbursed via Raast`;
+
+  const mobileText = convertMarkdownTablesToMobileText(tableText, "whatsapp");
+  assert(!mobileText.includes("|---|"));
+  assert(!mobileText.includes("| # |"));
+  assert(mobileText.includes("1. ⚠️ *Needs Proof* — *PKR 25,000*"));
+  assert(mobileText.includes("2. ✅ *Approved & Paid* — *PKR 25,000*"));
+  assert(mobileText.includes("Demo claim"));
+  assert(mobileText.includes("Emergency Relief Aid"));
+
+  // SMS strips bold asterisks
+  const smsText = convertMarkdownTablesToMobileText(tableText, "sms");
+  assert(!smsText.includes("*Needs Proof*"));
+  assert(smsText.includes("Needs Proof"));
+});
+
+test("generateVoiceSummary creates a concise conversational spoken voice summary (< 350 chars)", () => {
+  const longTableText = `Here are your most recent relief claims, Fatima:
+
+*Total claims on record:* *90* (showing the 10 most recent)
+
+| # | Status | Amount | Household | Income/Mo | Notes | Date |
+|---|--------|--------|-----------|-----------|-------|------|
+| 1 | ⚠️ *Needs Proof* | PKR 25,000 | 3 | PKR 14,500 | Demo claim for officer review | Nov 22, 2026 |
+| 2 | ✅ *Approved & Paid* | PKR 25,000 | 3 | PKR 14,500 | Raast ref: SIM-7070C09C | Nov 22, 2026 |
+
+*Summary:*
+• *1 claim paid* — PKR 25,000 disbursed via Raast
+• *1 claim approved* — payment pending
+
+Would you like me to help attach documents to any of the needs_proof claims?`;
+
+  const voiceSummary = generateVoiceSummary(longTableText);
+  assert(voiceSummary.length > 30);
+  assert(voiceSummary.length < 350);
+  assert(voiceSummary.includes("Fatima"));
+  assert(!voiceSummary.includes("|---|"));
+  assert(!voiceSummary.includes("**"));
 });
 
 test("detectLocale identifies English vs Urdu text accurately", () => {

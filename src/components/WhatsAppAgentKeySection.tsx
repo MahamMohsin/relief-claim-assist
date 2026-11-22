@@ -14,11 +14,14 @@ import {
   LoaderCircle,
   MessageSquare,
   Mic,
+  MicOff,
   Power,
   Send,
   Sparkles,
+  Square,
   Volume2,
 } from "lucide-react";
+import { transcribe } from "@/src/lib/client";
 import { Button } from "@astryxdesign/core/Button";
 import { Card } from "@astryxdesign/core/Card";
 import { Badge } from "@astryxdesign/core/Badge";
@@ -177,6 +180,63 @@ export function WhatsAppAgentKeySection({
     }
   }
 
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  async function handleToggleRecording() {
+    if (isRecording) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      }
+      setIsRecording(false);
+      return;
+    }
+
+    try {
+      if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+        setError("Microphone access is not supported in this browser.");
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = e => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        if (blob.size < 50) return;
+        setTestBusy(true);
+        try {
+          const transcript = await transcribe(blob, "en");
+          if (transcript.trim()) {
+            await handleSendTestMessage(transcript.trim(), true);
+          } else {
+            setError("No speech detected in audio clip. Please try speaking closer to the microphone.");
+          }
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Voice transcription failed.");
+        } finally {
+          setTestBusy(false);
+        }
+      };
+
+      recorder.start();
+      setIsRecording(true);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Microphone permission denied.");
+      setIsRecording(false);
+    }
+  }
+
   async function handleSendTestMessage(overrideText?: string, isVoice = false) {
     const text = (overrideText ?? testText).trim();
     if (!text || testBusy) return;
@@ -208,6 +268,13 @@ export function WhatsAppAgentKeySection({
           audioUrl,
         },
       ]);
+
+      if (audioUrl) {
+        try {
+          const snd = new Audio(audioUrl);
+          void snd.play().catch(() => {});
+        } catch {}
+      }
     } catch {
       setTestReplies(prev => [
         ...prev,
@@ -591,10 +658,32 @@ export function WhatsAppAgentKeySection({
               </button>
               <button
                 type="button"
+                disabled={testBusy}
+                onClick={() => void handleToggleRecording()}
+                style={{
+                  background: isRecording ? "#ef4444" : "#0284c7",
+                  color: "#fff",
+                  border: "none",
+                  padding: "0.35rem 0.65rem",
+                  borderRadius: "6px",
+                  fontSize: "0.78rem",
+                  fontWeight: 600,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  cursor: testBusy ? "not-allowed" : "pointer",
+                }}
+                title={isRecording ? "Stop recording and send voice note" : "Record your voice message via microphone"}
+              >
+                {isRecording ? <Square size={12} className="animate-pulse" /> : <Mic size={13} />}
+                <span>{isRecording ? "Stop & Send" : "Record Mic"}</span>
+              </button>
+              <button
+                type="button"
                 disabled={testBusy || !testText.trim()}
                 onClick={() => void handleSendTestMessage(undefined, true)}
                 style={{
-                  background: "#0284c7",
+                  background: "#0891b2",
                   color: "#fff",
                   border: "none",
                   padding: "0.35rem 0.65rem",
@@ -606,10 +695,10 @@ export function WhatsAppAgentKeySection({
                   gap: "4px",
                   cursor: testBusy || !testText.trim() ? "not-allowed" : "pointer",
                 }}
-                title="Simulate Voice Note (generates Cartesia audio speech reply)"
+                title="Type text and receive a voice message back"
               >
-                <Mic size={13} />
-                <span>Voice Test</span>
+                <Volume2 size={13} />
+                <span>Voice Reply</span>
               </button>
             </div>
           </div>
