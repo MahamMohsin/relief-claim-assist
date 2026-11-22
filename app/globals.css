@@ -380,6 +380,8 @@ th { background: var(--faint); color: var(--forest); }
   padding: 0.12rem 0.35rem;
   border-radius: 4px;
   cursor: pointer;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65), 0 0 1px rgba(0, 0, 0, 0.4);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
   transition: background 0.12s;
 }
 
@@ -404,7 +406,7 @@ th { background: var(--faint); color: var(--forest); }
    mini app icons in their own rail on the right, both starting from the top. */
 .dashboard-canvas {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 240px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
   gap: 1.8rem;
 }
@@ -1637,14 +1639,21 @@ th { background: var(--faint); color: var(--forest); }
   color: rgba(255, 255, 255, 0.8);
   padding: 0.4rem 0;
 }
-/* Apple iPad / Desktop Icon Grid */
+/* Apple iPad / Desktop Icon Grid: columns grow towards the left */
 .ios-desktop-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 96px));
-  gap: 1.75rem 2rem;
-  padding: 1.8rem 0.5rem;
-  justify-content: start;
-  align-items: start;
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 2rem;
+  padding: 0.5rem 0.5rem 1.8rem;
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+
+.ios-desktop-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+  align-items: center;
 }
 
 .ios-desktop-app {
@@ -6132,16 +6141,16 @@ body:has(.persona-dock-workspace-blurred) {
 .persona-macos-dock-bar {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
-  padding: 0.75rem 1.25rem;
-  border-radius: 26px;
+  gap: 0.5rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 20px;
   background: rgba(255, 255, 255, 0.16);
   backdrop-filter: blur(36px) saturate(210%);
   -webkit-backdrop-filter: blur(36px) saturate(210%);
   border: 1px solid rgba(255, 255, 255, 0.32);
   box-shadow:
-    0 28px 70px rgba(0, 0, 0, 0.48),
-    0 8px 24px rgba(0, 0, 0, 0.3),
+    0 24px 60px rgba(0, 0, 0, 0.45),
+    0 8px 20px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.45),
     inset 0 -1px 0 rgba(255, 255, 255, 0.1);
   overflow-x: auto;
@@ -6152,9 +6161,9 @@ body:has(.persona-dock-workspace-blurred) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.2rem;
-  padding: 0.45rem 0.5rem;
-  border-radius: 16px;
+  gap: 0.15rem;
+  padding: 0.25rem 0.35rem;
+  border-radius: 14px;
   background: transparent;
   border: none;
   cursor: pointer;
@@ -6162,11 +6171,11 @@ body:has(.persona-dock-workspace-blurred) {
   transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
   flex-shrink: 0;
-  width: 88px;
+  width: 76px;
 }
 
 .persona-macos-dock-item:hover:not(:disabled) {
-  transform: translateY(-8px) scale(1.1);
+  transform: translateY(-6px) scale(1.08);
   background: transparent;
   box-shadow: none;
 }
@@ -6182,11 +6191,11 @@ body:has(.persona-dock-workspace-blurred) {
 
 .persona-macos-dock-avatar-frame {
   position: relative;
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
   border: none;
-  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.32);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   background: rgba(0, 0, 0, 0.2);
   overflow: visible;
   display: flex;
@@ -6196,24 +6205,24 @@ body:has(.persona-dock-workspace-blurred) {
 }
 
 .persona-macos-dock-item:hover .persona-macos-dock-avatar-frame {
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.38);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.36);
 }
 
 .persona-macos-dock-img {
   width: 100%;
   height: 100%;
-  border-radius: 14px;
+  border-radius: 11px;
   object-fit: cover;
   display: block;
 }
 
 .persona-macos-dock-indicator {
   position: absolute;
-  bottom: -5px;
+  bottom: -4px;
   left: 50%;
   transform: translateX(-50%);
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: #ffffff;
   box-shadow: 0 0 6px rgba(255, 255, 255, 0.95), 0 1px 3px rgba(0, 0, 0, 0.5);
@@ -6222,7 +6231,7 @@ body:has(.persona-dock-workspace-blurred) {
 .persona-macos-dock-spinner {
   position: absolute;
   inset: 0;
-  border-radius: 14px;
+  border-radius: 11px;
   background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: center;
@@ -6231,55 +6240,56 @@ body:has(.persona-dock-workspace-blurred) {
 }
 
 .persona-macos-dock-name {
-  font-size: 0.80rem;
-  font-weight: 750;
+  font-size: 0.74rem;
+  font-weight: 400;
   color: #ffffff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
   text-align: center;
   white-space: nowrap;
-  max-width: 86px;
+  max-width: 76px;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-transform: capitalize;
   letter-spacing: -0.01em;
-  line-height: 1.18;
-  margin-top: 0.15rem;
+  line-height: 1.15;
+  margin-top: 0.1rem;
 }
 
 .persona-macos-dock-role {
-  font-size: 0.64rem;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.8);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: 0.62rem;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.82);
+  text-transform: capitalize;
+  letter-spacing: 0.01em;
   text-align: center;
   white-space: nowrap;
-  max-width: 86px;
+  max-width: 76px;
   overflow: hidden;
   text-overflow: ellipsis;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-  line-height: 1.12;
+  line-height: 1.1;
   margin-top: 0;
 }
 
 .persona-macos-dock-separator {
   width: 1px;
-  height: 52px;
+  height: 38px;
   background: rgba(255, 255, 255, 0.28);
-  margin: 0 0.35rem;
+  margin: 0 0.25rem;
   flex-shrink: 0;
 }
 
 .persona-macos-dock-avatar-frame.logout-frame {
   background: #dc2626;
-  border: 1.5px solid #ef4444;
+  border: 1px solid #ef4444;
   color: #ffffff;
-  box-shadow: 0 5px 16px rgba(220, 38, 38, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  box-shadow: none;
 }
 
 .persona-macos-dock-item.logout:hover .persona-macos-dock-avatar-frame.logout-frame {
   background: #b91c1c;
   border-color: #ef4444;
-  box-shadow: 0 8px 22px rgba(220, 38, 38, 0.55);
+  box-shadow: none;
 }
 
 @media (max-width: 720px) {

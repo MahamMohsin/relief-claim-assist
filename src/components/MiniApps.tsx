@@ -68,7 +68,7 @@ function Notice({ text, warning = false }: { text: string; warning?: boolean }) 
   return <div className={"notice" + (warning ? " warning" : "")} role={warning ? "alert" : "status"}>{warning ? <AlertCircle size={18} /> : <Check size={18} />}{text}</div>;
 }
 function StateTag({ value }: { value: string }) {
-  const color = ["approved", "paid", "granted", "genuine", "readable"].includes(value) ? "green"
+  const color = ["approved", "paid", "granted"].includes(value) ? "green"
     : ["rejected", "scam", "suspect", "failed"].includes(value) ? "red"
     : ["needs_proof", "revoked", "unreadable", "pending", "awaiting_funds"].includes(value) ? "amber" : "neutral";
   return <span className={"pill " + color}>{title(value)}</span>;
@@ -302,7 +302,6 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
       if (action === "evidence") {
         const evidence = await api<{ verified_status: string }>(action, { ...body, key });
         setAttached(title(evidence.verified_status));
-        setMessage("Evidence attached · " + title(evidence.verified_status));
       } else {
         const saved = await api<Claim>(action, { ...body, key });
         setClaimId(saved.id);
@@ -342,15 +341,17 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
     {(error || fault) && <Banner status="error" title="Something went wrong" description={error || fault} />}
     {message && <Banner status="success" title={message} />}
     {editing ? <Card padding={6}>
-      <HStack justify="between" hAlign="start" gap={4} wrap="wrap">
+      <VStack gap={2}>
+        <div style={{ display: "flex", justifyContent: "flex-start", width: "100%" }}>
+          <span data-cua="claim-back-btn" style={{ display: "inline-flex" }}>
+            <Button variant="ghost" size="sm" icon={<ArrowLeft size={16} />} label="Back" onClick={() => setEditing(false)} />
+          </span>
+        </div>
         <VStack gap={0.5}>
           <h2>{draft?.status === "needs_proof" ? "Replace evidence" : "Prepare a claim"}</h2>
           <p>Use synthetic details and pretend documents only.</p>
         </VStack>
-        <span data-cua="claim-back-btn" style={{ display: "inline-flex" }}>
-          <Button variant="secondary" label="Back to claims" onClick={() => setEditing(false)} />
-        </span>
-      </HStack>
+      </VStack>
       <HStack gap={1} wrap="wrap" paddingBlockStart={3}>
         {progressSteps.map((label, index) => (
           <Badge key={label} label={index + 1 + ". " + label} variant={step === index ? "info" : "neutral"} />
@@ -372,7 +373,7 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
             </div>
           </HStack>
           <div data-cua="claim-notes-input" style={{ width: "100%" }}>
-            <TextArea label="Additional details" value={details.notes} onChange={value => setDetails({ ...details, notes: value })} placeholder="Optional information for the officer" isOptional />
+            <TextArea label="Additional details" value={details.notes} onChange={value => setDetails({ ...details, notes: value })} placeholder="Optional information for the reviewer" isOptional />
           </div>
           <HStack gap={2} wrap="wrap">
             <span data-cua="claim-continue-evidence" style={{ display: "inline-flex" }}>
@@ -413,7 +414,7 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
           <Card variant="muted" padding={3}><VStack gap={0.5}><small>Household size</small><strong>{details.household_size} people</strong></VStack></Card>
           <Card variant="muted" padding={3}><VStack gap={0.5}><small>Evidence</small><strong>{attached || "Awaiting proof"}</strong></VStack></Card>
         </HStack>
-        <p className="muted">An officer reviews every claim before any simulated payment can be issued.</p>
+        <p className="muted">A reviewer reviews every claim before any simulated payment can be issued.</p>
         <HStack gap={2}>
           <span data-cua="claim-submit-btn" style={{ display: "inline-flex" }}>
             <Button variant="primary" label={busy ? "Submitting…" : ctx.offline ? "Queue claim" : "Submit claim"} isDisabled={busy} onClick={() => void run("submit")} />
@@ -422,34 +423,102 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
         </HStack>
       </VStack>}
     </Card> : <Card padding={6}>
-      <HStack justify="between" hAlign="start" gap={4} wrap="wrap">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", width: "100%", flexWrap: "wrap", gap: "1rem" }}>
         <VStack gap={0.5}>
           <h2>Your claims</h2>
-          <p>Follow applications, officer requests, and payment receipts.</p>
+          <p>Follow applications, reviewer requests, and payment receipts.</p>
         </VStack>
-        <span data-cua="claim-new-btn" style={{ display: "inline-flex" }}>
+        <div data-cua="claim-new-btn" style={{ marginLeft: "auto", display: "inline-flex" }}>
           <Button variant="primary" label="New claim" icon={<Plus size={16} />} onClick={() => start()} />
-        </span>
-      </HStack>
+        </div>
+      </div>
       {loading && !claims ? <Spinner /> : !claims?.length ? <p className="empty">{ctx.offline ? "Saved drafts are available offline. Reconnect to see submitted claims." : "This family has no claims yet."}</p> :
         <VStack gap={2} paddingBlockStart={3}>
           {claims.map(item => {
             const awaitingFunds = item.funding_status === "awaiting_funds";
             const displayStatus = awaitingFunds ? "awaiting_funds" : item.status;
-            return <Card key={item.id} variant="muted" padding={3}>
+            const income = item.payload_json?.monthly_income;
+            const household = item.payload_json?.household_size;
+            const notes = item.payload_json?.notes?.trim();
+            const docCount = item.documents?.length || 0;
+            const claimTitle = notes && notes.length > 0
+              ? (notes.length > 50 ? notes.slice(0, 48) + "…" : notes)
+              : item.amount_pkr
+                ? `Emergency Cash Aid · ${currency(item.amount_pkr)}`
+                : "Household Relief Assistance";
+
+            return <Card key={item.id} variant="muted" padding={4}>
             <VStack gap={2}>
-              <HStack gap={2} justify="between" wrap="wrap">
-                <HStack gap={2} wrap="wrap"><strong>Claim {short(item.id)}</strong><Badge label={title(displayStatus)} variant={badge(displayStatus)} /></HStack>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.75rem", width: "100%", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+                  <strong style={{ fontSize: "1.02rem", color: "#111827" }}>{claimTitle}</strong>
+                  <Badge label={title(displayStatus)} variant={badge(displayStatus)} />
+                </div>
                 <Button variant="ghost" size="sm" label={opened === item.id ? "Hide details" : "View details"} onClick={() => setOpened(opened === item.id ? undefined : item.id)} />
-              </HStack>
-              <small>{new Date(item.updated_at).toLocaleDateString()} · {item.amount_pkr ? currency(item.amount_pkr) : "Draft amount pending"}</small>
-              {opened === item.id && <VStack gap={2}>
-                <ol className="timeline"><li>Draft created</li>{item.status !== "draft" && <li>Submitted to the relief scheme</li>}<li>{title(item.status)}{item.rule_version_used ? " · Rule v" + item.rule_version_used : ""}</li>{awaitingFunds ? <li>Awaiting funds</li> : item.payment && <li>Payment {item.payment.status}</li>}</ol>
+              </div>
+
+              {/* Show actual contents of the claim */}
+              <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", flexWrap: "wrap", fontSize: "0.86rem", color: "#4b5563" }}>
+                <span style={{ fontWeight: 600, color: item.amount_pkr ? "#0f766e" : "#6b7280" }}>
+                  {item.amount_pkr ? currency(item.amount_pkr) : "Draft amount pending"}
+                </span>
+                <span>•</span>
+                {household !== undefined && (
+                  <>
+                    <span>{household} {household === 1 ? "person" : "people"}</span>
+                    <span>•</span>
+                  </>
+                )}
+                {income !== undefined && (
+                  <>
+                    <span>Income: {currency(income)}/mo</span>
+                    <span>•</span>
+                  </>
+                )}
+                <span>{docCount} {docCount === 1 ? "document" : "documents"}</span>
+                <span>•</span>
+                <small style={{ color: "#9ca3af" }}>{new Date(item.updated_at).toLocaleDateString()}</small>
+              </div>
+
+              {/* Subtle reference code */}
+              <div style={{ fontSize: "0.72rem", color: "#9ca3af" }}>
+                <span>Ref: #{item.id.slice(0, 8)}…{item.id.slice(-4)}</span>
+              </div>
+
+              {opened === item.id && <VStack gap={2} paddingBlockStart={2}>
+                <div style={{ height: "1px", background: "rgba(0, 0, 0, 0.08)", width: "100%", margin: "0.25rem 0" }} />
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "0.5rem" }}>
+                  <Card variant="default" padding={2}>
+                    <small style={{ color: "#6b7280" }}>Monthly Income</small>
+                    <strong style={{ display: "block", fontSize: "0.95rem" }}>{income !== undefined ? currency(income) : "Not recorded"}</strong>
+                  </Card>
+                  <Card variant="default" padding={2}>
+                    <small style={{ color: "#6b7280" }}>Household Size</small>
+                    <strong style={{ display: "block", fontSize: "0.95rem" }}>{household || 1} people</strong>
+                  </Card>
+                  <Card variant="default" padding={2}>
+                    <small style={{ color: "#6b7280" }}>Evidence Attached</small>
+                    <strong style={{ display: "block", fontSize: "0.95rem" }}>{docCount} {docCount === 1 ? "file" : "files"}</strong>
+                  </Card>
+                </div>
+
+                <ol className="timeline">
+                  <li>Draft created</li>
+                  {item.status !== "draft" && <li>Submitted to the relief scheme</li>}
+                  <li>{title(item.status)}{item.rule_version_used ? " · Rule v" + item.rule_version_used : ""}</li>
+                  {awaitingFunds ? <li>Awaiting funds</li> : item.payment && <li>Payment {item.payment.status}</li>}
+                </ol>
+
                 {awaitingFunds && <p lang={ctx.voiceLang} dir={ctx.voiceLang === "ur" ? "rtl" : "ltr"}>
                   {ctx.voiceLang === "ur" ? "آپ کی درخواست منظور ہو گئی ہے۔ ادائیگی کے لیے فنڈز کا انتظار ہے۔"
-                    : "An officer approved this claim. Payment is waiting for the scheme to have enough funds."}
+                    : "A reviewer approved this claim. Payment is waiting for the scheme to have enough funds."}
                 </p>}
-                {item.citizen_reason_en && <p>{item.citizen_reason_en}</p>}
+                {item.citizen_reason_en && (
+                  <div style={{ background: "rgba(0, 0, 0, 0.03)", padding: "0.5rem 0.75rem", borderRadius: "8px" }}>
+                    <small style={{ fontWeight: 600, color: "#4b5563" }}>Reviewer Decision Note:</small>
+                    <p style={{ margin: "0.2rem 0 0 0" }}>{item.citizen_reason_en}</p>
+                  </div>
+                )}
                 {item.citizen_reason_ur && <p lang="ur" dir="rtl">{item.citizen_reason_ur}</p>}
                 <p className="muted breakable">Claim ID: {item.id}</p>
                 {item.payment && !awaitingFunds && <p className="receipt"><CircleDollarSign size={21} /> {currency(item.payment.amount_pkr)} · <strong>{item.payment.raast_ref}</strong> · {title(item.payment.status)}</p>}

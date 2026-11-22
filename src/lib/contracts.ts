@@ -4,7 +4,7 @@ export const personas = {
   fatima: { name: "Fatima Bibi", role: "citizen", description: "Apply for aid and manage consent" },
   zainab: { name: "Zainab Health Worker", role: "helper", description: "Help families file and track claims" },
   tariq: { name: "Tariq Karyana Store", role: "shopkeeper", description: "Check alerts and report missing payments" },
-  bilal: { name: "Officer Bilal", role: "officer", description: "Review claims and issue mock payments" },
+  bilal: { name: "Reviewer Bilal", role: "officer", description: "Review claims and issue mock payments" },
   sana: { name: "Admin Sana", role: "admin", description: "Publish scheme rules and compare impact" },
   kamran: { name: "Auditor Kamran", role: "auditor", description: "Inspect decisions and safety metrics" },
 } as const;

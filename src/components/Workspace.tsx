@@ -937,36 +937,43 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                 )}
               </div>
 
-              {/* Apple iPad / Desktop App Grid (Icons with names below) */}
+              {/* Apple iPad / Desktop App Grid (Icons with names below, max 6 per column, batches move left) */}
               <div className="ios-desktop-grid">
-                {available.map(id => {
-                  const item = apps[id];
-                  const title = appTitle(id, profile.role);
-                  const Icon = item.icon;
-                  const isRunning = openApps.includes(id);
-                  const isMinimized = isRunning && minimizedApps.includes(id);
+                {Array.from({ length: Math.ceil(available.length / 6) }, (_, colIndex) => {
+                  const colApps = available.slice(colIndex * 6, colIndex * 6 + 6);
                   return (
-                    <motion.button
-                      className={"ios-desktop-app" + (isRunning ? " running" : "") + (isMinimized ? " minimized" : "")}
-                      key={id}
-                      data-app-tile={id}
-                      data-cua={"app-icon-" + id}
-                      aria-label={isMinimized ? title + " (minimized, click to restore)" : undefined}
-                      onClick={() => openAppWindow(id)}
-                      whileHover={motionDisabled ? undefined : { y: -7, scale: 1.06 }}
-                      whileTap={motionDisabled ? undefined : { scale: 0.91 }}
-                      transition={{ type: "spring", stiffness: 360, damping: 22, mass: 0.7 }}
-                    >
-                      <div className={"ios-desktop-icon " + item.color}>
-                        {"image" in item && item.image ? (
-                          <img src={item.image} alt={title} className="ios-desktop-icon-img" />
-                        ) : (
-                          <Icon size={34} strokeWidth={2.1} />
-                        )}
-                      </div>
-                      <span className="ios-desktop-label">{title}</span>
-                      {isRunning && <span className="ios-app-running-dot" />}
-                    </motion.button>
+                    <div className="ios-desktop-column" key={colIndex}>
+                      {colApps.map(id => {
+                        const item = apps[id];
+                        const title = appTitle(id, profile.role);
+                        const Icon = item.icon;
+                        const isRunning = openApps.includes(id);
+                        const isMinimized = isRunning && minimizedApps.includes(id);
+                        return (
+                          <motion.button
+                            className={"ios-desktop-app" + (isRunning ? " running" : "") + (isMinimized ? " minimized" : "")}
+                            key={id}
+                            data-app-tile={id}
+                            data-cua={"app-icon-" + id}
+                            aria-label={isMinimized ? title + " (minimized, click to restore)" : undefined}
+                            onClick={() => openAppWindow(id)}
+                            whileHover={motionDisabled ? undefined : { y: -7, scale: 1.06 }}
+                            whileTap={motionDisabled ? undefined : { scale: 0.91 }}
+                            transition={{ type: "spring", stiffness: 360, damping: 22, mass: 0.7 }}
+                          >
+                            <div className={"ios-desktop-icon " + item.color}>
+                              {"image" in item && item.image ? (
+                                <img src={item.image} alt={title} className="ios-desktop-icon-img" />
+                              ) : (
+                                <Icon size={34} strokeWidth={2.1} />
+                              )}
+                            </div>
+                            <span className="ios-desktop-label">{title}</span>
+                            {isRunning && <span className="ios-app-running-dot" />}
+                          </motion.button>
+                        );
+                      })}
+                    </div>
                   );
                 })}
               </div>
@@ -1010,18 +1017,14 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                             onClick={e => { e.stopPropagation(); closeAppWindow(appId); }}
                             title="Close window"
                             aria-label="Close window"
-                          >
-                            <X size={8} strokeWidth={3} aria-hidden="true" />
-                          </button>
+                          />
                           <button
                             type="button"
                             className="traffic-light minimize"
                             onClick={e => { e.stopPropagation(); minimizeAppWindow(appId); }}
                             title="Minimize window"
                             aria-label="Minimize window"
-                          >
-                            <Minus size={8} strokeWidth={3} aria-hidden="true" />
-                          </button>
+                          />
                           <button
                             type="button"
                             className="traffic-light maximize"
@@ -1029,9 +1032,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                             title={isExpanded ? "Restore window" : "Expand window"}
                             aria-label={isExpanded ? "Restore window" : "Expand window"}
                             aria-pressed={isExpanded}
-                          >
-                            {isExpanded ? <Minimize2 size={8} strokeWidth={3} aria-hidden="true" /> : <Maximize2 size={8} strokeWidth={3} aria-hidden="true" />}
-                          </button>
+                          />
                         </div>
 
                         <div className="window-title-group">
@@ -1130,6 +1131,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
               {roleEntries.map(([id, details]) => {
                 const isCurrent = profile.id === id || profile.role === details.role.toLowerCase();
                 const isBusy = busy === id;
+                const roleLabel = details.role === "officer" ? "Reviewer" : details.role.charAt(0).toUpperCase() + details.role.slice(1).toLowerCase();
                 return (
                   <button
                     key={id}
@@ -1137,7 +1139,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                     className={`persona-macos-dock-item ${isCurrent ? "is-current" : ""}`}
                     onClick={() => signIn(id)}
                     disabled={Boolean(busy) || offline}
-                    title={`${details.name} · ${details.role}`}
+                    title={`${details.name} · ${roleLabel}`}
                   >
                     <div className="persona-macos-dock-avatar-frame">
                       <img src={`/avatars/${id}.jpg`} alt={details.name} className="persona-macos-dock-img" />
@@ -1149,7 +1151,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                       {isCurrent && <span className="persona-macos-dock-indicator" aria-label="Current persona" />}
                     </div>
                     <span className="persona-macos-dock-name">{details.name}</span>
-                    <span className="persona-macos-dock-role">{details.role}</span>
+                    <span className="persona-macos-dock-role">{roleLabel}</span>
                   </button>
                 );
               })}
