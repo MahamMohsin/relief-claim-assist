@@ -61,6 +61,23 @@ function sendGatewayCommand(cmd: Record<string, unknown>) {
   } catch {}
 }
 
+function loadPersistedMessages(): WhatsAppChatMessage[] {
+  try {
+    const msgPath = path.resolve(process.cwd(), ".whatsapp-messages.json");
+    if (fs.existsSync(msgPath)) {
+      return JSON.parse(fs.readFileSync(msgPath, "utf-8"));
+    }
+  } catch {}
+  return [];
+}
+
+function savePersistedMessages(msgs: WhatsAppChatMessage[]) {
+  try {
+    const msgPath = path.resolve(process.cwd(), ".whatsapp-messages.json");
+    fs.writeFileSync(msgPath, JSON.stringify(msgs.slice(0, 200), null, 2), "utf-8");
+  } catch {}
+}
+
 function getStore(): WhatsAppServerStore {
   if (!globalThis.__rca_whatsapp_server_store) {
     globalThis.__rca_whatsapp_server_store = {
@@ -71,7 +88,7 @@ function getStore(): WhatsAppServerStore {
       qrDataUrl: "",
       connectedAt: null,
       lastActiveAt: new Date().toISOString(),
-      messages: [],
+      messages: loadPersistedMessages(),
     };
   }
   return globalThis.__rca_whatsapp_server_store;
@@ -140,6 +157,7 @@ export function recordWhatsAppMessage(message: Omit<WhatsAppChatMessage, "id" | 
   store.messages.unshift(entry);
   if (store.messages.length > 100) store.messages.length = 100;
   store.lastActiveAt = entry.timestamp;
+  savePersistedMessages(store.messages);
   return entry;
 }
 

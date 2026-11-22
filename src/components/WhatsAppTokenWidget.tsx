@@ -19,6 +19,10 @@ export function WhatsAppTokenWidget({
   variant?: "full" | "compact";
   onOpenApp?: () => void;
 }) {
+  if (personaId === "kamran") {
+    return null;
+  }
+
   const [data, setData] = useState<TokenData | null>(null);
   const [loading, setLoading] = useState(true);
   const [revealed, setRevealed] = useState(false);

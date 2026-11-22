@@ -14,3 +14,4 @@ supabase/.temp/
 .whatsapp-auth/
 .whatsapp-state.json
 .whatsapp-command.json
+.whatsapp-messages.json

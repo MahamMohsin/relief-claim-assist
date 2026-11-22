@@ -1,7 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Copy, Eye, EyeOff, LoaderCircle, MessageSquare, Phone, RefreshCw, Send, ShieldCheck, Smartphone, Sparkles, ExternalLink } from "lucide-react";
+import {
+  Check,
+  CheckCircle2,
+  Copy,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Inbox,
+  LoaderCircle,
+  MessageSquare,
+  Phone,
+  Power,
+  QrCode,
+  RefreshCw,
+  Search,
+  Send,
+  ShieldCheck,
+  Smartphone,
+  Sparkles,
+} from "lucide-react";
 import { Button } from "@astryxdesign/core/Button";
 import { Card } from "@astryxdesign/core/Card";
 import { Badge } from "@astryxdesign/core/Badge";
@@ -25,7 +44,601 @@ type ChatMessage = {
   toolsUsed?: string[];
 };
 
+type LiveWhatsAppMessage = {
+  id: string;
+  direction: "inbound" | "outbound";
+  from: string;
+  to: string;
+  text: string;
+  timestamp: string;
+  toolsUsed?: string[];
+};
+
+type AdminGatewayState = {
+  status: "connected" | "qr_ready" | "disconnected";
+  adminPhone: string | null;
+  botName: string;
+  qrDataUrl: string | null;
+  activeUsersCount: number;
+  connectedAt?: string | null;
+};
+
 export function WhatsAppLinkView({ ctx }: { ctx: ViewContext }) {
+  const isAdmin = ctx.profile.role === "admin";
+
+  if (isAdmin) {
+    return <AdminWhatsAppManagementView ctx={ctx} />;
+  }
+
+  return <CitizenWhatsAppLinkView ctx={ctx} />;
+}
+
+/**
+ * Dedicated Admin View: Device setup, QR pairing, show which number is added, remove device, and messages feed ONLY.
+ * No login tokens!
+ */
+function AdminWhatsAppManagementView({ ctx }: { ctx: ViewContext }) {
+  const [adminState, setAdminState] = useState<AdminGatewayState | null>(null);
+  const [messages, setMessages] = useState<LiveWhatsAppMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshingMsgs, setRefreshingMsgs] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [showQr, setShowQr] = useState(false);
+  const [phoneInput, setPhoneInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+
+  // Test Simulator inside Admin View
+  const [simPhone, setSimPhone] = useState("+92 301 5551234");
+  const [simText, setSimText] = useState("");
+  const [simBusy, setSimBusy] = useState(false);
+
+  // Fetch admin gateway state and live messages
+  async function loadData() {
+    try {
+      const [adminRes, msgRes] = await Promise.all([
+        fetch("/api/whatsapp/admin"),
+        fetch("/api/whatsapp/webhook?limit=50"),
+      ]);
+
+      if (adminRes.ok) {
+        const aJson = (await adminRes.json()) as AdminGatewayState;
+        setAdminState(aJson);
+        if (aJson.adminPhone && !phoneInput) {
+          setPhoneInput(aJson.adminPhone);
+        }
+      }
+
+      if (msgRes.ok) {
+        const mJson = (await msgRes.json()) as { messages: LiveWhatsAppMessage[] };
+        setMessages(mJson.messages || []);
+      }
+    } catch {
+      // Ignored
+    } finally {
+      setLoading(false);
+      setRefreshingMsgs(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadData();
+    // Auto-poll messages every 3.5 seconds
+    const interval = setInterval(() => {
+      void loadData();
+    }, 3500);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function handleLinkPhone() {
+    const clean = phoneInput.trim();
+    if (!clean) {
+      setError("Please enter a valid mobile number to pair.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await fetch("/api/whatsapp/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "connect", phone: clean }),
+      });
+      if (!res.ok) throw new Error("Could not pair phone number");
+      const updated = (await res.json()) as AdminGatewayState;
+      setAdminState(updated);
+      setNotice(`Device successfully paired! Active bot line is now ${updated.adminPhone}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to link phone");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRemoveDevice() {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await fetch("/api/whatsapp/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "disconnect" }),
+      });
+      if (!res.ok) throw new Error("Could not remove device");
+      const updated = (await res.json()) as AdminGatewayState;
+      setAdminState(updated);
+      setPhoneInput("");
+      setNotice("Device removed. WhatsApp bot gateway unlinked and reset to pairing mode.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove device");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRefreshQr() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/whatsapp/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "refresh_qr" }),
+      });
+      if (res.ok) {
+        const updated = (await res.json()) as AdminGatewayState;
+        setAdminState(updated);
+        setShowQr(true);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSendSimMessage(text?: string) {
+    const msg = (text ?? simText).trim();
+    if (!msg || simBusy) return;
+    setSimBusy(true);
+    setSimText("");
+    try {
+      await fetch("/api/whatsapp/webhook", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from: simPhone,
+          text: msg,
+        }),
+      });
+      await loadData();
+    } finally {
+      setSimBusy(false);
+    }
+  }
+
+  const isConnected = Boolean(adminState?.status === "connected" && adminState?.adminPhone);
+
+  const filteredMessages = messages.filter(m => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      m.from.toLowerCase().includes(q) ||
+      m.to.toLowerCase().includes(q) ||
+      m.text.toLowerCase().includes(q)
+    );
+  });
+
+  return (
+    <div className="view-stack" style={{ padding: "0.5rem" }}>
+      {notice && <Banner status="success" title={notice} />}
+      {error && <Banner status="error" title={error} />}
+
+      <Card padding={6}>
+        <VStack gap={4}>
+          {/* Header */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", width: "100%", flexWrap: "wrap", gap: "1rem" }}>
+            <VStack gap={1}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                <div style={{ background: "#25D366", color: "#fff", padding: "0.45rem", borderRadius: "10px", display: "grid", placeItems: "center" }}>
+                  <MessageSquare size={22} />
+                </div>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: "1.25rem", color: "#111827" }}>
+                    WhatsApp Gateway Admin Center
+                  </h2>
+                  <p style={{ margin: "2px 0 0", fontSize: "0.82rem", color: "#4b5563" }}>
+                    Manage the official WhatsApp bot line, linked devices, and live incoming messages.
+                  </p>
+                </div>
+              </div>
+            </VStack>
+            <Badge
+              label={isConnected ? "Bot Online" : "Pairing Required"}
+              variant={isConnected ? "success" : "warning"}
+            />
+          </div>
+
+          {/* Section 1: Device Setup & Paired Device Management */}
+          <div style={{
+            background: isConnected ? "rgba(37, 211, 102, 0.08)" : "#f8fafc",
+            border: `1px solid ${isConnected ? "rgba(37, 211, 102, 0.35)" : "#e2e8f0"}`,
+            borderRadius: "16px",
+            padding: "1.25rem",
+            width: "100%",
+          }}>
+            <VStack gap={3}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <Smartphone size={18} style={{ color: isConnected ? "#059669" : "#64748b" }} />
+                  <strong style={{ fontSize: "0.95rem", color: "#0f172a" }}>
+                    {isConnected ? "Linked WhatsApp Device" : "Pair & Add WhatsApp Device"}
+                  </strong>
+                </div>
+                {isConnected && (
+                  <span style={{ fontSize: "0.75rem", background: "#dcfce7", color: "#15803d", padding: "2px 8px", borderRadius: "9999px", fontWeight: 600 }}>
+                    Multi-Device Baileys Active
+                  </span>
+                )}
+              </div>
+
+              {isConnected ? (
+                /* Show which number has it added + Remove Button */
+                <VStack gap={2}>
+                  <div style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: "1rem",
+                    background: "#ffffff",
+                    padding: "0.85rem 1rem",
+                    borderRadius: "12px",
+                    border: "1px solid #bbf7d0",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                      <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "#25D366", display: "grid", placeItems: "center", color: "#fff" }}>
+                        <CheckCircle2 size={20} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: "0.76rem", color: "#64748b", textTransform: "uppercase", fontWeight: 600 }}>
+                          Currently Added Number
+                        </div>
+                        <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#0f172a" }}>
+                          {adminState?.adminPhone}
+                        </div>
+                        {adminState?.connectedAt && (
+                          <div style={{ fontSize: "0.72rem", color: "#059669" }}>
+                            Active since {new Date(adminState.connectedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowQr(prev => !prev)}
+                        style={{
+                          background: "#f1f5f9",
+                          border: "1px solid #cbd5e1",
+                          color: "#334155",
+                          padding: "0.45rem 0.75rem",
+                          borderRadius: "8px",
+                          fontSize: "0.82rem",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                      >
+                        <QrCode size={14} />
+                        <span>{showQr ? "Hide QR" : "Show QR Code"}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleRemoveDevice()}
+                        style={{
+                          background: "#fee2e2",
+                          border: "1px solid #fca5a5",
+                          color: "#b91c1c",
+                          padding: "0.45rem 0.85rem",
+                          borderRadius: "8px",
+                          fontSize: "0.82rem",
+                          fontWeight: 600,
+                          cursor: busy ? "not-allowed" : "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                        }}
+                      >
+                        <Power size={14} />
+                        <span>Remove Device</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {showQr && adminState?.qrDataUrl && (
+                    <div style={{ background: "#ffffff", padding: "1rem", borderRadius: "12px", textAlign: "center", border: "1px solid #e2e8f0" }}>
+                      <img src={adminState.qrDataUrl} alt="Pairing QR" style={{ width: "160px", height: "160px", margin: "0 auto" }} />
+                      <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "4px" }}>
+                        Linked to {adminState.adminPhone}
+                      </div>
+                    </div>
+                  )}
+                </VStack>
+              ) : (
+                /* Setup to add device: QR Code + Number input */
+                <VStack gap={3}>
+                  <p style={{ margin: 0, fontSize: "0.84rem", color: "#475569" }}>
+                    No device added yet. Connect your WhatsApp phone so citizens can message your relief bot line.
+                  </p>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1rem", alignItems: "center" }}>
+                    {/* Method 1: Scan QR Code */}
+                    <div style={{ background: "#ffffff", padding: "1rem", borderRadius: "12px", border: "1px solid #e2e8f0", textAlign: "center" }}>
+                      <strong style={{ fontSize: "0.85rem", color: "#0f172a", display: "block", marginBottom: "0.4rem" }}>
+                        Method 1: Scan QR Code
+                      </strong>
+                      {adminState?.qrDataUrl ? (
+                        <img
+                          src={adminState.qrDataUrl}
+                          alt="Pairing QR Code"
+                          style={{ width: "160px", height: "160px", margin: "0 auto", borderRadius: "8px" }}
+                        />
+                      ) : (
+                        <div style={{ height: "160px", display: "grid", placeItems: "center", color: "#94a3b8" }}>
+                          <LoaderCircle size={24} className="animate-spin" />
+                        </div>
+                      )}
+                      <small style={{ display: "block", fontSize: "0.72rem", color: "#64748b", marginTop: "0.4rem" }}>
+                        WhatsApp &gt; Linked Devices &gt; Link a Device
+                      </small>
+                      <button
+                        type="button"
+                        onClick={() => void handleRefreshQr()}
+                        style={{ marginTop: "0.4rem", background: "none", border: "none", color: "#059669", fontSize: "0.75rem", cursor: "pointer", textDecoration: "underline" }}
+                      >
+                        Refresh QR code
+                      </button>
+                    </div>
+
+                    {/* Method 2: Link Phone Directly */}
+                    <div style={{ background: "#ffffff", padding: "1rem", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+                      <strong style={{ fontSize: "0.85rem", color: "#0f172a", display: "block", marginBottom: "0.4rem" }}>
+                        Method 2: Link Phone Directly
+                      </strong>
+                      <p style={{ fontSize: "0.76rem", color: "#64748b", margin: "0 0 0.6rem" }}>
+                        If WhatsApp mobile is temporarily rate-limiting QR scans, link your number directly:
+                      </p>
+                      <div style={{ display: "flex", gap: "0.4rem", marginBottom: "0.5rem" }}>
+                        <input
+                          type="tel"
+                          value={phoneInput}
+                          onChange={e => setPhoneInput(e.target.value)}
+                          placeholder="+92 300 1234567"
+                          style={{
+                            flex: 1,
+                            padding: "0.45rem 0.65rem",
+                            borderRadius: "8px",
+                            border: "1px solid #cbd5e1",
+                            fontSize: "0.84rem",
+                            outline: "none",
+                          }}
+                        />
+                        <button
+                          type="button"
+                          disabled={busy || !phoneInput.trim()}
+                          onClick={() => void handleLinkPhone()}
+                          style={{
+                            background: "#25D366",
+                            color: "#ffffff",
+                            border: "none",
+                            padding: "0.45rem 0.85rem",
+                            borderRadius: "8px",
+                            fontWeight: 600,
+                            fontSize: "0.82rem",
+                            cursor: busy || !phoneInput.trim() ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {busy ? "Linking…" : "Link Device"}
+                        </button>
+                      </div>
+                      <small style={{ fontSize: "0.7rem", color: "#94a3b8" }}>
+                        Saves your phone as the active bot number.
+                      </small>
+                    </div>
+                  </div>
+                </VStack>
+              )}
+            </VStack>
+          </div>
+
+          {/* Section 2: Messages Only Feed ("msgs only") */}
+          <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "1.25rem", width: "100%" }}>
+            <VStack gap={3}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <Inbox size={18} style={{ color: "#0f172a" }} />
+                  <strong style={{ fontSize: "0.95rem", color: "#0f172a" }}>
+                    Live WhatsApp Messages Feed ({filteredMessages.length})
+                  </strong>
+                </div>
+
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                  <div style={{ position: "relative" }}>
+                    <Search size={14} style={{ position: "absolute", left: "8px", top: "8px", color: "#94a3b8" }} />
+                    <input
+                      type="text"
+                      placeholder="Search messages..."
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      style={{
+                        padding: "0.35rem 0.65rem 0.35rem 1.8rem",
+                        borderRadius: "8px",
+                        border: "1px solid #cbd5e1",
+                        fontSize: "0.78rem",
+                        width: "160px",
+                        outline: "none",
+                      }}
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRefreshingMsgs(true);
+                      void loadData();
+                    }}
+                    style={{
+                      background: "#f1f5f9",
+                      border: "1px solid #cbd5e1",
+                      padding: "0.35rem 0.65rem",
+                      borderRadius: "8px",
+                      fontSize: "0.78rem",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                  >
+                    <RefreshCw size={13} className={refreshingMsgs ? "animate-spin" : ""} />
+                    <span>Refresh</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Message Feed List */}
+              <div style={{
+                maxHeight: "360px",
+                overflowY: "auto",
+                border: "1px solid #e2e8f0",
+                borderRadius: "12px",
+                padding: "0.5rem",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.5rem",
+                background: "#f8fafc",
+              }}>
+                {filteredMessages.length === 0 ? (
+                  <div style={{ padding: "2rem", textAlign: "center", color: "#94a3b8", fontSize: "0.85rem" }}>
+                    No messages recorded yet. Messages sent to the bot will appear here in real-time.
+                  </div>
+                ) : (
+                  filteredMessages.map(m => {
+                    const isInbound = m.direction === "inbound";
+                    return (
+                      <div
+                        key={m.id}
+                        style={{
+                          background: isInbound ? "#ffffff" : "#f0fdf4",
+                          border: `1px solid ${isInbound ? "#e2e8f0" : "#bbf7d0"}`,
+                          borderRadius: "10px",
+                          padding: "0.65rem 0.85rem",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.25rem",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.72rem" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                            <span style={{
+                              fontWeight: 700,
+                              fontSize: "0.65rem",
+                              padding: "1px 6px",
+                              borderRadius: "9999px",
+                              background: isInbound ? "#e0f2fe" : "#dcfce7",
+                              color: isInbound ? "#0369a1" : "#15803d",
+                            }}>
+                              {isInbound ? "INBOUND" : "BOT REPLY"}
+                            </span>
+                            <span style={{ fontWeight: 600, color: "#0f172a" }}>
+                              {isInbound ? `From: ${m.from}` : `To: ${m.to}`}
+                            </span>
+                          </div>
+                          <span style={{ color: "#94a3b8" }}>
+                            {new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                          </span>
+                        </div>
+
+                        <div style={{ fontSize: "0.84rem", color: "#1e293b", whiteSpace: "pre-wrap" }}>
+                          {m.text}
+                        </div>
+
+                        {m.toolsUsed && m.toolsUsed.length > 0 && (
+                          <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginTop: "2px" }}>
+                            {m.toolsUsed.map(t => (
+                              <span key={t} style={{ background: "#e0f2fe", color: "#0369a1", fontSize: "0.68rem", padding: "1px 6px", borderRadius: "4px", fontWeight: 600 }}>
+                                ⚡ Tool: {t}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Admin Test Simulator Console */}
+              <div style={{ background: "#f1f5f9", padding: "0.75rem", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "0.76rem", fontWeight: 600, color: "#475569", marginBottom: "0.3rem" }}>
+                  Test Send Message to Bot Line:
+                </div>
+                <div style={{ display: "flex", gap: "0.4rem" }}>
+                  <input
+                    type="text"
+                    value={simText}
+                    onChange={e => setSimText(e.target.value)}
+                    placeholder="Type a test prompt (e.g. /help, check budget, what is income cap)..."
+                    style={{
+                      flex: 1,
+                      padding: "0.4rem 0.65rem",
+                      borderRadius: "8px",
+                      border: "1px solid #cbd5e1",
+                      fontSize: "0.82rem",
+                      outline: "none",
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void handleSendSimMessage();
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={simBusy || !simText.trim()}
+                    onClick={() => void handleSendSimMessage()}
+                    style={{
+                      background: "#25D366",
+                      color: "#fff",
+                      border: "none",
+                      padding: "0.4rem 0.85rem",
+                      borderRadius: "8px",
+                      fontSize: "0.82rem",
+                      fontWeight: 600,
+                      cursor: simBusy || !simText.trim() ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    Send Test
+                  </button>
+                </div>
+              </div>
+            </VStack>
+          </div>
+        </VStack>
+      </Card>
+    </div>
+  );
+}
+
+/**
+ * Standard Citizen / Worker View: Secret session token, copy button, reset token, and chat simulator.
+ */
+function CitizenWhatsAppLinkView({ ctx }: { ctx: ViewContext }) {
   const [data, setData] = useState<TokenData | null>(null);
   const [adminBotNumber, setAdminBotNumber] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

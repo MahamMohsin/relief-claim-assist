@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Award, Bell, CheckCircle2, ChevronDown, Clock, Cloud, CloudOff, Fingerprint, HandHeart, House,
-  LoaderCircle, LogOut, Maximize2, Minimize2, Minus, Radio, ShieldCheck, Trophy, UserPlus, UserRound, Users, Wifi, X } from "lucide-react";
+  LoaderCircle, LogOut, Maximize2, MessageSquare, Minimize2, Minus, Radio, ShieldCheck, Trophy, UserPlus, UserRound, Users, Wifi, X } from "lucide-react";
 import { canOpen, personas, type Audit, type Claim, type Family, type MiniApp, type Overview, type Persona, type Profile } from "@/src/lib/contracts";
 import { api, jsonRequest } from "@/src/lib/client";
 import { queued, pushMutation, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
@@ -697,16 +697,35 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
 
                             <div className="liquid-menu-divider" />
 
-                            <WhatsAppTokenWidget
-                              personaId={profile?.id || "fatima"}
-                              variant="compact"
-                              onOpenApp={() => {
-                                setUserDropdownOpen(false);
-                                openAppWindow("whatsapp");
-                              }}
-                            />
-
-                            <div className="liquid-menu-divider" />
+                            {profile?.role !== "admin" ? (
+                              <>
+                                <WhatsAppTokenWidget
+                                  personaId={profile?.id || "fatima"}
+                                  variant="compact"
+                                  onOpenApp={() => {
+                                    setUserDropdownOpen(false);
+                                    openAppWindow("whatsapp");
+                                  }}
+                                />
+                                <div className="liquid-menu-divider" />
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  className="liquid-action-btn secondary wide"
+                                  onClick={() => {
+                                    setUserDropdownOpen(false);
+                                    openAppWindow("whatsapp");
+                                  }}
+                                  style={{ padding: "0.6rem 0.8rem", width: "100%", justifyContent: "center", display: "flex", gap: "0.5rem", alignItems: "center" }}
+                                >
+                                  <MessageSquare size={15} />
+                                  <span>Manage WhatsApp Gateway & Messages</span>
+                                </button>
+                                <div className="liquid-menu-divider" />
+                              </>
+                            )}
 
                             <div className="liquid-action-buttons row">
                               <button
