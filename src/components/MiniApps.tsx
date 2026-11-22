@@ -141,6 +141,8 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
   editingRef.current = editing;
   const stepRef = useRef(step);
   stepRef.current = step;
+  const claimsRef = useRef(claims);
+  claimsRef.current = claims;
   const snapshotRef = useRef({
     editing,
     step: (["household", "evidence", "review"] as const)[step] ?? "household",
@@ -151,6 +153,19 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
     docType,
     fixture,
     attached,
+    openedClaimId: opened ?? null,
+    claims: (claims ?? []).slice(0, 10).map(item => ({
+      id: item.id,
+      status: item.status,
+      amountPkr: item.amount_pkr,
+      monthlyIncome: item.payload_json?.monthly_income,
+      householdSize: item.payload_json?.household_size,
+      notes: item.payload_json?.notes,
+      paymentStatus: item.payment_status,
+      fundingStatus: item.funding_status,
+      raastRef: item.payment?.raast_ref,
+      reasonEn: item.citizen_reason_en,
+    })),
   });
   snapshotRef.current = {
     editing,
@@ -162,6 +177,19 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
     docType,
     fixture,
     attached,
+    openedClaimId: opened ?? null,
+    claims: (claims ?? []).slice(0, 10).map(item => ({
+      id: item.id,
+      status: item.status,
+      amountPkr: item.amount_pkr,
+      monthlyIncome: item.payload_json?.monthly_income,
+      householdSize: item.payload_json?.household_size,
+      notes: item.payload_json?.notes,
+      paymentStatus: item.payment_status,
+      fundingStatus: item.funding_status,
+      raastRef: item.payment?.raast_ref,
+      reasonEn: item.citizen_reason_en,
+    })),
   };
   const startRef = useRef<(item?: Claim) => void>(() => {});
   const runRef = useRef<(action: "draft" | "submit" | "evidence") => Promise<void>>(async () => {});
@@ -174,6 +202,24 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
       startNew: () => startRef.current(),
       backToList: () => {
         setEditing(false);
+      },
+      inspectOrEdit: (mode, targetClaimId) => {
+        const list = claimsRef.current ?? [];
+        const picked = targetClaimId
+          ? list.find(c => c.id === targetClaimId || c.id.startsWith(targetClaimId))
+          : mode === "edit"
+            ? list.find(c => ["draft", "needs_proof"].includes(c.status)) ?? list[0]
+            : list[0];
+        if (!picked) {
+          if (mode === "edit") startRef.current();
+          return;
+        }
+        if (mode === "edit" && ["draft", "needs_proof"].includes(picked.status)) {
+          startRef.current(picked);
+        } else {
+          setEditing(false);
+          setOpened(picked.id);
+        }
       },
       setField: (field, value) => {
         setDetails(current => ({ ...current, [field]: value }));
@@ -283,12 +329,25 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
     setMessage("");
     const key = crypto.randomUUID();
     try {
-      const currentId = claimId ?? (pendingDraft && !ctx.offline ? await resolveDraft(ctx.profile.id, pendingDraft) : null);
+      let currentId = claimId ?? (pendingDraft && !ctx.offline ? await resolveDraft(ctx.profile.id, pendingDraft) : null);
+      if (action === "evidence" && !currentId && !pendingDraft) {
+        if (ctx.offline) {
+          const draftKey = crypto.randomUUID();
+          await ctx.enqueue("draft", { citizenId: ctx.citizen, claimId: null, payload: details }, { key: draftKey });
+          setPendingDraft(draftKey);
+          await ctx.enqueue("evidence", { citizenId: ctx.citizen, claimId: null, docType, ...(image ? { image } : { fixture }) }, { key, dependsOn: draftKey });
+          setAttached("Queued evidence");
+          setMessage("Draft and evidence saved to the offline queue.");
+          return;
+        }
+        const savedDraft = await api<Claim>("draft", { citizenId: ctx.citizen, claimId: null, payload: details, key: crypto.randomUUID() });
+        currentId = savedDraft.id;
+        setClaimId(savedDraft.id);
+      }
       const base = { citizenId: ctx.citizen, claimId: currentId ?? null };
       const body = action === "evidence"
         ? { ...base, docType, ...(image ? { image } : { fixture }) }
         : { ...base, payload: details };
-      if (action === "evidence" && !currentId && !pendingDraft) throw new Error("Save the draft before attaching evidence.");
       if (ctx.offline || (!currentId && pendingDraft)) {
         await ctx.enqueue(action, body, { key, dependsOn: !currentId ? pendingDraft : undefined });
         if (action === "draft" && !currentId && !pendingDraft) setPendingDraft(key);
@@ -456,7 +515,9 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
                   <strong style={{ fontSize: "1.02rem", color: "#111827" }}>{claimTitle}</strong>
                   <Badge label={title(displayStatus)} variant={badge(displayStatus)} />
                 </div>
-                <Button variant="ghost" size="sm" label={opened === item.id ? "Hide details" : "View details"} onClick={() => setOpened(opened === item.id ? undefined : item.id)} />
+                <span data-cua={`claim-details-${item.id}`} style={{ display: "inline-flex" }}>
+                  <Button variant="ghost" size="sm" label={opened === item.id ? "Hide details" : "View details"} onClick={() => setOpened(opened === item.id ? undefined : item.id)} />
+                </span>
               </div>
 
               {/* Show actual contents of the claim */}
@@ -542,9 +603,56 @@ function FamilyView({ ctx }: { ctx: ViewContext }) {
   const [search, setSearch] = useState("");
   const [problem, setProblem] = useState("");
   const [switching, setSwitching] = useState<string>();
+  const activeFamily = data?.find(f => f.id === ctx.citizen);
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  const citizenRef = useRef(ctx.citizen);
+  citizenRef.current = ctx.citizen;
+  const activeFamilyRef = useRef(activeFamily);
+  activeFamilyRef.current = activeFamily;
+  const selectFamilyRef = useRef(ctx.selectFamily);
+  selectFamilyRef.current = ctx.selectFamily;
+
   useEffect(() => {
     cuaEngine.search.family = setSearch;
-    return () => { delete cuaEngine.search.family; };
+    cuaEngine.family = {
+      getSnapshot: () => ({
+        activeFamilyId: citizenRef.current,
+        activeFamilyName: activeFamilyRef.current?.full_name,
+        activeVillageArea: activeFamilyRef.current?.village_area,
+        totalFamilies: dataRef.current?.length ?? 0,
+        families: (dataRef.current ?? []).map(f => ({
+          id: f.id,
+          name: f.full_name,
+          villageArea: f.village_area,
+          consent: f.consent,
+        })),
+      }),
+      switchFamily: async familyIdOrName => {
+        let list = dataRef.current;
+        if (!list || list.length === 0) {
+          list = await api<Family[]>("families").catch(() => []);
+        }
+        if (!list || list.length === 0) return;
+        const needle = familyIdOrName.toLowerCase();
+        const target = list.find(f => f.id === familyIdOrName || f.full_name.toLowerCase().includes(needle) || f.village_area.toLowerCase().includes(needle));
+        if (target) {
+          setSwitching(target.id);
+          setProblem("");
+          try {
+            await selectFamilyRef.current(target);
+          } catch (err) {
+            setProblem(getMessage(err));
+          } finally {
+            setSwitching(undefined);
+          }
+        }
+      },
+    };
+    return () => {
+      delete cuaEngine.search.family;
+      if (cuaEngine.family) cuaEngine.family = null;
+    };
   }, []);
   return <Card padding={6}>
     <HStack justify="between" hAlign="start" gap={4} wrap="wrap">
@@ -563,11 +671,13 @@ function FamilyView({ ctx }: { ctx: ViewContext }) {
               <VStack gap={0.5}><strong>{family.full_name}</strong><small>{family.village_area}</small></VStack>
               <HStack gap={2}>
                 <Badge label={title(family.consent)} variant={family.consent === "granted" ? "success" : "warning"} />
-                <Button variant="secondary" size="sm" label="Switch" isDisabled={ctx.offline || Boolean(switching)} isLoading={switching === family.id} onClick={async () => {
-                  setSwitching(family.id); setProblem("");
-                  try { await ctx.selectFamily(family); } catch (error) { setProblem(getMessage(error)); }
-                  finally { setSwitching(undefined); }
-                }} />
+                <span data-cua={`family-switch-${family.id}`} style={{ display: "inline-flex" }}>
+                  <Button variant="secondary" size="sm" label="Switch" isDisabled={ctx.offline || Boolean(switching)} isLoading={switching === family.id} onClick={async () => {
+                    setSwitching(family.id); setProblem("");
+                    try { await ctx.selectFamily(family); } catch (error) { setProblem(getMessage(error)); }
+                    finally { setSwitching(undefined); }
+                  }} />
+                </span>
               </HStack>
             </HStack>
           </Card>)}
@@ -584,11 +694,21 @@ function PrivacyView({ ctx }: { ctx: ViewContext }) {
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
   const changeRef = useRef<(action: "consent" | "correction", body: object) => Promise<void>>(async () => {});
-  const privacySnapshotRef = useRef<{ field: string; value: string; helpers?: { id: string; name: string; status: string }[] }>({ field, value });
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  const privacySnapshotRef = useRef<{
+    field: string;
+    value: string;
+    helpers?: { id: string; name: string; status: string }[];
+    officers?: string[];
+    correctionsCount?: number;
+  }>({ field, value });
   privacySnapshotRef.current = {
     field,
     value,
     helpers: data?.helpers?.map(h => ({ id: h.id, name: h.name, status: h.status })),
+    officers: data?.officers,
+    correctionsCount: data?.corrections?.length ?? 0,
   };
   useEffect(() => {
     cuaEngine.privacy = {
@@ -599,17 +719,22 @@ function PrivacyView({ ctx }: { ctx: ViewContext }) {
         await changeRef.current("correction", { field: nextField, value: nextValue });
       },
       setHelperConsent: async (consent, helperNameOrId) => {
-        const target = helperNameOrId && data?.helpers
-          ? data.helpers.find(h => h.id === helperNameOrId || h.name.toLowerCase().includes(helperNameOrId.toLowerCase())) ?? data.helpers[0]
-          : data?.helpers?.[0];
+        const helpers = dataRef.current?.helpers ?? [];
+        const target = helperNameOrId && helpers.length
+          ? helpers.find(h => h.id === helperNameOrId || h.name.toLowerCase().includes(helperNameOrId.toLowerCase())) ?? helpers[0]
+          : helpers[0];
         if (!target) return;
+        if (target.status === consent) {
+          setMessage(`${target.name} access is already ${consent}.`);
+          return;
+        }
         await changeRef.current("consent", { helperId: target.id, consent });
       },
     };
     return () => {
       if (cuaEngine.privacy) cuaEngine.privacy = null;
     };
-  }, [data?.helpers]);
+  }, []);
   if (!ctx.citizen) return <FamilyRequired ctx={ctx} />;
 
   async function change(action: "consent" | "correction", body: object) {
@@ -743,8 +868,127 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
     cuaEngine.search.review = setQuery;
     return () => { delete cuaEngine.search.review; };
   }, []);
+
   const claim = data?.find(item => item.id === selected);
   const awaitingFunds = claim?.funding_status === "awaiting_funds";
+
+  const reviewStateRef = useRef({ data, selected, claim, statusFilter, sortOrder });
+  reviewStateRef.current = { data, selected, claim, statusFilter, sortOrder };
+  const reviewActionsRef = useRef({
+    pick: (_item: Claim) => {},
+    produceSummary: async (_overrideClaim?: Claim) => {},
+    quickDecide: async (_chosen: "approve" | "reject" | "more_proof", _r?: string, _ru?: string, _overrideClaim?: Claim) => {},
+    handleQuickCardReview: async (_item: Claim, _chosen: "approve" | "reject" | "more_proof") => {},
+    update: async (_action: "review" | "disburse", _outcome?: "paid" | "failed", _overrideClaim?: Claim) => {},
+  });
+
+  useEffect(() => {
+    const resolveTargetClaim = async (claimIdOrName?: string): Promise<Claim | undefined> => {
+      let list = reviewStateRef.current.data;
+      if (!list || list.length === 0) {
+        list = await api<Claim[]>("queue").catch(() => []);
+      }
+      if (!list || list.length === 0) return undefined;
+      if (claimIdOrName) {
+        const needle = claimIdOrName.toLowerCase();
+        return list.find(c => c.id === claimIdOrName || c.id.toLowerCase().startsWith(needle) || (c.citizen_name && c.citizen_name.toLowerCase().includes(needle))) ?? list[0];
+      }
+      return reviewStateRef.current.claim ?? list[0];
+    };
+
+    cuaEngine.review = {
+      getSnapshot: () => {
+        const s = reviewStateRef.current;
+        const sel = s.claim;
+        const docs = sel?.documents ?? [];
+        const verified = docs.filter(doc => ["genuine", "readable"].includes(doc.verified_status)).length;
+        const hasSuspect = docs.some(d => d.verified_status === "suspect" || Boolean(d.tamper_reason));
+        return {
+          queueCount: s.data?.length ?? 0,
+          selectedClaimId: s.selected || null,
+          selectedClaim: sel ? {
+            id: sel.id,
+            citizenName: sel.citizen_name ?? "Applicant",
+            status: sel.status,
+            monthlyIncome: sel.payload_json?.monthly_income,
+            householdSize: sel.payload_json?.household_size,
+            aiConfidence: sel.ai_confidence,
+            hasSuspectDoc: hasSuspect,
+            verifiedDocs: docs.length ? `${verified}/${docs.length} docs verified` : "None",
+            paymentStatus: sel.payment_status,
+            fundingStatus: sel.funding_status,
+            reports: sel.reports,
+            aiSummary: sel.ai_summary,
+          } : undefined,
+          activeFilter: s.statusFilter,
+          activeSort: s.sortOrder,
+          topClaimId: s.data?.[0]?.id,
+          claims: (s.data ?? []).slice(0, 15).map(item => {
+            const itemDocs = item.documents ?? [];
+            return {
+              id: item.id,
+              citizenName: item.citizen_name ?? "Applicant",
+              status: item.status,
+              monthlyIncome: item.payload_json?.monthly_income,
+              householdSize: item.payload_json?.household_size,
+              aiConfidence: item.ai_confidence,
+              hasSuspectDoc: itemDocs.some(d => d.verified_status === "suspect" || Boolean(d.tamper_reason)),
+              paymentStatus: item.payment_status,
+              fundingStatus: item.funding_status,
+            };
+          }),
+        };
+      },
+      selectClaim: async claimIdOrName => {
+        const found = await resolveTargetClaim(claimIdOrName);
+        if (found) {
+          reviewActionsRef.current.pick(found);
+          return found.id;
+        }
+        return null;
+      },
+      backToBoard: () => {
+        setSelected("");
+        setNotice("");
+        setProblem("");
+        setAiSummary(null);
+      },
+      produceSummary: async claimIdOrName => {
+        const target = await resolveTargetClaim(claimIdOrName);
+        if (target && reviewStateRef.current.selected !== target.id) {
+          reviewActionsRef.current.pick(target);
+        }
+        await reviewActionsRef.current.produceSummary(target);
+      },
+      decide: async (chosenDecision, userReason, userReasonUr, claimIdOrName) => {
+        const target = await resolveTargetClaim(claimIdOrName);
+        if (target && reviewStateRef.current.selected !== target.id) {
+          reviewActionsRef.current.pick(target);
+        }
+        if (userReason) setReason(userReason);
+        if (userReasonUr) setReasonUr(userReasonUr);
+        await reviewActionsRef.current.quickDecide(chosenDecision, userReason, userReasonUr, target);
+      },
+      quickDecide: async (claimId, chosenDecision) => {
+        const item = await resolveTargetClaim(claimId);
+        if (item) {
+          await reviewActionsRef.current.handleQuickCardReview(item, chosenDecision);
+        }
+      },
+      disburse: async (outcome, claimIdOrName) => {
+        const target = await resolveTargetClaim(claimIdOrName);
+        if (target && reviewStateRef.current.selected !== target.id) {
+          reviewActionsRef.current.pick(target);
+        }
+        await reviewActionsRef.current.update("disburse", outcome || "paid", target);
+      },
+      setFilter: filter => setStatusFilter(filter),
+      setSort: order => setSortOrder(order),
+    };
+    return () => {
+      if (cuaEngine.review) cuaEngine.review = null;
+    };
+  }, []);
 
   const activeColumns = useMemo(() => {
     if (statusFilter === "accepted") {
@@ -759,13 +1003,14 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
     ];
   }, [statusFilter]);
 
-  async function update(action: "review" | "disburse", outcome: "paid" | "failed" = "paid") {
-    if (!claim) return;
+  async function update(action: "review" | "disburse", outcome: "paid" | "failed" = "paid", overrideClaim?: Claim) {
+    const activeClaim = overrideClaim ?? claim;
+    if (!activeClaim) return;
     setBusy(true); setProblem(""); setNotice("");
     try {
       const updated = await api<Claim>(action, action === "review"
-        ? { claimId: claim.id, decision, reason, reasonUr, aiSummary: aiSummary?.summary || claim.ai_summary }
-        : { claimId: claim.id, outcome });
+        ? { claimId: activeClaim.id, decision, reason, reasonUr, aiSummary: aiSummary?.summary || activeClaim.ai_summary }
+        : { claimId: activeClaim.id, outcome });
       setDecision(updated.status === "needs_proof" ? "more_proof" : "approve");
       setNotice(action === "review"
         ? updated.funding_status === "awaiting_funds" ? "Officer approval recorded. The claim is awaiting funds." : "Officer decision recorded and sent to applicant."
@@ -775,16 +1020,17 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
     finally { setBusy(false); }
   }
 
-  async function produceSummary() {
-    if (!claim) return;
+  async function produceSummary(overrideClaim?: Claim) {
+    const activeClaim = overrideClaim ?? claim;
+    if (!activeClaim) return;
     setAiSummaryLoading(true);
     setProblem("");
     try {
-      const result = await api<ClaimSummaryResult>("claim_summary", { claimId: claim.id });
+      const result = await api<ClaimSummaryResult>("claim_summary", { claimId: activeClaim.id });
       setAiSummary(result);
-      if (["submitted", "in_review", "needs_proof"].includes(claim.status)) {
+      if (["submitted", "in_review", "needs_proof"].includes(activeClaim.status)) {
         if (result.recommendation === "approve") {
-          setDecision(claim.status === "needs_proof" ? "more_proof" : "approve");
+          setDecision(activeClaim.status === "needs_proof" ? "more_proof" : "approve");
         } else if (result.recommendation === "reject") {
           setDecision("reject");
         } else if (result.recommendation === "more_proof") {
@@ -801,28 +1047,29 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
     }
   }
 
-  async function quickDecide(chosenDecision: "approve" | "reject" | "more_proof") {
-    if (!claim) return;
+  async function quickDecide(chosenDecision: "approve" | "reject" | "more_proof", overrideReason?: string, overrideReasonUr?: string, overrideClaim?: Claim) {
+    const activeClaim = overrideClaim ?? claim;
+    if (!activeClaim) return;
     setBusy(true);
     setProblem("");
     setNotice("");
     try {
-      let finalReason = reason;
-      let finalReasonUr = reasonUr;
-      let finalSummary = aiSummary?.summary || claim.ai_summary;
+      let finalReason = (overrideReason ?? reason).trim();
+      let finalReasonUr = (overrideReasonUr ?? reasonUr).trim();
+      let finalSummary = aiSummary?.summary || activeClaim.ai_summary;
 
       if (!finalReason || finalReason.length < 5 || !finalSummary) {
-        const generated = await api<ClaimSummaryResult>("claim_summary", { claimId: claim.id });
+        const generated = await api<ClaimSummaryResult>("claim_summary", { claimId: activeClaim.id });
         setAiSummary(generated);
-        finalReason = generated.reason;
-        finalReasonUr = generated.reasonUr;
+        if (!finalReason || finalReason.length < 5) finalReason = generated.reason;
+        if (!finalReasonUr) finalReasonUr = generated.reasonUr;
         finalSummary = generated.summary;
         setReason(finalReason);
         setReasonUr(finalReasonUr);
       }
 
       const updated = await api<Claim>("review", {
-        claimId: claim.id,
+        claimId: activeClaim.id,
         decision: chosenDecision,
         reason: finalReason,
         reasonUr: finalReasonUr,
@@ -869,6 +1116,8 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
     setAiSummary(null);
   }
 
+  reviewActionsRef.current = { pick, produceSummary, quickDecide, handleQuickCardReview, update };
+
   if (claim) {
     const docs = claim.documents ?? [];
     const verified = docs.filter(doc => ["genuine", "readable"].includes(doc.verified_status)).length;
@@ -879,6 +1128,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
     <div className="claim-detail-sticky-bar">
       <button
         type="button"
+        data-cua="review-back-btn"
         className="claim-detail-back-btn"
         onClick={() => { setSelected(""); setNotice(""); setProblem(""); setAiSummary(null); }}
       >
@@ -1025,10 +1275,10 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
               </>
             )}
             {claim.status === "approved" && claim.payment_status !== "paid" && <>
-              <button className="secondary" type="button" disabled={busy || ctx.offline} onClick={() => void update("disburse")}>
+              <button data-cua="review-disburse-btn" className="secondary" type="button" disabled={busy || ctx.offline} onClick={() => void update("disburse")}>
                 {awaitingFunds ? "Check funds and issue payment" : claim.payment_status === "failed" ? "Retry simulated payment" : "Issue simulated payment"}
               </button>
-              {claim.payment_status === "pending" && !awaitingFunds && <button className="secondary" type="button" disabled={busy || ctx.offline}
+              {claim.payment_status === "pending" && !awaitingFunds && <button data-cua="review-disburse-fail-btn" className="secondary" type="button" disabled={busy || ctx.offline}
                 onClick={() => void update("disburse", "failed")}>Simulate payment failure</button>}
             </>}
           </div>
@@ -1129,6 +1379,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
         <div className="kanban-actions-group">
           <button
             type="button"
+            data-cua="review-sort-btn"
             className="kanban-sort-btn"
             onClick={() => setSortOrder(prev => prev === "desc" ? "asc" : "desc")}
             title={sortOrder === "desc" ? "Currently showing highest reliability score first. Click to show lowest first." : "Currently showing lowest reliability score first. Click to show highest first."}
@@ -1145,6 +1396,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
               <button
                 key={key}
                 type="button"
+                data-cua={`review-filter-${key}`}
                 role="tab"
                 aria-selected={statusFilter === key}
                 className={"kanban-filter-btn" + (statusFilter === key ? " active" : "")}
@@ -1186,6 +1438,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
                     role="button"
                     tabIndex={0}
                     key={item.id}
+                    data-cua={`review-card-${item.id}`}
                     className="kanban-card"
                     onClick={() => pick(item)}
                     onKeyDown={e => { if (e.key === "Enter" || e.key === " ") pick(item); }}
@@ -1319,6 +1572,116 @@ function RuleView({ ctx }: { ctx: ViewContext }) {
   const [problem, setProblem] = useState("");
   const [busy, setBusy] = useState(false);
   const config = draft ?? active?.config_json;
+  const pendingStaffRef = useRef<Array<Pick<Profile, "id" | "full_name" | "role">>>([]);
+  const ruleStateRef = useRef({ data, active, config, name, impact });
+  ruleStateRef.current = { data, active, config, name, impact };
+  const refreshRef = useRef(ctx.refresh);
+  refreshRef.current = ctx.refresh;
+
+  useEffect(() => {
+    cuaEngine.rules = {
+      getSnapshot: () => {
+        const s = ruleStateRef.current;
+        return {
+          activeVersion: s.active?.version,
+          activeName: s.active?.name,
+          config: s.config ? {
+            income_cap: s.config.income_cap,
+            minimum_household: s.config.minimum_household,
+            amount_pkr: s.config.amount_pkr,
+            confidence_threshold: s.config.confidence_threshold,
+          } : undefined,
+          pendingStaffCount: pendingStaffRef.current.length,
+          pendingStaff: pendingStaffRef.current.map(item => ({
+            id: item.id,
+            name: item.full_name,
+            role: item.role,
+          })),
+          historyCount: s.data?.length ?? 0,
+          ...(s.impact ? {
+            lastSimulation: {
+              changedCount: s.impact.filter(row => row.before !== row.after).length,
+              totalCount: s.impact.length,
+            },
+          } : {}),
+        };
+      },
+      updateConfig: (patch, newName) => {
+        const base = ruleStateRef.current.config;
+        if (base) {
+          const next = { ...base, ...patch };
+          ruleStateRef.current.config = next;
+          setDraft(next);
+          setImpact(undefined);
+        }
+        if (newName) {
+          ruleStateRef.current.name = newName;
+          setName(newName);
+        }
+      },
+      simulate: async patch => {
+        let base = ruleStateRef.current.config;
+        if (!base) {
+          const fetched = await api<Rule[]>("rules").catch(() => []);
+          base = fetched.find(r => r.is_active)?.config_json;
+        }
+        if (!base) return;
+        const targetConfig = patch ? { ...base, ...patch } : base;
+        if (patch) setDraft(targetConfig);
+        setBusy(true); setProblem(""); setNotice("");
+        try {
+          setImpact(await api<Impact[]>("simulate", { config: targetConfig }));
+        } catch (e) {
+          setProblem(getMessage(e));
+        } finally {
+          setBusy(false);
+        }
+      },
+      publish: async (pubName, patch) => {
+        let base = ruleStateRef.current.config;
+        let fallbackName = ruleStateRef.current.name || ruleStateRef.current.active?.name;
+        if (!base) {
+          const fetched = await api<Rule[]>("rules").catch(() => []);
+          const currentActive = fetched.find(r => r.is_active);
+          base = currentActive?.config_json;
+          fallbackName = fallbackName || currentActive?.name;
+        }
+        if (!base) return;
+        const finalConfig: RuleConfig = patch ? { ...base, ...patch } : base;
+        setBusy(true); setProblem(""); setNotice("");
+        try {
+          const next = await api<Rule>("publish", { name: pubName || fallbackName || "Updated relief rule", config: finalConfig });
+          setNotice("Rule version " + next.version + " is live.");
+          setDraft(null);
+          setImpact(undefined);
+          refreshRef.current();
+        } catch (e) {
+          setProblem(getMessage(e));
+        } finally {
+          setBusy(false);
+        }
+      },
+      decideStaff: async (userIdOrName, decision) => {
+        let list = pendingStaffRef.current;
+        if (list.length === 0) {
+          list = await api<Array<Pick<Profile, "id" | "full_name" | "role">>>("staff_queue").catch(() => []);
+        }
+        const needle = userIdOrName.toLowerCase();
+        const target = list.find(item => item.id === userIdOrName || item.full_name.toLowerCase().includes(needle));
+        const resolvedId = target?.id ?? userIdOrName;
+        try {
+          await api("decide_staff", { userId: resolvedId, decision });
+          setNotice(decision === "active" ? "Staff access approved." : "Staff access rejected.");
+          refreshRef.current();
+        } catch (e) {
+          setProblem(getMessage(e));
+        }
+      },
+    };
+    return () => {
+      if (cuaEngine.rules) cuaEngine.rules = null;
+    };
+  }, []);
   async function apply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!config) return;
@@ -1339,8 +1702,8 @@ function RuleView({ ctx }: { ctx: ViewContext }) {
   return <div className="view-stack">
     <Notice text={problem || error} warning /><Notice text={notice} />
     <Panel><div className="panel-head"><div><h2>Eligibility rules</h2><p>Publish a new version while keeping prior decisions tied to their rules.</p></div>{active && <span className="pill green">Active · v{active.version}</span>}</div>
-      {config ? <form onSubmit={apply}><label>Rule name<input value={name || active?.name || ""} onChange={event => setName(event.target.value)} minLength={3} maxLength={100} required /></label>
-        <div className="form-grid">{ruleLabels.map(([key, label, min, max, step]) => <label key={key}>{label}<input type="number" min={min} max={max} step={step} required
+      {config ? <form onSubmit={apply}><label>Rule name<input data-cua="rule-name-input" value={name || active?.name || ""} onChange={event => setName(event.target.value)} minLength={3} maxLength={100} required /></label>
+        <div className="form-grid">{ruleLabels.map(([key, label, min, max, step]) => <label key={key}>{label}<input data-cua={`rule-input-${key}`} type="number" min={min} max={max} step={step} required
           value={config[key]} onChange={event => { setDraft({ ...config, [key]: +event.target.value }); setImpact(undefined); }} /></label>)}</div>
         <div className="actions"><button className="secondary" value="simulate" disabled={busy || ctx.offline}>Simulate impact on historical cases</button>
           <button className="primary" value="publish" disabled={busy || ctx.offline}>Publish version</button></div>
@@ -1354,15 +1717,18 @@ function RuleView({ ctx }: { ctx: ViewContext }) {
     <Panel><h2>Version history</h2><div className="rows">{data?.map(rule => <div className="list-row static" key={rule.id}>
       <div><strong>v{rule.version} · {rule.name}</strong><small>{currency(rule.config_json.income_cap)} income cap</small></div><StateTag value={rule.is_active ? "active" : "historical"} />
     </div>)}</div></Panel>
-    <StaffApprovals ctx={ctx} />
+    <StaffApprovals ctx={ctx} onStaffLoaded={list => { pendingStaffRef.current = list; }} />
   </div>;
 }
 
-function StaffApprovals({ ctx }: { ctx: ViewContext }) {
+function StaffApprovals({ ctx, onStaffLoaded }: { ctx: ViewContext; onStaffLoaded?: (list: Array<Pick<Profile, "id" | "full_name" | "role">>) => void }) {
   const { data, error, loading } = useActionList<Array<Pick<Profile, "id" | "full_name" | "role">>>("staff_queue", ctx);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [problem, setProblem] = useState("");
+  useEffect(() => {
+    if (data && onStaffLoaded) onStaffLoaded(data);
+  }, [data, onStaffLoaded]);
   async function decide(userId: string, decision: "active" | "rejected") {
     setBusy(true);
     setNotice("");
@@ -1381,8 +1747,8 @@ function StaffApprovals({ ctx }: { ctx: ViewContext }) {
     {loading && !data ? <Spinner /> : data?.length === 0 ? <p>No staff requests are pending.</p> : null}
     {data?.map(item => <div className="list-row static" key={item.id}>
       <div><strong>{item.full_name}</strong><small>{title(item.role)}</small></div>
-      <button className="secondary" disabled={busy || ctx.offline} onClick={() => void decide(item.id, "active")}>Approve staff access</button>
-      <button className="quiet" disabled={busy || ctx.offline} onClick={() => void decide(item.id, "rejected")}>Reject</button>
+      <button data-cua={`staff-active-${item.id}`} className="secondary" disabled={busy || ctx.offline} onClick={() => void decide(item.id, "active")}>Approve staff access</button>
+      <button data-cua={`staff-rejected-${item.id}`} className="quiet" disabled={busy || ctx.offline} onClick={() => void decide(item.id, "rejected")}>Reject</button>
     </div>)}
   </Panel>;
 }
@@ -1404,13 +1770,30 @@ const REGISTERED_USERS = [
 function UsersView() {
   const [selected, setSelected] = useState<string[]>([]);
   const [query, setQuery] = useState("");
-  useEffect(() => {
-    cuaEngine.search.users = setQuery;
-    return () => { delete cuaEngine.search.users; };
-  }, []);
   const filtered = REGISTERED_USERS.filter(u =>
     [u.name, u.role, u.id, u.code, u.linkedTitle, u.linkedSub].join(" ").toLowerCase().includes(query.toLowerCase())
   );
+  const usersSnapRef = useRef({ query, filtered });
+  usersSnapRef.current = { query, filtered };
+  useEffect(() => {
+    cuaEngine.search.users = setQuery;
+    cuaEngine.users = {
+      getSnapshot: () => ({
+        totalUsers: REGISTERED_USERS.length,
+        filteredCount: usersSnapRef.current.filtered.length,
+        query: usersSnapRef.current.query,
+        visibleUsers: usersSnapRef.current.filtered.map(u => ({
+          id: u.id,
+          name: u.name,
+          role: u.role,
+        })),
+      }),
+    };
+    return () => {
+      delete cuaEngine.search.users;
+      if (cuaEngine.users) cuaEngine.users = null;
+    };
+  }, []);
   const allChecked = filtered.length > 0 && filtered.every(u => selected.includes(u.id));
 
   return <Panel>
