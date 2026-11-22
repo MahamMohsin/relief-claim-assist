@@ -33,6 +33,7 @@ export const names = [
   "scheme_budget_adjust",
   "audit_vault_control",
   "whatsapp_configure_agent",
+  "sms_gateway_control",
   "window_manage",
 ];
 const appKeys = ["claim", "profile", "scam", "policy", "privacy", "family", "review", "rules", "users", "audit", "whatsapp"] as const;
@@ -254,6 +255,14 @@ export type ScreenContext = {
     searchQuery?: string;
     recentMessagesCount?: number;
     recentMessages?: { direction: string; from: string; text: string }[];
+    smsStatus?: string;
+    smsPaired?: boolean;
+    smsAdminPhone?: string | null;
+    smsLinked?: boolean;
+    smsLinkedPhone?: string | null;
+    smsLoginCommand?: string;
+    smsActiveSessions?: number;
+    smsFeedCount?: number;
   };
 };
 
@@ -844,6 +853,40 @@ export function registerTools(pi: ExtensionAPI, context: PiContext) {
       }
       emit({ type: "whatsapp_set_key", key: input.apiKey.trim(), agentName: input.agentName?.trim() || undefined });
       return textResult({ configuredWhatsAppKey: true, agentName: input.agentName?.trim() || "Ali" });
+    },
+  });
+
+  pi.registerTool({
+    name: "sms_gateway_control",
+    label: "Control Direct SMS / Google Messages",
+    description: "Open WhatsApp & SMS and control Google Messages Direct SMS: regenerate personal /login key ('regenerate_key', any user), or admin actions ('pair', 'open_window', 'refresh_qr', 'set_phone', 'toggle_auto_prompt', 'disconnect', 'simulate_sms').",
+    parameters: Type.Object({
+      action: Type.Union([
+        Type.Literal("regenerate_key"),
+        Type.Literal("pair"),
+        Type.Literal("open_window"),
+        Type.Literal("refresh_qr"),
+        Type.Literal("set_phone"),
+        Type.Literal("toggle_auto_prompt"),
+        Type.Literal("disconnect"),
+        Type.Literal("simulate_sms"),
+      ]),
+      phone: Type.Optional(Type.String({ maxLength: 40 })),
+      text: Type.Optional(Type.String({ maxLength: 500 })),
+    }),
+    async execute(_id, input) {
+      const adminOnly = input.action !== "regenerate_key";
+      if (adminOnly && profile.role !== "admin") {
+        throw new ApiError(403, "Only scheme administrators can manage the Google Messages SMS gateway pairing or simulator.");
+      }
+      emit({ type: "open_mini_app", app: "whatsapp" });
+      emit({
+        type: "google_messages_action",
+        action: input.action,
+        phone: input.phone?.trim() || undefined,
+        text: input.text?.trim() || undefined,
+      });
+      return textResult({ smsAction: input.action, phone: input.phone, text: input.text });
     },
   });
 
