@@ -1681,7 +1681,7 @@ th { background: var(--faint); color: var(--forest); }
   position: absolute;
   inset: 0;
   border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  border: none;
   pointer-events: none;
 }
 
@@ -2102,6 +2102,97 @@ th { background: var(--faint); color: var(--forest); }
   overflow-wrap: anywhere;
 }
 
+.voice-chat-markdown {
+  color: inherit;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.voice-chat-markdown p {
+  margin: 0 0 0.5rem 0;
+  color: inherit;
+  white-space: pre-wrap;
+}
+
+.voice-chat-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.voice-chat-markdown strong,
+.voice-chat-markdown b {
+  font-weight: 700;
+  color: inherit;
+}
+
+.voice-chat-markdown em,
+.voice-chat-markdown i {
+  font-style: italic;
+}
+
+.voice-chat-markdown ul,
+.voice-chat-markdown ol {
+  margin: 0.35rem 0 0.5rem 1.15rem;
+  padding: 0;
+}
+
+.voice-chat-markdown ul:last-child,
+.voice-chat-markdown ol:last-child {
+  margin-bottom: 0;
+}
+
+.voice-chat-markdown ul {
+  list-style-type: disc;
+}
+
+.voice-chat-markdown ol {
+  list-style-type: decimal;
+}
+
+.voice-chat-markdown li {
+  margin-bottom: 0.2rem;
+  line-height: 1.4;
+}
+
+.voice-chat-markdown li:last-child {
+  margin-bottom: 0;
+}
+
+.voice-chat-markdown code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.82em;
+  background: rgba(255, 255, 255, 0.16);
+  padding: 0.12rem 0.32rem;
+  border-radius: 4px;
+}
+
+.voice-chat-markdown pre {
+  margin: 0.4rem 0;
+  padding: 0.55rem;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+.voice-chat-markdown pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
+.voice-chat-markdown blockquote {
+  border-left: 2.5px solid rgba(255, 255, 255, 0.35);
+  margin: 0.4rem 0;
+  padding-left: 0.6rem;
+  opacity: 0.88;
+}
+
+.voice-chat-markdown a {
+  color: #70baff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .voice-chat-turn .glass-icon-btn {
   color: rgba(255, 255, 255, 0.75);
   flex-shrink: 0;
@@ -2212,8 +2303,8 @@ th { background: var(--faint); color: var(--forest); }
   justify-content: center;
   border-radius: 9999px;
   background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  border: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
   transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease;
   overflow: visible;
   padding: 2px;
@@ -2222,7 +2313,7 @@ th { background: var(--faint); color: var(--forest); }
 }
 .bot-avatar-host:hover {
   transform: scale(1.1);
-  box-shadow: 0 6px 20px rgba(45, 212, 191, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: 0 6px 20px rgba(45, 212, 191, 0.4);
 }
 .bot-avatar-host:active {
   transform: scale(0.96);
@@ -2230,10 +2321,10 @@ th { background: var(--faint); color: var(--forest); }
 
 .voice-dock-bot-avatar {
   background: rgba(255, 255, 255, 0.12);
-  border: 1.5px solid rgba(255, 255, 255, 0.35);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  border: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
   animation: ghost-dock-float 3s ease-in-out infinite;
-  transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.24s ease, border-color 0.24s ease;
+  transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.24s ease;
 }
 
 @keyframes ghost-dock-float {
@@ -5530,16 +5621,16 @@ button.active-cases-card:hover {
 .relief-stat-row:nth-of-type(3) .relief-stat-icon { color: var(--accent-600); }
 .relief-pin-icon .pin-shape { background: var(--accent-600); }
 
-/* App tiles: fills distinct from the canvas, a light ring and a drop shadow
+/* App tiles: fills distinct from the canvas, with a soft drop shadow
    (box-shadow only, so the tile size is unchanged). */
-.ios-desktop-icon.ios-green, .window-mini-icon.ios-green { background: #1F7A4D; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55), 0 10px 24px rgba(0, 0, 0, 0.35); }
-.ios-desktop-icon.ios-orange, .window-mini-icon.ios-orange { background: var(--accent-600); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55), 0 10px 24px rgba(0, 0, 0, 0.35); }
-.ios-desktop-icon.ios-blue, .window-mini-icon.ios-blue { background: #2A7364; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55), 0 10px 24px rgba(0, 0, 0, 0.35); }
-.ios-desktop-icon.ios-purple, .window-mini-icon.ios-purple { background: #3F4FB8; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55), 0 10px 24px rgba(0, 0, 0, 0.35); }
-.ios-desktop-icon.ios-teal, .window-mini-icon.ios-teal { background: #2A7364; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55), 0 10px 24px rgba(0, 0, 0, 0.35); }
-.ios-desktop-icon.ios-indigo, .window-mini-icon.ios-indigo { background: #3F4FB8; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55), 0 10px 24px rgba(0, 0, 0, 0.35); }
-.ios-desktop-icon.ios-amber, .window-mini-icon.ios-amber { background: var(--accent-600); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55), 0 10px 24px rgba(0, 0, 0, 0.35); }
-.ios-desktop-icon.ios-rose, .window-mini-icon.ios-rose { background: #1F7A4D; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55), 0 10px 24px rgba(0, 0, 0, 0.35); }
+.ios-desktop-icon.ios-green, .window-mini-icon.ios-green { background: #1F7A4D; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35); }
+.ios-desktop-icon.ios-orange, .window-mini-icon.ios-orange { background: var(--accent-600); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35); }
+.ios-desktop-icon.ios-blue, .window-mini-icon.ios-blue { background: #2A7364; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35); }
+.ios-desktop-icon.ios-purple, .window-mini-icon.ios-purple { background: #3F4FB8; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35); }
+.ios-desktop-icon.ios-teal, .window-mini-icon.ios-teal { background: #2A7364; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35); }
+.ios-desktop-icon.ios-indigo, .window-mini-icon.ios-indigo { background: #3F4FB8; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35); }
+.ios-desktop-icon.ios-amber, .window-mini-icon.ios-amber { background: var(--accent-600); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35); }
+.ios-desktop-icon.ios-rose, .window-mini-icon.ios-rose { background: #1F7A4D; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35); }
 
 /* Astryx secondary buttons (variant class x17x4s8c): white fill, green text,
    edge drawn with box-shadow (color only, no size change). */
@@ -5961,18 +6052,17 @@ body:has(.persona-dock-workspace-blurred) {
   width: 56px;
   height: 56px;
   border-radius: 16px;
-  border: 1.5px solid rgba(255, 255, 255, 0.85);
-  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  border: none;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.32);
   background: rgba(0, 0, 0, 0.2);
   overflow: visible;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  transition: box-shadow 0.18s ease;
 }
 
 .persona-macos-dock-item:hover .persona-macos-dock-avatar-frame {
-  border-color: #ffffff;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.38);
 }
 

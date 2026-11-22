@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from "react";
+import ReactMarkdown from "react-markdown";
 import { ChevronDown, ChevronUp, Mic, Send, Volume2, X } from "lucide-react";
 import type { MiniApp, Profile, UIAction } from "@/src/lib/contracts";
 import { transcribe } from "@/src/lib/client";
@@ -560,7 +561,9 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
           <div key={turn.id} className={"voice-chat-turn " + turn.role}>
             <div className="voice-chat-body">
               <span className="voice-chat-role">{turn.role === "user" ? "You" : "Assistant"}</span>
-              <p>{turn.text}</p>
+              <div className="voice-chat-markdown">
+                <ReactMarkdown>{turn.text}</ReactMarkdown>
+              </div>
             </div>
             {turn.role === "assistant" && turn.id === lastAssistantId && (
               <button
