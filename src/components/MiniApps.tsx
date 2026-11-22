@@ -26,6 +26,7 @@ import { Selector } from "@astryxdesign/core/Selector";
 import { FileInput } from "@astryxdesign/core/FileInput";
 import { HStack } from "@astryxdesign/core/HStack";
 import { VStack } from "@astryxdesign/core/VStack";
+import { ProgressBar } from "@astryxdesign/core/ProgressBar";
 import { claimStepHelp, dirFor, evidenceText, pick, stageText, statusText, strings, toneText, useLang, type ClaimTone, type EvidenceLabel, type Lang } from "@/src/lib/i18n";
 
 export type ViewContext = {
@@ -493,40 +494,95 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
           <Banner status={toneStatus[tone]} title={pick(toneText[tone], lang)} isDismissable dismissLabel={lang === "ur" ? "بند کریں" : "Dismiss"} onDismiss={() => setTracked(null)} />
         </section>
       : message && <Banner status="success" title={message} />}
-    {editing ? <Card padding={6}>
-      <VStack gap={2}>
-        <div style={{ display: "flex", justifyContent: "flex-start", width: "100%" }}>
+    {editing ? <Card padding={5}>
+      <VStack gap={3} width="100%">
+        {/* Duolingo-style Top Progress Bar + Audio Button */}
+        <HStack justify="between" vAlign="center" gap={3} width="100%">
           <span data-cua="claim-back-btn" style={{ display: "inline-flex" }}>
             <Button variant="ghost" size="sm" icon={<ArrowLeft size={16} />} label="Back" onClick={() => setEditing(false)} />
           </span>
-        </div>
-        <VStack gap={0.5}>
-          <h2>{draft?.status === "needs_proof" ? "Replace evidence" : "Prepare a claim"}</h2>
-          <p>Use synthetic details and pretend documents only.</p>
-        </VStack>
-      </VStack>
-      <HStack gap={1} wrap="wrap" paddingBlockStart={3}>
-        {progressSteps.map((label, index) => (
-          <Badge key={label} label={index + 1 + ". " + label} variant={step === index ? "info" : "neutral"} />
-        ))}
-      </HStack>
-      <VStack gap={2} paddingBlockStart={3}>
-        <p lang={lang} dir={dirFor(lang)}>{claimStepHelp[lang][step]}</p>
-        <Button variant="secondary" label="Listen to this step" icon={<AudioLines size={16} />} onClick={() =>
-          void speakText(claimStepHelp[lang][step], lang, ctx.lite || ctx.offline).then(setMessage)} />
+          <div style={{ flex: 1, minWidth: 140 }}>
+            <ProgressBar
+              label={`Step ${step + 1} of 3`}
+              value={step === 0 ? 34 : step === 1 ? 68 : 100}
+              max={100}
+              variant={step === 2 ? "success" : "accent"}
+              isLabelHidden
+            />
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            label={lang === "ur" ? "سنیں" : "Listen"}
+            icon={<AudioLines size={15} />}
+            onClick={() => void speakText(claimStepHelp[lang][step], lang, ctx.lite || ctx.offline).then(setMessage)}
+          />
+        </HStack>
+
+        {/* 3 Visual Milestone Pills */}
+        <HStack gap={2} wrap="wrap" vAlign="center" justify="between" width="100%">
+          {([
+            { idx: 0, label: progressSteps[0], Icon: UsersRound },
+            { idx: 1, label: progressSteps[1], Icon: FileCheck },
+            { idx: 2, label: progressSteps[2], Icon: CheckCircle2 },
+          ] as const).map(({ idx, label, Icon }) => {
+            const done = step > idx;
+            const active = step === idx;
+            return (
+              <Button
+                key={label}
+                variant={active ? "primary" : done ? "secondary" : "ghost"}
+                size="sm"
+                label={`${idx + 1}. ${label}`}
+                icon={done ? <Check size={15} /> : <Icon size={15} />}
+                onClick={() => setStep(idx)}
+              />
+            );
+          })}
+        </HStack>
+
+        <p className="muted" lang={lang} dir={dirFor(lang)} style={{ margin: 0, fontSize: "0.9rem" }}>
+          {claimStepHelp[lang][step]}
+        </p>
       </VStack>
       {step === 0 && <form onSubmit={event => { event.preventDefault(); setStep(1); }}>
         <VStack gap={3} paddingBlockStart={3}>
           <HStack gap={3} wrap="wrap">
             <div data-cua="claim-income-input" style={{ flex: 1, minWidth: 180 }}>
-              <NumberInput label="Monthly household income (PKR)" value={details.monthly_income} onChange={value => setDetails({ ...details, monthly_income: value ?? 0 })} min={0} isRequired width="100%" />
+              <VStack gap={1.5}>
+                <NumberInput label="Monthly income (PKR)" value={details.monthly_income} onChange={value => setDetails({ ...details, monthly_income: value ?? 0 })} min={0} isRequired width="100%" />
+                <HStack gap={1} wrap="wrap">
+                  {[10000, 15000, 20000, 25000].map(preset => (
+                    <Button
+                      key={preset}
+                      variant={details.monthly_income === preset ? "primary" : "secondary"}
+                      size="sm"
+                      label={`${preset / 1000}k`}
+                      onClick={() => setDetails({ ...details, monthly_income: preset })}
+                    />
+                  ))}
+                </HStack>
+              </VStack>
             </div>
             <div data-cua="claim-household-input" style={{ flex: 1, minWidth: 180 }}>
-              <NumberInput label="People in household" value={details.household_size} onChange={value => setDetails({ ...details, household_size: value ?? 1 })} min={1} isRequired width="100%" />
+              <VStack gap={1.5}>
+                <NumberInput label="Household size" value={details.household_size} onChange={value => setDetails({ ...details, household_size: value ?? 1 })} min={1} isRequired width="100%" />
+                <HStack gap={1} wrap="wrap">
+                  {[2, 3, 5, 7].map(count => (
+                    <Button
+                      key={count}
+                      variant={details.household_size === count ? "primary" : "secondary"}
+                      size="sm"
+                      label={`${count} people`}
+                      onClick={() => setDetails({ ...details, household_size: count })}
+                    />
+                  ))}
+                </HStack>
+              </VStack>
             </div>
           </HStack>
           <div data-cua="claim-notes-input" style={{ width: "100%" }}>
-            <TextArea label="Additional details" value={details.notes} onChange={value => setDetails({ ...details, notes: value })} placeholder="Optional information for the reviewer" isOptional />
+            <TextArea label="Short note (optional)" value={details.notes} onChange={value => setDetails({ ...details, notes: value })} placeholder="e.g. Flood damage, widow household" isOptional />
           </div>
           <HStack gap={2} wrap="wrap">
             <span data-cua="claim-continue-evidence" style={{ display: "inline-flex" }}>
@@ -605,9 +661,24 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
       </VStack>}
       {step === 2 && <VStack gap={3} paddingBlockStart={3}>
         <HStack gap={2} wrap="wrap">
-          <Card variant="muted" padding={3}><VStack gap={0.5}><small>Monthly income</small><strong>{currency(details.monthly_income)}</strong></VStack></Card>
-          <Card variant="muted" padding={3}><VStack gap={0.5}><small>Household size</small><strong>{details.household_size} people</strong></VStack></Card>
-          <Card variant="muted" padding={3}><VStack gap={0.5}><small>Evidence</small><strong lang={evidenceShown ? lang : undefined}>{evidenceShown || "Awaiting proof"}</strong></VStack></Card>
+          <Card variant="muted" padding={3}>
+            <HStack gap={2} vAlign="center">
+              <CircleDollarSign size={20} color="#0f766e" />
+              <VStack gap={0.5}><small>Income</small><strong>{currency(details.monthly_income)}</strong></VStack>
+            </HStack>
+          </Card>
+          <Card variant="muted" padding={3}>
+            <HStack gap={2} vAlign="center">
+              <UsersRound size={20} color="#0f766e" />
+              <VStack gap={0.5}><small>Household</small><strong>{details.household_size} people</strong></VStack>
+            </HStack>
+          </Card>
+          <Card variant="muted" padding={3}>
+            <HStack gap={2} vAlign="center">
+              <FileCheck size={20} color={evidenceShown ? "#16a34a" : "#d97706"} />
+              <VStack gap={0.5}><small>Proof</small><strong lang={evidenceShown ? lang : undefined}>{evidenceShown || "Awaiting proof"}</strong></VStack>
+            </HStack>
+          </Card>
         </HStack>
         {(draft?.documents?.length ?? 0) > 0 && (
           <VStack gap={1.5} width="100%">
@@ -692,6 +763,19 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
                 ? `Emergency Cash Aid · ${currency(item.amount_pkr)}`
                 : "Household Relief Assistance";
 
+            const journey =
+              item.payment_status === "paid" || item.status === "closed"
+                ? { value: 100, variant: "success" as const, label: "Paid" }
+                : item.status === "rejected"
+                  ? { value: 100, variant: "error" as const, label: "Rejected" }
+                  : item.status === "approved"
+                    ? { value: 82, variant: "success" as const, label: awaitingFunds ? "Awaiting funds" : "Approved" }
+                    : item.status === "needs_proof"
+                      ? { value: 52, variant: "warning" as const, label: "Needs proof" }
+                      : item.status === "in_review" || item.status === "submitted"
+                        ? { value: 58, variant: "accent" as const, label: "In review" }
+                        : { value: 25, variant: "neutral" as const, label: "Draft" };
+
             return <Card key={item.id} variant="muted" padding={4}>
             <VStack gap={2}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.75rem", width: "100%", flexWrap: "wrap" }}>
@@ -703,6 +787,14 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
                   <Button variant="ghost" size="sm" label={opened === item.id ? "Hide details" : "View details"} onClick={() => setOpened(opened === item.id ? undefined : item.id)} />
                 </span>
               </div>
+
+              <ProgressBar
+                label={journey.label}
+                value={journey.value}
+                max={100}
+                variant={journey.variant}
+                isLabelHidden
+              />
 
               {/* Show actual contents of the claim */}
               <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", flexWrap: "wrap", fontSize: "0.86rem", color: "#4b5563" }}>
