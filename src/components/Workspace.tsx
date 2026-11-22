@@ -8,6 +8,7 @@ import { ArrowLeft, ArrowRight, ArrowUpRight, Award, Bell, CheckCircle2, Chevron
   LoaderCircle, LogOut, Maximize2, MessageSquare, Minimize2, Minus, Radio, ShieldCheck, Trophy, UserPlus, UserRound, Users, Wifi, X } from "lucide-react";
 import { canOpen, personas, type Audit, type Claim, type Family, type MiniApp, type Overview, type Persona, type Profile } from "@/src/lib/contracts";
 import { api, jsonRequest } from "@/src/lib/client";
+import { pick, strings, useLang } from "@/src/lib/i18n";
 import { queued, pushMutation, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
 import { syncQueue } from "@/src/lib/offline/syncEngine";
 import { apps, appTitle } from "./launcher";
@@ -76,6 +77,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   const [fixtureOnline, setFixtureOnline] = useState(true);
   const [browserOnline, setBrowserOnline] = useState(true);
   const [lite, setLite] = useState(false);
+  const { lang } = useLang(); // app-wide language, toggled by the voice dock pill
   const [pending, setPending] = useState<Mutation[]>([]);
   const [busy, setBusy] = useState<Persona | "signout" | null>(null);
   const [headMessage, setHeadMessage] = useState("");
@@ -125,13 +127,13 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
     try { setPending(await queued(owner, scope)); } catch { setHeadMessage("Offline storage is unavailable in this browser."); }
   }, [owner, scope]);
 
-  const synchronize = useCallback(async (manual = false) => {
+  const synchronize = useCallback(async (manual = false, flush = false) => {
     if (!owner || offline || activeCall.current) return;
     const controller = new AbortController();
     activeCall.current = controller;
     setSyncing(true);
     try {
-      const count = await syncQueue({ owner, citizen: scope, manual, signal: controller.signal, onTranscript: setTranscript });
+      const count = await syncQueue({ owner, citizen: scope, manual, flush, signal: controller.signal, onTranscript: setTranscript });
       if (count && !controller.signal.aborted) {
         setVersion(value => value + 1);
         setHeadMessage(count + (count === 1 ? " queued item synced." : " queued items synced."));
@@ -147,9 +149,23 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
     }
   }, [owner, scope, offline, reloadQueue]);
 
+  // Flush the outbox as soon as the connection returns or the app regains focus.
+  useEffect(() => {
+    const flushNow = () => { if (!offline) void synchronize(false, true); };
+    const onVisible = () => { if (document.visibilityState === "visible") flushNow(); };
+    window.addEventListener("online", flushNow);
+    window.addEventListener("focus", flushNow);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("online", flushNow);
+      window.removeEventListener("focus", flushNow);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [offline, synchronize]);
+
   useEffect(() => {
     void reloadQueue();
-    if (!offline) void synchronize();
+    if (!offline) void synchronize(false, true);
     const interval = window.setInterval(() => { if (!offline) void synchronize(); }, 4500);
     return () => {
       window.clearInterval(interval);
@@ -596,7 +612,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   const status = offline ? "Offline" : "Online";
   const failed = pending.find(item => item.failure);
   const context: ViewContext | null = profile ? {
-    profile, citizen, offline, version, enqueue, selectFamily, prefill, stepNav, voiceLang: profile.locale,
+    profile, citizen, offline, version, enqueue, selectFamily, prefill, stepNav, voiceLang: lang,
     go: changeApp, refresh: () => setVersion(current => current + 1), lite,
   } : null;
 
@@ -802,7 +818,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                                     onClick={() => void synchronize(true)}
                                   >
                                     <Cloud size={15} />
-                                    <span>{syncing ? "Syncing…" : "Sync now"}</span>
+                                    <span lang={lang}>{pick(syncing ? strings.syncing : strings.syncNow, lang)}</span>
                                   </button>
                                 )}
                               </div>
@@ -1065,7 +1081,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
               <div className="ios-desktop-grid">
                 {available.map(id => {
                   const item = apps[id];
-                  const title = appTitle(id, profile.role);
+                  const title = appTitle(id, profile.role, lang);
                   const Icon = item.icon;
                   const isRunning = openApps.includes(id);
                   const isMinimized = isRunning && minimizedApps.includes(id);
@@ -1088,7 +1104,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                           <Icon size={34} strokeWidth={2.1} />
                         )}
                       </div>
-                      <span className="ios-desktop-label">{title}</span>
+                      <span className="ios-desktop-label" lang={lang === "ur" && title !== item.title ? "ur" : undefined}>{title}</span>
                       {isRunning && <span className="ios-app-running-dot" />}
                     </motion.button>
                   );
@@ -1158,7 +1174,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                           <span className={"window-mini-icon " + appMeta.color}>
                             <Icon size={14} />
                           </span>
-                          <span className="window-title-text">{appTitle(appId, profile.role)}</span>
+                          <span className="window-title-text" lang={lang === "ur" && appTitle(appId, profile.role, lang) !== apps[appId].title ? "ur" : undefined}>{appTitle(appId, profile.role, lang)}</span>
                         </div>
 
                         {/* Window Quick Size & Close Options */}
@@ -1216,13 +1232,13 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
         <nav className="minimized-tray" aria-label="Minimized windows">
           {openApps.filter(id => minimizedApps.includes(id)).map(appId => {
             const meta = apps[appId];
-            const title = appTitle(appId, profile.role);
+            const title = appTitle(appId, profile.role, lang);
             const TrayIcon = meta.icon;
             return (
               <button key={appId} type="button" className="minimized-chip" aria-label={"Restore " + title + " window"}
                 onClick={() => openAppWindow(appId)}>
                 <span className={"window-mini-icon " + meta.color} aria-hidden="true"><TrayIcon size={14} /></span>
-                <span className="minimized-chip-label">{title}</span>
+                <span className="minimized-chip-label" lang={lang === "ur" && title !== meta.title ? "ur" : undefined}>{title}</span>
               </button>
             );
           })}

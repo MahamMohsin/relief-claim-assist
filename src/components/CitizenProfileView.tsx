@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { api, HttpError } from "@/src/lib/client";
 import { prepareDocumentImage } from "@/src/lib/compressImage";
+import { SLOW_HINT_TEXT, useSlowHint } from "@/src/lib/useSlowHint";
 import type { CitizenDocument, CitizenProfileData, CitizenRecord } from "@/src/lib/contracts";
 import type { ViewContext } from "./MiniApps";
 import { WhatsAppTokenWidget } from "./WhatsAppTokenWidget";
@@ -116,6 +117,7 @@ export function CitizenProfileView({ ctx }: { ctx: ViewContext }) {
   const [imageData, setImageData] = useState<string | null>(null);
   const [applyToCore, setApplyToCore] = useState(true);
   const [busy, setBusy] = useState(false);
+  const slow = useSlowHint(busy);
 
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -650,7 +652,7 @@ export function CitizenProfileView({ ctx }: { ctx: ViewContext }) {
               </span>
               <Button
                 variant="primary"
-                label={busy ? "Extracting…" : "Extract & save"}
+                label={busy ? (slow ? SLOW_HINT_TEXT : "Extracting…") : "Extract & save"}
                 icon={<Icon icon={Sparkles} size="sm" />}
                 isLoading={busy}
                 isDisabled={busy || ctx.offline || !imageData || migrationMissing}

@@ -1,9 +1,14 @@
 import { BookOpen, ClipboardCheck, FileText, Fingerprint, IdCard, MessageSquareShare, Scale, ShieldCheck, SlidersHorizontal, Users, UsersRound } from "lucide-react";
 import type { MiniApp, Role } from "@/src/lib/contracts";
+import { appText, pick, type Lang } from "@/src/lib/i18n";
 
-export function appTitle(id: MiniApp, role?: Role): string {
-  if (id === "profile" && role === "helper") return "Family Profile";
-  return apps[id].title;
+const staffRoles: Role[] = ["officer", "admin", "auditor"];
+export function appTitle(id: MiniApp, role?: Role, lang: Lang = "en"): string {
+  // Helpers see the profile tile as "Family Profile".
+  const key = id === "profile" && role === "helper" ? "familyProfile" : id;
+  // Citizen-facing tile names follow the app language; staff screens stay English.
+  if (lang === "ur" && appText[key] && !(role && staffRoles.includes(role))) return pick(appText[key], lang);
+  return key === "familyProfile" ? "Family Profile" : apps[id].title;
 }
 
 export const apps = {

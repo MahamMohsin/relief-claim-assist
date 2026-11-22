@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useLang } from "@/src/lib/i18n";
+import { SLOW_HINT_TEXT, useSlowHint } from "@/src/lib/useSlowHint";
 import {
   AlertTriangle,
   CircleDollarSign,
@@ -144,11 +146,13 @@ function CopyVerdictButton({ text }: { text: string }) {
 }
 
 export function ScamChatView({ ctx }: { ctx: ViewContext }) {
+  const { lang } = useLang();
   const [turns, setTurns] = useState<ScamTurn[]>([]);
   const [draft, setDraft] = useState("");
   const [attachment, setAttachment] = useState<PendingImage | null>(null);
   const [inputError, setInputError] = useState("");
   const [busy, setBusy] = useState(false);
+  const slow = useSlowHint(busy);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const activeController = useRef<AbortController | null>(null);
   const submitRef = useRef<(rawText: string, explicitImage?: PendingImage | null) => Promise<void>>(async () => {});
@@ -669,7 +673,7 @@ export function ScamChatView({ ctx }: { ctx: ViewContext }) {
                     <ChatMessageBubble variant="ghost">
                       {turn.status === "checking" && (
                         <Text color="secondary">
-                          Inspecting content against official policy rules and the payment rail…
+                          {slow ? SLOW_HINT_TEXT : "Inspecting content against official policy rules and the payment rail…"}
                         </Text>
                       )}
 
@@ -851,7 +855,7 @@ export function ScamChatView({ ctx }: { ctx: ViewContext }) {
                                   onClick={() =>
                                     void speakText(
                                       spokenSummary,
-                                      ctx.voiceLang,
+                                      lang,
                                       ctx.lite || ctx.offline,
                                     )
                                   }

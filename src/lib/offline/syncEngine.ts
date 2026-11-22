@@ -1,20 +1,22 @@
-import { api, HttpError, transcribe } from "@/src/lib/client";
+import { api, isRetryable, REQUEST_TIMEOUT_MS, transcribe } from "@/src/lib/client";
 import { complete, markRetry, queued, resolveDraft } from "./queue";
 
 type SyncOptions = {
   owner: string;
   citizen: string;
   manual: boolean;
+  /** Retry now, ignoring backoff (reconnect / app focus), but skip items that failed permanently. */
+  flush?: boolean;
   signal: AbortSignal;
   onTranscript: (transcript: string) => void;
 };
 
-export async function syncQueue({ owner, citizen, manual, signal, onTranscript }: SyncOptions) {
+export async function syncQueue({ owner, citizen, manual, flush = false, signal, onTranscript }: SyncOptions) {
   let synced = 0;
   const blocked = new Set<string>();
   for (const item of await queued(owner, citizen)) {
     if (signal.aborted) break;
-    if (!manual && (item.failure || item.nextAttempt > Date.now())) continue;
+    if (!manual && (item.failure || (!flush && item.nextAttempt > Date.now()))) continue;
     let claimId: string | undefined;
     if (item.dependsOn) {
       if (blocked.has(item.dependsOn)) continue;
@@ -23,7 +25,7 @@ export async function syncQueue({ owner, citizen, manual, signal, onTranscript }
     }
     try {
       if (item.action === "transcribe" && item.audio) {
-        const text = await transcribe(item.audio, item.body.locale === "en" ? "en" : "ur", signal);
+        const text = await transcribe(item.audio, item.body.locale === "en" ? "en" : "ur", signal, REQUEST_TIMEOUT_MS);
         if (text) onTranscript(text);
         await complete(item);
       } else if (item.action !== "transcribe") {
@@ -34,7 +36,7 @@ export async function syncQueue({ owner, citizen, manual, signal, onTranscript }
     } catch (error) {
       if (signal.aborted) break;
       blocked.add(item.id);
-      const permanent = error instanceof HttpError && error.status < 500 && ![408, 429].includes(error.status);
+      const permanent = !isRetryable(error);
       await markRetry(item, permanent && error instanceof Error ? error.message : undefined);
       if (!permanent) break;
     }

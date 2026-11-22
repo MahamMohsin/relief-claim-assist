@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { AlertCircle, ArrowLeft, ArrowUpDown, AudioLines, CalendarDays, Check, CheckCircle2, ChevronRight, CircleDollarSign, FileCheck, FileText, LoaderCircle, LockKeyhole, MessageSquare, Paperclip, Plus, Search, ShieldAlert, Sparkles, UsersRound, XCircle } from "lucide-react";
-import { api, HttpError } from "@/src/lib/client";
+import { api, HttpError, isRetryable } from "@/src/lib/client";
+import { compressImage } from "@/src/lib/offline/compressImage";
 import { getDraft, resolveDraft, saveDraft, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
 import type { Action, Audit, Claim, ClaimSummaryResult, Family, MiniApp, Payload, Privacy, Profile, Rule, RuleConfig, UIAction } from "@/src/lib/contracts";
 import { speakText } from "./os/speech";
@@ -24,6 +25,7 @@ import { Selector } from "@astryxdesign/core/Selector";
 import { FileInput } from "@astryxdesign/core/FileInput";
 import { HStack } from "@astryxdesign/core/HStack";
 import { VStack } from "@astryxdesign/core/VStack";
+import { claimStepHelp, dirFor, evidenceText, pick, stageText, statusText, strings, toneText, useLang, type ClaimTone, type EvidenceLabel, type Lang } from "@/src/lib/i18n";
 
 export type ViewContext = {
   profile: Profile;
@@ -105,22 +107,67 @@ function useActionList<T>(action: Action, ctx: ViewContext, withFamily = false) 
 }
 
 const clean: Payload = { monthly_income: 14500, household_size: 3, notes: "" };
-const progressSteps = ["Household", "Evidence", "Review & submit"];
-const claimStepHelp = {
-  en: [
-    "Enter your total monthly household income and the number of people in your household. Then continue to evidence.",
-    "Attach a readable synthetic document. You can pick a sample or upload an image. Then select Review claim.",
-    "Check the details and evidence. Select Submit claim when you are ready. An officer will review it.",
-  ],
-  ur: [
-    "گھر کی کل ماہانہ آمدنی اور گھر کے افراد کی تعداد درج کریں۔ پھر ثبوت کے مرحلے پر جائیں۔",
-    "واضح فرضی دستاویز منسلک کریں۔ آپ نمونہ منتخب کر سکتے ہیں یا تصویر لگا سکتے ہیں۔ پھر درخواست کا جائزہ لیں۔",
-    "تفصیلات اور ثبوت دیکھ لیں، پھر درخواست جمع کریں۔ ایک افسر اس کا جائزہ لے گا۔",
-  ],
+const claimIsChecking = (claim: Claim) => claim.ai_route === "checking" || Boolean(claim.documents?.some(doc => doc.verified_status === "processing"));
+// Citizen-facing stage: Received → Checking documents → Checked / Needs proof / With officer.
+const statusLabel = (status: string, lang: Lang) => statusText[status] ? pick(statusText[status], lang) : title(status);
+function claimStage(claim: Claim, lang: Lang) {
+  if (claim.status === "draft") return null;
+  if (claimIsChecking(claim)) return pick(stageText.checking, lang);
+  if (claim.ai_route === "human_review") return pick(stageText.failedToOfficer, lang);
+  if (claim.status === "needs_proof") return pick(stageText.needsProof, lang);
+  if (claim.status === "submitted" || claim.status === "in_review") return pick(stageText.withOfficer, lang);
+  return statusLabel(claim.status, lang);
+}
+// Status banner after submit / evidence upload, driven by the live (polled) claim.
+function claimTone(claim: Claim): ClaimTone | null {
+  if (claimIsChecking(claim)) return "processing";
+  if (claim.status === "needs_proof") return "needs_proof";
+  if (claim.status === "submitted" || claim.status === "in_review") return "in_review";
+  if (claim.status === "approved") return "approved";
+  if (claim.status === "rejected") return "rejected";
+  if (claim.status === "draft" && ["unreadable", "incomplete", "unverified"].includes(claim.documents?.at(-1)?.verified_status ?? "")) return "needs_proof";
+  return null;
+}
+const evidenceTone = (status: string): ClaimTone | null =>
+  status === "processing" ? "processing" : ["unreadable", "incomplete", "unverified"].includes(status) ? "needs_proof" : null;
+// "Latest evidence" label from the live document (same polled data as the banner and claim card).
+function evidenceLabel(doc: { verified_status: string; tamper_flag?: boolean }): EvidenceLabel | null {
+  if (doc.verified_status === "processing") return "checking";
+  if (doc.tamper_flag || ["flagged", "tampered"].includes(doc.verified_status)) return "flagged";
+  if (["readable", "verified"].includes(doc.verified_status)) return "verified";
+  if (["unreadable", "incomplete", "blurry", "blurred", "needs_proof"].includes(doc.verified_status)) return "clearer";
+  if (["check_failed", "unverified", "failed"].includes(doc.verified_status)) return "failed";
+  return null;
+}
+const toneStatus: Record<ClaimTone, "success" | "warning" | "info" | "error"> = {
+  processing: "success", needs_proof: "warning", in_review: "info", approved: "success", rejected: "error",
 };
+const progressSteps = ["Household", "Evidence", "Review & submit"];
+// Decision reason: the selected language first, the other one small underneath.
+function DecisionReason({ en, ur, lang }: { en: string | null; ur: string | null; lang: Lang }) {
+  const other: Lang = lang === "ur" ? "en" : "ur";
+  const text = { en, ur };
+  const firstLang = text[lang] ? lang : other;
+  const first = text[firstLang];
+  const second = text[lang] ? text[other] : null;
+  return <>
+    {first && <p lang={firstLang} dir={dirFor(firstLang)}>{first}</p>}
+    {second && <small className="muted" lang={other} dir={dirFor(other)}>{second}</small>}
+  </>;
+}
 
 function ClaimView({ ctx }: { ctx: ViewContext }) {
+  const { lang } = useLang();
   const { data: claims, error, loading } = useActionList<Claim[]>("claims", ctx, true);
+  // While background checks run, refresh the claim status (every 10s, or 30s in 2G Lite).
+  const checking = Boolean(claims?.some(claimIsChecking));
+  const refreshRef = useRef(ctx.refresh);
+  refreshRef.current = ctx.refresh;
+  useEffect(() => {
+    if (!checking || ctx.offline) return;
+    const timer = window.setInterval(() => refreshRef.current(), ctx.lite ? 30_000 : 10_000);
+    return () => window.clearInterval(timer);
+  }, [checking, ctx.offline, ctx.lite]);
   const [editing, setEditing] = useState(false);
   const [step, setStep] = useState(0);
   const [details, setDetails] = useState<Payload>(clean);
@@ -135,6 +182,23 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
   const [message, setMessage] = useState("");
   const [fault, setFault] = useState("");
   const [opened, setOpened] = useState<string>();
+  // Claim whose status the banner follows. `live` turns on once the polled list has shown a status for it,
+  // after which only the live status is used (the one-time response is just the first frame).
+  const [tracked, setTracked] = useState<{ id: string; fallback: ClaimTone | null; live: boolean } | null>(null);
+  const trackedLive = tracked ? claims?.find(item => item.id === tracked.id) : undefined;
+  const liveTone = trackedLive ? claimTone(trackedLive) : null;
+  const tone = tracked ? (tracked.live ? liveTone : liveTone ?? tracked.fallback) : null;
+  useEffect(() => {
+    if (tracked && !tracked.live && liveTone) setTracked({ ...tracked, live: true });
+  }, [tracked, liveTone]);
+  useEffect(() => {
+    if (!tracked) return;
+    if (tracked.live && !tone) { setTracked(null); return; }
+    // Only in_review / approved auto-hide (6s). needs_proof and rejected stay until the status changes or × is tapped.
+    if (tone !== "in_review" && tone !== "approved") return;
+    const timer = window.setTimeout(() => setTracked(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [tracked, tone]);
   const previousPrefill = useRef<ViewContext["prefill"]>(null);
   const scope = ctx.citizen ?? "self";
   const editingRef = useRef(editing);
@@ -309,6 +373,13 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
 
   if (!ctx.citizen) return <FamilyRequired ctx={ctx} />;
   const draft = claims?.find(item => item.id === claimId);
+  // Latest evidence from the live polled claim (agrees with the banner and the claim card).
+  // While it is still processing, the polling effect above keeps refreshing (10s, 30s in 2G Lite).
+  const liveDoc = draft?.documents?.at(-1);
+  const liveLabel = liveDoc ? evidenceLabel(liveDoc) : null;
+  const evidenceShown = attached === "Queued evidence" ? pick(strings.queuedEvidence, lang)
+    : liveDoc ? (liveLabel ? pick(evidenceText[liveLabel], lang) : title(liveDoc.verified_status))
+    : attached;
 
   function start(item?: Claim) {
     setClaimId(item?.id ?? null);
@@ -321,12 +392,14 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
     setEditing(true);
     setFault("");
     setMessage("");
+    setTracked(null);
   }
 
   async function run(action: "draft" | "submit" | "evidence") {
     setBusy(true);
     setFault("");
     setMessage("");
+    setTracked(null);
     const key = crypto.randomUUID();
     try {
       let currentId = claimId ?? (pendingDraft && !ctx.offline ? await resolveDraft(ctx.profile.id, pendingDraft) : null);
@@ -348,30 +421,39 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
       const body = action === "evidence"
         ? { ...base, docType, ...(image ? { image } : { fixture }) }
         : { ...base, payload: details };
-      if (ctx.offline || (!currentId && pendingDraft)) {
+      const queueInOutbox = async () => {
         await ctx.enqueue(action, body, { key, dependsOn: !currentId ? pendingDraft : undefined });
         if (action === "draft" && !currentId && !pendingDraft) setPendingDraft(key);
         if (action === "evidence") setAttached("Queued evidence");
         if (action === "submit") {
           setEditing(false);
           await wipeDraft(ctx.profile.id, scope).catch(() => {});
-          setMessage("Claim queued. It will be sent when you reconnect.");
-        } else setMessage("Saved to the offline queue.");
+        }
+        setMessage(pick(strings.savedOnPhone, lang));
+      };
+      if (ctx.offline || (!currentId && pendingDraft)) {
+        await queueInOutbox();
         return;
       }
+      const send = async <T,>() => {
+        try { return await api<T>(action, { ...body, key }); }
+        catch (error) { if (isRetryable(error)) { await queueInOutbox(); return null; } throw error; }
+      };
 
       if (action === "evidence") {
-        const evidence = await api<{ verified_status: string }>(action, { ...body, key });
+        const evidence = await send<{ verified_status: string }>();
+        if (!evidence) return;
         setAttached(title(evidence.verified_status));
       } else {
-        const saved = await api<Claim>(action, { ...body, key });
+        const saved = await send<Claim>();
+        if (!saved) return;
         setClaimId(saved.id);
         if (action === "submit") {
           setEditing(false);
           await wipeDraft(ctx.profile.id, scope).catch(() => {});
           setOpened(saved.id);
-          setMessage(saved.status === "needs_proof" ? "Evidence needs attention. Open the claim to continue." : "Your claim is now with an officer.");
-        } else setMessage("Draft saved.");
+          setTracked({ id: saved.id, fallback: claimTone(saved), live: false });
+        } else setMessage(pick(strings.draftSaved, lang));
       }
       ctx.refresh();
     } catch (error) {
@@ -384,12 +466,14 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
 
   async function readImage(file: File | undefined) {
     if (!file) return;
-    if (file.size > 2_000_000) { setFault("Choose a synthetic image under 2 MB."); return; }
+    if (file.size > 8_000_000) { setFault("Choose a synthetic image under 8 MB."); return; }
     setFault("");
-    const reader = new FileReader();
-    reader.onload = () => setImage(typeof reader.result === "string" ? reader.result : null);
-    reader.onerror = () => setFault("The file could not be opened.");
-    reader.readAsDataURL(file);
+    try {
+      // Compress before upload (smaller in 2G Lite) so weak connections can finish the upload.
+      setImage(await compressImage(file, ctx.lite));
+    } catch {
+      setFault("The file could not be opened.");
+    }
   }
 
   const badge = (status: string) => ["approved", "paid", "granted", "genuine", "readable"].includes(status)
@@ -398,9 +482,13 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
     : ["needs_proof", "revoked", "unreadable", "awaiting_funds"].includes(status) ? "warning" as const
     : ["submitted", "in_review"].includes(status) ? "info" as const : "neutral" as const;
 
-  return <div className="view-stack">
+  return <div className="view-stack" data-app-lang={lang}>
     {(error || fault) && <Banner status="error" title="Something went wrong" description={error || fault} />}
-    {message && <Banner status="success" title={message} />}
+    {tracked && tone
+      ? <section key={tracked.id + tone} className="claim-status" data-tone={tone} lang={lang} dir={dirFor(lang)}>
+          <Banner status={toneStatus[tone]} title={pick(toneText[tone], lang)} isDismissable dismissLabel={lang === "ur" ? "بند کریں" : "Dismiss"} onDismiss={() => setTracked(null)} />
+        </section>
+      : message && <Banner status="success" title={message} />}
     {editing ? <Card padding={6}>
       <VStack gap={2}>
         <div style={{ display: "flex", justifyContent: "flex-start", width: "100%" }}>
@@ -419,9 +507,9 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
         ))}
       </HStack>
       <VStack gap={2} paddingBlockStart={3}>
-        <p lang={ctx.voiceLang} dir={ctx.voiceLang === "ur" ? "rtl" : "ltr"}>{claimStepHelp[ctx.voiceLang][step]}</p>
+        <p lang={lang} dir={dirFor(lang)}>{claimStepHelp[lang][step]}</p>
         <Button variant="secondary" label="Listen to this step" icon={<AudioLines size={16} />} onClick={() =>
-          void speakText(claimStepHelp[ctx.voiceLang][step], ctx.voiceLang, ctx.lite || ctx.offline).then(setMessage)} />
+          void speakText(claimStepHelp[lang][step], lang, ctx.lite || ctx.offline).then(setMessage)} />
       </VStack>
       {step === 0 && <form onSubmit={event => { event.preventDefault(); setStep(1); }}>
         <VStack gap={3} paddingBlockStart={3}>
@@ -438,10 +526,10 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
           </div>
           <HStack gap={2} wrap="wrap">
             <span data-cua="claim-continue-evidence" style={{ display: "inline-flex" }}>
-              <Button type="submit" variant="primary" label="Continue to evidence" endContent={<ChevronRight size={16} />} />
+              <Button type="submit" variant="primary" label={pick(strings.continueToEvidence, lang)} endContent={<ChevronRight size={16} />} />
             </span>
             <span data-cua="claim-save-draft" style={{ display: "inline-flex" }}>
-              <Button variant="secondary" label="Save draft" isDisabled={busy} onClick={() => void run("draft")} />
+              <Button variant="secondary" label={pick(strings.saveDraft, lang)} isDisabled={busy} onClick={() => void run("draft")} />
             </span>
           </HStack>
         </VStack>
@@ -456,31 +544,31 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
           </div>
         </HStack>
         <FileInput label="Upload or take a picture of a synthetic document" value={file} onChange={next => { const picked = Array.isArray(next) ? next[0] ?? null : next; setFile(picked); void readImage(picked ?? undefined); }} accept="image/png,image/jpeg,image/webp" mode="dropzone" isOptional />
-        {attached && <p className="muted">Latest evidence: {attached}</p>}
+        {evidenceShown && <p className="muted" lang={lang} dir={dirFor(lang)}>{pick(strings.latestEvidence, lang)}: {evidenceShown}</p>}
         <HStack gap={2} wrap="wrap">
           <span data-cua="claim-attach-btn" style={{ display: "inline-flex" }}>
             {claimId || pendingDraft
-              ? <Button variant="secondary" label={busy ? "Processing…" : "Attach evidence"} isDisabled={busy} onClick={() => void run("evidence")} />
-              : <Button variant="secondary" label="Save draft to attach evidence" isDisabled={busy} onClick={() => void run("draft")} />}
+              ? <Button variant="secondary" label={pick(busy ? strings.processing : liveDoc ? strings.updateEvidence : strings.attachEvidence, lang)} isDisabled={busy} onClick={() => void run("evidence")} />
+              : <Button variant="secondary" label={pick(strings.saveDraftToAttach, lang)} isDisabled={busy} onClick={() => void run("draft")} />}
           </span>
           <span data-cua="claim-review-btn" style={{ display: "inline-flex" }}>
-            <Button variant="primary" label="Review claim" isDisabled={busy} onClick={() => setStep(2)} />
+            <Button variant="primary" label={pick(strings.reviewClaim, lang)} isDisabled={busy} onClick={() => setStep(2)} />
           </span>
-          <Button variant="ghost" label="Back" onClick={() => setStep(0)} />
+          <Button variant="ghost" label={pick(strings.back, lang)} onClick={() => setStep(0)} />
         </HStack>
       </VStack>}
       {step === 2 && <VStack gap={3} paddingBlockStart={3}>
         <HStack gap={2} wrap="wrap">
           <Card variant="muted" padding={3}><VStack gap={0.5}><small>Monthly income</small><strong>{currency(details.monthly_income)}</strong></VStack></Card>
           <Card variant="muted" padding={3}><VStack gap={0.5}><small>Household size</small><strong>{details.household_size} people</strong></VStack></Card>
-          <Card variant="muted" padding={3}><VStack gap={0.5}><small>Evidence</small><strong>{attached || "Awaiting proof"}</strong></VStack></Card>
+          <Card variant="muted" padding={3}><VStack gap={0.5}><small>Evidence</small><strong lang={evidenceShown ? lang : undefined}>{evidenceShown || "Awaiting proof"}</strong></VStack></Card>
         </HStack>
         <p className="muted">A reviewer reviews every claim before any simulated payment can be issued.</p>
         <HStack gap={2}>
           <span data-cua="claim-submit-btn" style={{ display: "inline-flex" }}>
-            <Button variant="primary" label={busy ? "Submitting…" : ctx.offline ? "Queue claim" : "Submit claim"} isDisabled={busy} onClick={() => void run("submit")} />
+            <Button variant="primary" label={pick(busy ? strings.submitting : ctx.offline ? strings.queueClaim : strings.submitClaim, lang)} isDisabled={busy} onClick={() => void run("submit")} />
           </span>
-          <Button variant="ghost" label="Back" onClick={() => setStep(1)} />
+          <Button variant="ghost" label={pick(strings.back, lang)} onClick={() => setStep(1)} />
         </HStack>
       </VStack>}
     </Card> : <Card padding={6}>
@@ -586,8 +674,13 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
                 <p className="muted breakable">Claim ID: {item.id}</p>
                 {item.payment && !awaitingFunds && <p className="receipt"><CircleDollarSign size={21} /> {currency(item.payment.amount_pkr)} · <strong>{item.payment.raast_ref}</strong> · {title(item.payment.status)}</p>}
                 <HStack gap={2} wrap="wrap">
-                  {["draft", "needs_proof"].includes(item.status) && <Button variant="primary" label={item.status === "draft" ? "Edit draft" : "Update evidence"} onClick={() => start(item)} />}
-                  {item.citizen_reason_en && <Button variant="secondary" label="Play decision" icon={<AudioLines size={16} />} onClick={() => void speakText(item.citizen_reason_ur || item.citizen_reason_en!, item.citizen_reason_ur ? "ur" : "en", ctx.lite || ctx.offline).then(setMessage)} />}
+                  {["draft", "needs_proof"].includes(item.status) && <Button variant="primary" label={item.status === "draft" ? "Edit draft" : pick(strings.updateEvidence, lang)} onClick={() => start(item)} />}
+                  {(item.citizen_reason_en || item.citizen_reason_ur) && <Button variant="secondary" label={pick(strings.playDecision, lang)} icon={<AudioLines size={16} />} onClick={() => {
+                    // Speak the decision in the selected language, falling back to the other one.
+                    const own = lang === "ur" ? item.citizen_reason_ur : item.citizen_reason_en;
+                    const spoken: Lang = own ? lang : lang === "ur" ? "en" : "ur";
+                    void speakText((own ?? item.citizen_reason_en ?? item.citizen_reason_ur)!, spoken, ctx.lite || ctx.offline).then(setMessage);
+                  }} />}
                 </HStack>
               </VStack>}
             </VStack>
@@ -687,6 +780,7 @@ function FamilyView({ ctx }: { ctx: ViewContext }) {
 }
 
 function PrivacyView({ ctx }: { ctx: ViewContext }) {
+  const { lang } = useLang();
   const { data, error, loading } = useActionList<Privacy>("privacy", ctx, true);
   const [field, setField] = useState("full_name");
   const [value, setValue] = useState("");
@@ -741,13 +835,15 @@ function PrivacyView({ ctx }: { ctx: ViewContext }) {
     setBusy(true); setProblem(""); setMessage("");
     try {
       const args = { ...body, citizenId: ctx.citizen };
-      if (ctx.offline) {
-        await ctx.enqueue(action, args);
-        setMessage("Change queued. Permissions update on the server when you reconnect.");
-      } else {
-        await api(action, { ...args, key: crypto.randomUUID() });
-        setMessage(action === "correction" ? "Correction request recorded." : "Helper access updated.");
-        ctx.refresh();
+      const key = crypto.randomUUID();
+      const queued = async () => { await ctx.enqueue(action, args, { key }); setMessage(pick(strings.savedOnPhone, lang)); };
+      if (ctx.offline) await queued();
+      else {
+        try {
+          await api(action, { ...args, key });
+          setMessage(action === "correction" ? "Correction request recorded." : "Helper access updated.");
+          ctx.refresh();
+        } catch (error) { if (isRetryable(error)) await queued(); else throw error; }
       }
     } catch (error) { setProblem(getMessage(error)); }
     finally { setBusy(false); }
@@ -1755,7 +1851,33 @@ function StaffApprovals({ ctx, onStaffLoaded }: { ctx: ViewContext; onStaffLoade
 function AuditView({ ctx }: { ctx: ViewContext }) {
   const logs = useActionList<Audit[]>("audit", ctx);
   const safety = useActionList<SafetyMetric[]>("safety", ctx);
-  return <AuditVaultView ctx={ctx} logs={logs} safety={safety} />;
+  const jobs = useActionList<JobStats | null>("job_stats", ctx);
+  return <>
+    {jobs.data && <p className="muted">Background jobs · {(["queued", "running", "done", "failed", "dead"] as const).map(key => title(key) + " " + jobs.data![key]).join(" · ")}</p>}
+    <AuditVaultView ctx={ctx} logs={logs} safety={safety} />
+  </>;
+}
+
+type JobStats = Record<"queued" | "running" | "done" | "failed" | "dead", number>;
+type JobRow = { id: string; type: string; status: string; attempts: number; max_attempts: number; last_error: string | null; updated_at: string };
+
+// Officer case detail: background job history for this claim (shown only when jobs exist).
+function JobHistory({ claimId, ctx }: { claimId: string; ctx: ViewContext }) {
+  const [jobs, setJobs] = useState<JobRow[]>([]);
+  useEffect(() => {
+    if (ctx.offline) return;
+    const controller = new AbortController();
+    api<JobRow[]>("job_history", { claimId }, controller.signal).then(rows => setJobs(Array.isArray(rows) ? rows : [])).catch(() => setJobs([]));
+    return () => controller.abort();
+  }, [claimId, ctx.offline, ctx.version]);
+  if (!jobs.length) return null;
+  return <div className="rows">
+    <small className="muted">Background checks</small>
+    {jobs.map(job => <div className="list-row static" key={job.id}><div><strong>{title(job.type)}</strong>
+      <small>Attempts {job.attempts}/{job.max_attempts} · {new Date(job.updated_at).toLocaleString()}</small>
+      {job.last_error && <small>Last error: {job.last_error}</small>}
+    </div><StateTag value={job.status} /></div>)}
+  </div>;
 }
 
 const REGISTERED_USERS = [

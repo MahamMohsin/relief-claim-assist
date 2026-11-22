@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useLang } from "@/src/lib/i18n";
+import { SLOW_HINT_TEXT, useSlowHint } from "@/src/lib/useSlowHint";
 import { BookOpen, RotateCcw, Sparkles, Volume2 } from "lucide-react";
 import { api } from "@/src/lib/client";
 import type { PolicyAnswer } from "@/src/lib/contracts";
@@ -107,10 +109,12 @@ function CopyAnswerButton({ text }: { text: string }) {
 }
 
 export function PolicyChatView({ ctx }: { ctx: ViewContext }) {
+  const { lang } = useLang();
   const [turns, setTurns] = useState<PolicyTurn[]>([]);
   const [draft, setDraft] = useState("");
   const [inputError, setInputError] = useState("");
   const [busy, setBusy] = useState(false);
+  const slow = useSlowHint(busy);
   const activeController = useRef<AbortController | null>(null);
   const askRef = useRef<(raw: string) => Promise<void>>(async () => {});
   const resetRef = useRef<() => void>(() => {});
@@ -391,7 +395,7 @@ export function PolicyChatView({ ctx }: { ctx: ViewContext }) {
                     <ChatMessageBubble variant="ghost">
                       {turn.status === "searching" && (
                         <Text color="secondary">
-                          Searching official policy sections…
+                          {slow ? SLOW_HINT_TEXT : "Searching official policy sections…"}
                         </Text>
                       )}
 
@@ -503,7 +507,7 @@ export function PolicyChatView({ ctx }: { ctx: ViewContext }) {
                                   onClick={() =>
                                     void speakText(
                                       turn.result!.answer,
-                                      ctx.voiceLang,
+                                      lang,
                                       ctx.lite || ctx.offline,
                                     )
                                   }
