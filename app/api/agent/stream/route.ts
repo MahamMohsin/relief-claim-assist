@@ -12,6 +12,11 @@ export const runtime = "nodejs";
 const screenContextSchema = z.object({
   activeApp: z.string().max(30).nullish(),
   openApps: z.array(z.string().max(30)).max(12).optional(),
+  persona: z.object({
+    id: z.string().max(30),
+    role: z.string().max(30),
+    name: z.string().max(100),
+  }).optional(),
   claim: z.object({
     editing: z.boolean(),
     step: z.string().max(30),
@@ -32,7 +37,69 @@ const screenContextSchema = z.object({
       status: z.string().max(20),
     })).optional(),
   }).optional(),
-}).optional();
+  review: z.object({
+    queueCount: z.number(),
+    selectedClaimId: z.string().max(60).nullish(),
+    selectedClaim: z.object({
+      id: z.string().max(60),
+      citizenName: z.string().max(100),
+      status: z.string().max(30),
+      monthlyIncome: z.number().optional(),
+      householdSize: z.number().optional(),
+      aiConfidence: z.number().nullable().optional(),
+      hasSuspectDoc: z.boolean().optional(),
+      verifiedDocs: z.string().max(100).optional(),
+      paymentStatus: z.string().max(30).optional(),
+      fundingStatus: z.string().max(30).nullable().optional(),
+      reports: z.number().optional(),
+      aiSummary: z.string().max(3000).nullable().optional(),
+    }).optional(),
+    activeFilter: z.string().max(20).optional(),
+    activeSort: z.string().max(10).optional(),
+    topClaimId: z.string().max(60).optional(),
+  }).optional(),
+  family: z.object({
+    activeFamilyId: z.string().max(60).nullish(),
+    activeFamilyName: z.string().max(100).optional(),
+    activeVillageArea: z.string().max(100).optional(),
+    totalFamilies: z.number().optional(),
+  }).optional(),
+  rules: z.object({
+    activeVersion: z.number().optional(),
+    activeName: z.string().max(100).optional(),
+    config: z.object({
+      income_cap: z.number(),
+      minimum_household: z.number(),
+      amount_pkr: z.number(),
+      confidence_threshold: z.number(),
+    }).optional(),
+    pendingStaffCount: z.number().optional(),
+  }).optional(),
+  profile: z.object({
+    citizenName: z.string().max(100).optional(),
+    cnicMock: z.string().max(40).optional(),
+    monthlyIncome: z.number().optional(),
+    householdSize: z.number().optional(),
+    phone: z.string().max(40).optional(),
+    villageArea: z.string().max(100).optional(),
+    uploadedDocKinds: z.array(z.string().max(40)).optional(),
+  }).optional(),
+  budget: z.object({
+    totalPkr: z.number(),
+    availablePkr: z.number(),
+    reservedPkr: z.number(),
+    paidPkr: z.number(),
+    awaitingClaims: z.number(),
+  }).optional(),
+  audit: z.object({
+    totalLogs: z.number(),
+    safetyScoreAverage: z.number().optional(),
+  }).optional(),
+  whatsapp: z.object({
+    configured: z.boolean(),
+    recentMessagesCount: z.number().optional(),
+  }).optional(),
+}).passthrough().optional();
 
 const streamSchema = z.object({
   prompt: z.string().trim().min(1).max(1000),

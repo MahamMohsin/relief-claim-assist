@@ -1,6 +1,6 @@
 "use client";
 
-import type { MiniApp, Payload, UIAction } from "@/src/lib/contracts";
+import type { MiniApp, Payload, Persona, RuleConfig, UIAction } from "@/src/lib/contracts";
 import { apps } from "../launcher";
 
 export type SpotlightRect = {
@@ -25,6 +25,11 @@ export type CursorState = {
 export type ScreenContextSnapshot = {
   activeApp: MiniApp | null;
   openApps: MiniApp[];
+  persona?: {
+    id: string;
+    role: string;
+    name: string;
+  };
   claim?: {
     editing: boolean;
     step: "household" | "evidence" | "review";
@@ -40,6 +45,68 @@ export type ScreenContextSnapshot = {
     field: string;
     value: string;
     helpers?: { id: string; name: string; status: string }[];
+  };
+  review?: {
+    queueCount: number;
+    selectedClaimId: string | null;
+    selectedClaim?: {
+      id: string;
+      citizenName: string;
+      status: string;
+      monthlyIncome?: number;
+      householdSize?: number;
+      aiConfidence?: number | null;
+      hasSuspectDoc?: boolean;
+      verifiedDocs?: string;
+      paymentStatus?: string;
+      fundingStatus?: string | null;
+      reports?: number;
+      aiSummary?: string | null;
+    };
+    activeFilter?: "all" | "accepted" | "rejected";
+    activeSort?: "asc" | "desc";
+    topClaimId?: string;
+  };
+  family?: {
+    activeFamilyId: string | null;
+    activeFamilyName?: string;
+    activeVillageArea?: string;
+    totalFamilies?: number;
+  };
+  rules?: {
+    activeVersion?: number;
+    activeName?: string;
+    config?: {
+      income_cap: number;
+      minimum_household: number;
+      amount_pkr: number;
+      confidence_threshold: number;
+    };
+    pendingStaffCount?: number;
+  };
+  profile?: {
+    citizenName?: string;
+    cnicMock?: string;
+    monthlyIncome?: number;
+    householdSize?: number;
+    phone?: string;
+    villageArea?: string;
+    uploadedDocKinds?: string[];
+  };
+  budget?: {
+    totalPkr: number;
+    availablePkr: number;
+    reservedPkr: number;
+    paidPkr: number;
+    awaitingClaims: number;
+  };
+  audit?: {
+    totalLogs: number;
+    safetyScoreAverage?: number;
+  };
+  whatsapp?: {
+    configured: boolean;
+    recentMessagesCount?: number;
   };
 };
 
@@ -77,13 +144,58 @@ export type PrivacyCuaHandler = {
   setHelperConsent: (consent: "revoked" | "granted", helperNameOrId?: string) => Promise<void>;
 };
 
+export type ReviewCuaHandler = {
+  getSnapshot: () => NonNullable<ScreenContextSnapshot["review"]>;
+  selectClaim: (claimId: string) => void;
+  backToBoard: () => void;
+  produceSummary: () => Promise<void>;
+  decide: (decision: "approve" | "reject" | "more_proof", reason?: string, reasonUr?: string) => Promise<void>;
+  quickDecide: (claimId: string, decision: "approve" | "reject" | "more_proof") => Promise<void>;
+  disburse: (outcome?: "paid" | "failed") => Promise<void>;
+  setFilter: (filter: "all" | "accepted" | "rejected") => void;
+  setSort: (order: "asc" | "desc") => void;
+};
+
+export type FamilyCuaHandler = {
+  getSnapshot: () => NonNullable<ScreenContextSnapshot["family"]>;
+  switchFamily: (familyIdOrName: string) => Promise<void>;
+};
+
+export type RuleCuaHandler = {
+  getSnapshot: () => NonNullable<ScreenContextSnapshot["rules"]>;
+  updateConfig: (patch: Partial<RuleConfig>, name?: string) => void;
+  simulate: () => Promise<void>;
+  publish: (name?: string, config?: RuleConfig) => Promise<void>;
+  decideStaff: (userId: string, decision: "active" | "rejected") => Promise<void>;
+};
+
+export type ProfileCuaHandler = {
+  getSnapshot: () => NonNullable<ScreenContextSnapshot["profile"]>;
+  addSampleDoc: (kind: "cnic" | "utility" | "job") => Promise<void>;
+};
+
+export type WhatsAppCuaHandler = {
+  getSnapshot: () => NonNullable<ScreenContextSnapshot["whatsapp"]>;
+  setApiKey: (key: string) => Promise<void>;
+};
+
 export type WorkspaceCuaBridge = {
   isAppOpen: (app: MiniApp) => boolean;
   getOpenApps: () => MiniApp[];
   getActiveApp: () => MiniApp | null;
   openApp: (app: MiniApp) => void;
   focusApp: (app: MiniApp) => void;
+  closeApp?: (app: MiniApp) => void;
+  minimizeApp?: (app: MiniApp) => void;
+  switchPersona?: (persona: Persona) => Promise<void>;
+  toggleLite?: () => void;
+  toggleNetworkDrop?: () => void;
   refresh: () => void;
+  getDesktopSnapshot?: () => {
+    persona?: ScreenContextSnapshot["persona"];
+    budget?: ScreenContextSnapshot["budget"];
+    audit?: ScreenContextSnapshot["audit"];
+  };
 };
 
 type Listener = (state: CursorState) => void;
@@ -113,6 +225,11 @@ class CuaEngine {
   public policy: PolicyCuaHandler | null = null;
   public scam: ScamCuaHandler | null = null;
   public privacy: PrivacyCuaHandler | null = null;
+  public review: ReviewCuaHandler | null = null;
+  public family: FamilyCuaHandler | null = null;
+  public rules: RuleCuaHandler | null = null;
+  public profile: ProfileCuaHandler | null = null;
+  public whatsapp: WhatsAppCuaHandler | null = null;
   public search: Partial<Record<"family" | "review" | "users", (query: string) => void>> = {};
 
   subscribe(listener: Listener) {
@@ -126,11 +243,20 @@ class CuaEngine {
   getScreenSnapshot(): ScreenContextSnapshot {
     const activeApp = this.bridge?.getActiveApp() ?? null;
     const openApps = this.bridge?.getOpenApps() ?? [];
+    const desktop = this.bridge?.getDesktopSnapshot?.() ?? {};
     return {
       activeApp,
       openApps,
+      ...(desktop.persona ? { persona: desktop.persona } : {}),
+      ...(desktop.budget ? { budget: desktop.budget } : {}),
+      ...(desktop.audit ? { audit: desktop.audit } : {}),
       ...(this.claim ? { claim: this.claim.getSnapshot() } : {}),
       ...(this.privacy ? { privacy: this.privacy.getSnapshot() } : {}),
+      ...(this.review ? { review: this.review.getSnapshot() } : {}),
+      ...(this.family ? { family: this.family.getSnapshot() } : {}),
+      ...(this.rules ? { rules: this.rules.getSnapshot() } : {}),
+      ...(this.profile ? { profile: this.profile.getSnapshot() } : {}),
+      ...(this.whatsapp ? { whatsapp: this.whatsapp.getSnapshot() } : {}),
     };
   }
 

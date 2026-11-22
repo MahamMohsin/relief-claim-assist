@@ -61,6 +61,11 @@ export function resolveStep(value: unknown): "household" | "evidence" | "review"
 export type ScreenContext = {
   activeApp?: string | null;
   openApps?: string[];
+  persona?: {
+    id: string;
+    role: string;
+    name: string;
+  };
   claim?: {
     editing: boolean;
     step: string;
@@ -76,6 +81,68 @@ export type ScreenContext = {
     field: string;
     value: string;
     helpers?: { id: string; name: string; status: string }[];
+  };
+  review?: {
+    queueCount: number;
+    selectedClaimId?: string | null;
+    selectedClaim?: {
+      id: string;
+      citizenName: string;
+      status: string;
+      monthlyIncome?: number;
+      householdSize?: number;
+      aiConfidence?: number | null;
+      hasSuspectDoc?: boolean;
+      verifiedDocs?: string;
+      paymentStatus?: string;
+      fundingStatus?: string | null;
+      reports?: number;
+      aiSummary?: string | null;
+    };
+    activeFilter?: string;
+    activeSort?: string;
+    topClaimId?: string;
+  };
+  family?: {
+    activeFamilyId?: string | null;
+    activeFamilyName?: string;
+    activeVillageArea?: string;
+    totalFamilies?: number;
+  };
+  rules?: {
+    activeVersion?: number;
+    activeName?: string;
+    config?: {
+      income_cap: number;
+      minimum_household: number;
+      amount_pkr: number;
+      confidence_threshold: number;
+    };
+    pendingStaffCount?: number;
+  };
+  profile?: {
+    citizenName?: string;
+    cnicMock?: string;
+    monthlyIncome?: number;
+    householdSize?: number;
+    phone?: string;
+    villageArea?: string;
+    uploadedDocKinds?: string[];
+  };
+  budget?: {
+    totalPkr: number;
+    availablePkr: number;
+    reservedPkr: number;
+    paidPkr: number;
+    awaitingClaims: number;
+  };
+  audit?: {
+    totalLogs: number;
+    safetyScoreAverage?: number;
+  };
+  whatsapp?: {
+    configured: boolean;
+    recentMessagesCount?: number;
   };
 };
 
