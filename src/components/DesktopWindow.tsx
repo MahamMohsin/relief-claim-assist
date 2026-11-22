@@ -46,9 +46,21 @@ export function DesktopWindow({
   children,
 }: DesktopWindowProps) {
   const winRef = useRef<HTMLDivElement>(null);
+  const [viewport, setViewport] = useState(() => ({
+    w: typeof window !== "undefined" ? window.innerWidth : 1280,
+    h: typeof window !== "undefined" ? window.innerHeight : 800,
+  }));
+  const isMobile = viewport.w <= 768;
+
+  useEffect(() => {
+    const onResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   const [pos, setPos] = useState<WindowPos>(() => ({
-    x: Math.max(20, (typeof window !== "undefined" ? window.innerWidth / 2 - 380 : 120) + initialOffset),
-    y: 20 + initialOffset,
+    x: Math.max(12, (typeof window !== "undefined" ? window.innerWidth / 2 - 380 : 120) + initialOffset),
+    y: 16 + initialOffset,
   }));
   const [customSize, setCustomSize] = useState<WindowSize | null>(null);
   const [interacting, setInteracting] = useState(false);
@@ -58,30 +70,38 @@ export function DesktopWindow({
     setCustomSize(null);
   }, [preset]);
 
-  const activeSize = customSize ?? PRESET_SIZES[preset];
+  const rawSize = customSize ?? PRESET_SIZES[preset];
+  const activeSize: WindowSize = isMobile
+    ? { width: Math.max(280, viewport.w - 12), height: Math.max(320, viewport.h - 118) }
+    : {
+        width: Math.min(rawSize.width, Math.max(320, viewport.w - 24)),
+        height: Math.min(rawSize.height, Math.max(280, viewport.h - 116)),
+      };
+  const clampedX = isMobile ? 6 : Math.min(Math.max(8, pos.x), Math.max(8, viewport.w - activeSize.width - 8));
+  const clampedY = isMobile ? 6 : Math.min(Math.max(4, pos.y), Math.max(4, viewport.h - activeSize.height - 96));
 
   // Compute Apple macOS / iPadOS spring-from-icon vector relative to the window center
   const originDelta = useMemo(() => {
     if (!launchOrigin || typeof window === "undefined") {
       return { dx: 0, dy: 44 };
     }
-    const finalCenterX = (isMaximized ? window.innerWidth / 2 : pos.x + activeSize.width / 2);
-    const finalCenterY = 32 + (isMaximized ? (window.innerHeight - 32) / 2 : pos.y + activeSize.height / 2);
+    const finalCenterX = (isMaximized || isMobile ? window.innerWidth / 2 : clampedX + activeSize.width / 2);
+    const finalCenterY = 32 + (isMaximized || isMobile ? (window.innerHeight - 32) / 2 : clampedY + activeSize.height / 2);
     return {
       dx: launchOrigin.x - finalCenterX,
       dy: launchOrigin.y - finalCenterY,
     };
-  }, [launchOrigin, isMaximized, pos.x, pos.y, activeSize.width, activeSize.height]);
+  }, [launchOrigin, isMaximized, isMobile, clampedX, clampedY, activeSize.width, activeSize.height]);
 
   const startDrag = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isMaximized) return;
+    if (isMaximized || isMobile) return;
     if ((e.target as HTMLElement).closest("button")) return;
     e.preventDefault();
     onFocus();
 
     const startX = e.clientX;
     const startY = e.clientY;
-    const startPos = { ...pos };
+    const startPos = { x: clampedX, y: clampedY };
     setInteracting(true);
 
     const onMove = (ev: PointerEvent) => {
@@ -104,7 +124,7 @@ export function DesktopWindow({
   };
 
   const startResize = (dir: "e" | "s" | "se") => (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isMaximized) return;
+    if (isMaximized || isMobile) return;
     e.preventDefault();
     e.stopPropagation();
     onFocus();
@@ -194,8 +214,8 @@ export function DesktopWindow({
       }
       style={{
         zIndex,
-        top: isMaximized ? "8px" : `${pos.y}px`,
-        left: isMaximized ? "8px" : `${pos.x}px`,
+        top: isMaximized ? "8px" : `${clampedY}px`,
+        left: isMaximized ? "8px" : `${clampedX}px`,
         width: isMaximized ? undefined : `${activeSize.width}px`,
         height: isMaximized ? undefined : `${activeSize.height}px`,
         transition: interacting ? "none" : undefined,
@@ -205,6 +225,7 @@ export function DesktopWindow({
         "desktop-window preset-" +
         preset +
         (isMaximized ? " maximized " : " ") +
+        (isMobile ? " mobile-sheet " : "") +
         (isFocused ? "focused " : "") +
         (isMinimized ? "minimized " : "") +
         (interacting ? "interacting " : "")
@@ -219,7 +240,7 @@ export function DesktopWindow({
 
       {children}
 
-      {!isMaximized && (
+      {!isMaximized && !isMobile && (
         <>
           <div className="win-resize-e" onPointerDown={startResize("e")} aria-hidden="true" />
           <div className="win-resize-s" onPointerDown={startResize("s")} aria-hidden="true" />

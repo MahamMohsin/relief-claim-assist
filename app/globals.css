@@ -6791,6 +6791,40 @@ button.active-cases-card:hover {
   }
 }
 
+/* ========================================================
+   MOBILE RESPONSIVE WINDOWS (Commit 1: phone/tablet full-width sheets)
+   ======================================================== */
+@media (max-width: 768px) {
+  .desktop-window.mobile-sheet {
+    border-radius: 18px !important;
+    max-width: calc(100vw - 12px);
+    max-height: calc(100dvh - 114px);
+  }
+
+  .desktop-window.mobile-sheet .window-controls-right {
+    display: none;
+  }
+
+  .desktop-window.mobile-sheet .desktop-window-titlebar {
+    padding: 0.65rem 0.85rem;
+    cursor: default;
+  }
+
+  .desktop-window.mobile-sheet .traffic-light {
+    width: 18px;
+    height: 18px;
+  }
+
+  .desktop-window.mobile-sheet .desktop-window-body {
+    padding: 0.85rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .desktop-window.mobile-sheet .desktop-window-body.desktop-window-body--flush {
+    padding: 0;
+  }
+}
+
 
 /* Claim status banner (citizen claim view): colors follow the live claim status. */
 .claim-status[data-tone="approved"] .astryx-banner { background: var(--success-bg); color: var(--success-text); }
