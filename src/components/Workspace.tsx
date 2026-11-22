@@ -223,7 +223,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   }, [reloadQueue, synchronize, offline]);
 
   useEffect(() => {
-    if (!profile || offline || !canOpen(profile.role, "claim")) return;
+    if (!profile || offline || !["citizen", "helper"].includes(profile.role)) return;
     let activeController: AbortController | null = null;
     const storageKey = `relief_seen_citizen_claims_${profile.id}_${citizen ?? "self"}`;
     const isCitizenOrHelper = profile.role === "citizen" || profile.role === "helper";
@@ -1071,8 +1071,8 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                   />
                 )}
 
-                {/* Right Side Widgets: Status Progress Card + Recent Claim Preview Card (for Citizens and Helpers) */}
-                {canOpen(profile.role, "claim") && (
+                {/* Right Side Widgets: Status Progress Card + Recent Claim Preview Card (for Citizens and Helpers only) */}
+                {(profile.role === "citizen" || profile.role === "helper") && (
                   <div className="ios-top-widgets-group">
                     {/* Relief Claims Status Progress Pill Widget */}
                     <div
