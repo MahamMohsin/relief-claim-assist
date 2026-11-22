@@ -97,7 +97,7 @@ const cues: [MiniApp, RegExp][] = [
   ["rules", /rule studio|simulate (?:rule|impact|policy|digital twin)|digital twin|publish (?:new )?rule|eligibility rule|update rule|edit rule|(?:change|update|edit|set|raise|lower|increase|decrease|modify)\s+(?:the\s+)?(?:income cap|minimum household|payout|confidence threshold)|rule config|staff access|approve staff|reject staff|staff request/i],
   ["users", /registered users|users list|user directory|accounts list|open users|users app|search users/i],
   ["audit", /audit|safety eval|decision safety|threshold comparison|forensic|compliance log/i],
-  ["whatsapp", /whatsapp|whats app|wa agent|meta agent|agent api key|bot api key|whatsapp key|connect whatsapp|disconnect whatsapp|test whatsapp/i],
+  ["whatsapp", /whatsapp|whats app|wa agent|meta agent|agent api key|bot api key|whatsapp key|connect whatsapp|disconnect whatsapp|test whatsapp|google messages|sms hub|whatsapp\s*&\s*sms/i],
   ["policy", /policy|eligib|qualify|income cap|who can|which document|what document|what proof|how much (?:aid|money|payout|is)|how do (?:i|raast)|can (?:a |we |i )?apply|widow|پالیسی|اہلیت|بیوہ|بیواؤں/i],
   ["claim", /claims?|clains?|relief|relife|apply|application|draft|attach evidence|back to claims?|submit (?:my |the )?claim|monthly income|my income|income is|household|family size|\b\d+\s*(?:people|members|persons)\b|درخواست/i],
 ];

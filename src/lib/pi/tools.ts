@@ -52,7 +52,7 @@ Object.assign(appAliases, {
   rulestudio: "rules",
   registeredusers: "users", userdirectory: "users",
   auditvault: "audit",
-  whatsapp: "whatsapp", whatsapplink: "whatsapp", walink: "whatsapp", whatsap: "whatsapp", watsapp: "whatsapp",
+  whatsapp: "whatsapp", whatsapplink: "whatsapp", walink: "whatsapp", whatsap: "whatsapp", watsapp: "whatsapp", whatsappsms: "whatsapp", googlemessages: "whatsapp", messaging: "whatsapp", smshub: "whatsapp",
 } satisfies Record<string, (typeof appKeys)[number]>);
 
 export function resolveApp(value: unknown): (typeof appKeys)[number] | null {
