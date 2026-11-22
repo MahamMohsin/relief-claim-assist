@@ -217,6 +217,8 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
   const [loading, setLoading] = useState(!offline);
   const [busy, setBusy] = useState(false);
   const [showQr, setShowQr] = useState(false);
+  const [phoneInput, setPhoneInput] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -227,16 +229,18 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
         const res = await fetch("/api/whatsapp/admin");
         if (!res.ok) throw new Error("Could not load WhatsApp admin status");
         const json = (await res.json()) as WhatsAppState;
-        if (active) setState(json);
+        if (active) {
+          setState(json);
+          if (json.adminPhone) setPhoneInput(json.adminPhone);
+        }
       } catch {
-        // Fallback default state
         if (active) {
           setState({
-            status: "connected",
-            adminPhone: "+92 300 8765432",
+            status: "qr_ready",
+            adminPhone: null,
             botName: "Relief Assist WhatsApp Official Bot",
             qrDataUrl: null,
-            activeUsersCount: 3,
+            activeUsersCount: 0,
           });
         }
       } finally {
@@ -247,27 +251,42 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
     return () => { active = false; };
   }, [offline]);
 
-  async function triggerAction(action: "connect" | "disconnect" | "refresh_qr") {
+  async function triggerAction(action: "connect" | "disconnect" | "refresh_qr", phoneToUse?: string) {
     if (busy || offline) return;
     try {
       setBusy(true);
+      setErrorMsg("");
+      const payload: { action: string; phone?: string } = { action };
+      if (action === "connect") {
+        const p = (phoneToUse ?? phoneInput).trim();
+        if (!p) {
+          setErrorMsg("Please enter your admin WhatsApp number to pair.");
+          setBusy(false);
+          return;
+        }
+        payload.phone = p;
+      }
       const res = await fetch("/api/whatsapp/admin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error("Action failed");
+      if (!res.ok) {
+        const errJson = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(errJson.error || "Action failed");
+      }
       const updated = (await res.json()) as WhatsAppState;
       setState(updated);
       if (action === "refresh_qr") setShowQr(true);
-    } catch {
-      // Ignored
+      if (action === "disconnect") setPhoneInput("");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Failed to execute WhatsApp action.");
     } finally {
       setBusy(false);
     }
   }
 
-  const isConnected = state?.status === "connected";
+  const isConnected = state?.status === "connected" && Boolean(state?.adminPhone);
 
   return (
     <article className="audit-glass-card admin-whatsapp-card" aria-labelledby="admin-wa-heading">
@@ -307,10 +326,10 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
             </div>
             <div>
               <strong style={{ fontSize: "0.88rem", display: "block" }}>
-                {isConnected ? "WhatsApp Web Connected" : "Pairing Required"}
+                {isConnected ? "WhatsApp Web Paired & Active" : "Admin Pairing Required"}
               </strong>
               <small style={{ color: "rgba(255, 255, 255, 0.75)", fontSize: "0.74rem" }}>
-                {isConnected ? `Bot Line: ${state?.adminPhone || "+92 300 8765432"}` : "Scan QR code with admin phone"}
+                {isConnected ? `Bot Line: ${state?.adminPhone}` : "Scan QR code or enter your WhatsApp phone number below"}
               </small>
             </div>
           </div>
@@ -319,7 +338,13 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
           </span>
         </div>
 
-        {/* WhatsApp QR Code Section (Always available to inspect or scan) */}
+        {errorMsg && (
+          <p style={{ color: "#f87171", fontSize: "0.75rem", margin: 0 }}>
+            {errorMsg}
+          </p>
+        )}
+
+        {/* WhatsApp QR Code Section */}
         {(!isConnected || showQr) && state?.qrDataUrl && (
           <div style={{
             display: "flex",
@@ -340,8 +365,61 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
               alt="WhatsApp Web Pairing QR Code"
               style={{ width: "160px", height: "160px", borderRadius: "8px", border: "1px solid #e5e7eb" }}
             />
-            <small style={{ fontSize: "0.7rem", color: "#4b5563", maxWidth: "240px" }}>
-              WhatsApp &gt; Linked Devices &gt; Link a Device. Authenticates official bot gateway for incoming user commands.
+            <small style={{ fontSize: "0.7rem", color: "#4b5563", maxWidth: "260px" }}>
+              Open <strong>WhatsApp &gt; Linked Devices &gt; Link a Device</strong> and point your camera at this QR code.
+            </small>
+          </div>
+        )}
+
+        {/* Dynamic Admin Phone Pairing Input (When not yet connected) */}
+        {!isConnected && (
+          <div style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.4rem",
+            background: "rgba(0, 0, 0, 0.25)",
+            padding: "0.75rem",
+            borderRadius: "10px",
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+          }}>
+            <label style={{ fontSize: "0.74rem", color: "rgba(255, 255, 255, 0.85)", fontWeight: 500 }}>
+              Your WhatsApp Phone Number:
+            </label>
+            <div style={{ display: "flex", gap: "0.4rem" }}>
+              <input
+                type="tel"
+                value={phoneInput}
+                onChange={e => setPhoneInput(e.target.value)}
+                placeholder="+92 300 1234567"
+                style={{
+                  flex: 1,
+                  background: "rgba(0, 0, 0, 0.5)",
+                  border: "1px solid rgba(255, 255, 255, 0.25)",
+                  borderRadius: "8px",
+                  padding: "0.4rem 0.65rem",
+                  color: "#ffffff",
+                  fontSize: "0.82rem",
+                  outline: "none",
+                }}
+              />
+              <button
+                type="button"
+                className="audit-glass-open-btn"
+                disabled={busy || offline || !phoneInput.trim()}
+                onClick={() => void triggerAction("connect")}
+                style={{
+                  background: "#25D366",
+                  color: "#ffffff",
+                  border: "none",
+                  fontWeight: 600,
+                  padding: "0.4rem 0.85rem",
+                }}
+              >
+                Pair Phone
+              </button>
+            </div>
+            <small style={{ fontSize: "0.68rem", color: "rgba(255, 255, 255, 0.6)" }}>
+              Entering your number completes pairing with this instance. Users will message this line to log in.
             </small>
           </div>
         )}
@@ -349,7 +427,7 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
         {/* KPIs */}
         <dl className="admin-claim-kpis" style={{ margin: "0.25rem 0" }}>
           <dt>Admin WhatsApp</dt>
-          <dd>{state?.adminPhone || "+92 300 8765432"}</dd>
+          <dd>{state?.adminPhone || "Not paired yet"}</dd>
           <dt>Linked Citizens</dt>
           <dd>{state?.activeUsersCount || 0} active</dd>
           <dt>Supported Commands</dt>
@@ -378,30 +456,19 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
                 onClick={() => void triggerAction("disconnect")}
               >
                 <Power size={13} aria-hidden="true" />
-                <span>Disconnect</span>
+                <span>Disconnect / Re-pair Number</span>
               </button>
             </>
           ) : (
-            <>
-              <button
-                type="button"
-                className="audit-glass-open-btn"
-                disabled={busy || offline}
-                onClick={() => void triggerAction("connect")}
-              >
-                <CheckCircle2 size={13} aria-hidden="true" />
-                <span>Simulate Phone Scan</span>
-              </button>
-              <button
-                type="button"
-                className="audit-glass-open-btn"
-                disabled={busy || offline}
-                onClick={() => void triggerAction("refresh_qr")}
-              >
-                <RefreshCw size={13} aria-hidden="true" className={busy ? "spin" : ""} />
-                <span>Generate Fresh QR</span>
-              </button>
-            </>
+            <button
+              type="button"
+              className="audit-glass-open-btn"
+              disabled={busy || offline}
+              onClick={() => void triggerAction("refresh_qr")}
+            >
+              <RefreshCw size={13} aria-hidden="true" className={busy ? "spin" : ""} />
+              <span>Generate Fresh QR Code</span>
+            </button>
           )}
         </div>
       </div>

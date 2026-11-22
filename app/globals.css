@@ -734,11 +734,39 @@ th { background: var(--faint); color: var(--forest); }
   justify-content: flex-start;
   flex-wrap: nowrap;
   gap: 1rem;
-  padding: 0.5rem 0.2rem;
+  padding: 0.5rem 0.5rem 4rem 0.2rem;
   justify-self: start;
   width: 100%;
   max-width: 720px;
   min-width: 0;
+  max-height: calc(100dvh - 80px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ios-top-hero-row::-webkit-scrollbar,
+.ios-top-widgets-group::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ios-top-hero-row::-webkit-scrollbar-track,
+.ios-top-widgets-group::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ios-top-hero-row::-webkit-scrollbar-thumb,
+.ios-top-widgets-group::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 9999px;
+}
+
+.ios-top-hero-row::-webkit-scrollbar-thumb:hover,
+.ios-top-widgets-group::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
 }
 
 /* The app icons take the right-hand rail. */
@@ -755,6 +783,8 @@ th { background: var(--faint); color: var(--forest); }
   .ios-top-hero-row {
     justify-self: stretch;
     max-width: none;
+    max-height: none;
+    overflow-y: visible;
   }
 
   .dashboard-canvas > .ios-desktop-grid {
@@ -769,6 +799,10 @@ th { background: var(--faint); color: var(--forest); }
   align-items: stretch;
   gap: 1rem;
   max-width: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
 
 .ios-hero-name {

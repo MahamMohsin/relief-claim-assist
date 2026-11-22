@@ -1,4 +1,4 @@
-import { getRecentWhatsAppMessages, recordWhatsAppMessage } from "./server";
+import { getRecentWhatsAppMessages, getWhatsAppAdminState, recordWhatsAppMessage } from "./server";
 import { normalizePhone } from "./session";
 
 /**
@@ -104,9 +104,10 @@ export async function executeMcpTool(name: string, args: Record<string, unknown>
     case "send_message": {
       const recipient = normalizePhone(String(args.recipient || ""));
       const message = String(args.message || "");
+      const adminState = await getWhatsAppAdminState();
       const recorded = recordWhatsAppMessage({
         direction: "outbound",
-        from: "+92 300 8765432",
+        from: adminState.adminPhone || "whatsapp-official-bot",
         to: recipient,
         text: message,
       });

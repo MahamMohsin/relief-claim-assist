@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { processIncomingWhatsAppMessage } from "@/src/lib/whatsapp/agent";
-import { getRecentWhatsAppMessages, recordWhatsAppMessage } from "@/src/lib/whatsapp/server";
+import { getRecentWhatsAppMessages, getWhatsAppAdminState, recordWhatsAppMessage } from "@/src/lib/whatsapp/server";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -25,11 +25,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Message text is required." }, { status: 400 });
     }
 
+    const adminState = await getWhatsAppAdminState();
+    const botPhone = adminState.adminPhone || "whatsapp-official-bot";
+
     // 1. Record inbound message
     recordWhatsAppMessage({
       direction: "inbound",
       from,
-      to: "+92 300 8765432",
+      to: botPhone,
       text,
     });
 
@@ -39,7 +42,7 @@ export async function POST(request: Request) {
     // 3. Record outbound bot response
     recordWhatsAppMessage({
       direction: "outbound",
-      from: "+92 300 8765432",
+      from: botPhone,
       to: from,
       text: result.reply,
       toolsUsed: result.toolsUsed,

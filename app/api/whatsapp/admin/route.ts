@@ -17,7 +17,14 @@ export async function POST(request: Request) {
     } else if (action === "refresh_qr") {
       state = await refreshAdminPairingQr();
     } else {
-      state = await connectAdminWhatsApp(body.phone || "+92 300 8765432");
+      const phone = body.phone?.trim();
+      if (!phone) {
+        return NextResponse.json(
+          { error: "Phone number is required to pair admin WhatsApp." },
+          { status: 400 }
+        );
+      }
+      state = await connectAdminWhatsApp(phone);
     }
 
     return NextResponse.json(state);

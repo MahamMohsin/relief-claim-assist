@@ -27,6 +27,7 @@ type ChatMessage = {
 
 export function WhatsAppLinkView({ ctx }: { ctx: ViewContext }) {
   const [data, setData] = useState<TokenData | null>(null);
+  const [adminBotNumber, setAdminBotNumber] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [tokenRevealed, setTokenRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -52,10 +53,18 @@ export function WhatsAppLinkView({ ctx }: { ctx: ViewContext }) {
     async function load() {
       try {
         setLoading(true);
-        const res = await fetch(`/api/whatsapp/token?persona=${ctx.profile.id}`);
-        if (!res.ok) throw new Error("Could not load WhatsApp token");
-        const json = (await res.json()) as TokenData;
-        if (active) setData(json);
+        const [tokenRes, adminRes] = await Promise.all([
+          fetch(`/api/whatsapp/token?persona=${ctx.profile.id}`),
+          fetch("/api/whatsapp/admin"),
+        ]);
+        if (tokenRes.ok) {
+          const json = (await tokenRes.json()) as TokenData;
+          if (active) setData(json);
+        }
+        if (adminRes.ok) {
+          const adminJson = (await adminRes.json()) as { adminPhone?: string | null };
+          if (active && adminJson.adminPhone) setAdminBotNumber(adminJson.adminPhone);
+        }
       } catch (err) {
         if (active) setError(err instanceof Error ? err.message : "Failed to load session token");
       } finally {
@@ -151,7 +160,6 @@ export function WhatsAppLinkView({ ctx }: { ctx: ViewContext }) {
   const token = data?.token || "rca_wa_live_demo_token";
   const maskedToken = token.slice(0, 8) + "••••••••••••••••••••••••" + token.slice(-4);
   const roleDisplay = ctx.profile.role === "officer" ? "Reviewer" : ctx.profile.role.charAt(0).toUpperCase() + ctx.profile.role.slice(1);
-  const adminBotNumber = "+92 300 8765432";
   const loginCommand = `/login ${token}`;
 
   return (
@@ -225,27 +233,33 @@ export function WhatsAppLinkView({ ctx }: { ctx: ViewContext }) {
                   onClick={() => void handleResetToken()}
                 />
 
-                <a
-                  href={`https://wa.me/${adminBotNumber.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(loginCommand)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    background: "#25D366",
-                    color: "#ffffff",
-                    padding: "0.45rem 0.95rem",
-                    borderRadius: "8px",
-                    fontWeight: 600,
-                    fontSize: "0.85rem",
-                    textDecoration: "none",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    boxShadow: "0 2px 8px rgba(37, 211, 102, 0.35)",
-                  }}
-                >
-                  <ExternalLink size={15} />
-                  <span>Open WhatsApp Web / App</span>
-                </a>
+                {adminBotNumber ? (
+                  <a
+                    href={`https://wa.me/${adminBotNumber.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(loginCommand)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      background: "#25D366",
+                      color: "#ffffff",
+                      padding: "0.45rem 0.95rem",
+                      borderRadius: "8px",
+                      fontWeight: 600,
+                      fontSize: "0.85rem",
+                      textDecoration: "none",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      boxShadow: "0 2px 8px rgba(37, 211, 102, 0.35)",
+                    }}
+                  >
+                    <ExternalLink size={15} />
+                    <span>Open in WhatsApp ({adminBotNumber})</span>
+                  </a>
+                ) : (
+                  <span style={{ fontSize: "0.78rem", color: "#b45309", background: "#fef3c7", padding: "0.35rem 0.75rem", borderRadius: "8px", border: "1px solid #fde68a" }}>
+                    Admin has not yet paired a bot phone via QR code in Admin Dashboard
+                  </span>
+                )}
               </div>
             </VStack>
           </div>
@@ -258,7 +272,11 @@ export function WhatsAppLinkView({ ctx }: { ctx: ViewContext }) {
                 <div style={{ fontWeight: 700, color: "#25D366", fontSize: "1.1rem", marginBottom: "0.25rem" }}>1</div>
                 <strong>Message Official Bot</strong>
                 <p style={{ margin: "0.25rem 0 0", fontSize: "0.82rem", color: "#4b5563" }}>
-                  Save or open chat with <code>{adminBotNumber}</code>.
+                  {adminBotNumber ? (
+                    <>Chat with <code>{adminBotNumber}</code></>
+                  ) : (
+                    <em>Pending Admin QR code pairing</em>
+                  )}
                 </p>
               </div>
 

@@ -27,7 +27,7 @@ export type WhatsAppChatMessage = {
 
 interface WhatsAppServerStore {
   status: WhatsAppConnectionStatus;
-  adminPhone: string;
+  adminPhone: string | null;
   botName: string;
   qrData: string;
   qrDataUrl: string;
@@ -45,12 +45,12 @@ function getStore(): WhatsAppServerStore {
   if (!globalThis.__rca_whatsapp_server_store) {
     const defaultQrData = `2@${Buffer.from(crypto.randomUUID()).toString("base64")},${Buffer.from("relief-assist-admin-pubkey").toString("base64")},${Buffer.from("token-" + Date.now()).toString("base64")}`;
     globalThis.__rca_whatsapp_server_store = {
-      status: "connected", // Pre-connected in demo mode so users can immediately test /login
-      adminPhone: "+92 300 8765432",
+      status: "qr_ready", // Starts ready for admin to scan QR code
+      adminPhone: null, // Dynamic: configured by admin scanning QR code
       botName: "Relief Assist WhatsApp Official Bot",
       qrData: defaultQrData,
       qrDataUrl: "",
-      connectedAt: new Date().toISOString(),
+      connectedAt: null,
       lastActiveAt: new Date().toISOString(),
       messages: [],
     };
@@ -105,10 +105,14 @@ export async function refreshAdminPairingQr(): Promise<WhatsAppAdminState> {
   return getWhatsAppAdminState();
 }
 
-export async function connectAdminWhatsApp(phone = "+92 300 8765432"): Promise<WhatsAppAdminState> {
+export async function connectAdminWhatsApp(phone: string): Promise<WhatsAppAdminState> {
   const store = getStore();
+  const cleanPhone = phone.trim();
+  if (!cleanPhone) {
+    throw new Error("A valid phone number is required to link the WhatsApp bot.");
+  }
   store.status = "connected";
-  store.adminPhone = phone;
+  store.adminPhone = cleanPhone;
   store.connectedAt = new Date().toISOString();
   store.lastActiveAt = new Date().toISOString();
   return getWhatsAppAdminState();
@@ -116,10 +120,11 @@ export async function connectAdminWhatsApp(phone = "+92 300 8765432"): Promise<W
 
 export async function disconnectAdminWhatsApp(): Promise<WhatsAppAdminState> {
   const store = getStore();
-  store.status = "disconnected";
+  store.status = "qr_ready";
+  store.adminPhone = null;
   store.connectedAt = null;
   store.lastActiveAt = new Date().toISOString();
-  return getWhatsAppAdminState();
+  return refreshAdminPairingQr();
 }
 
 export function recordWhatsAppMessage(message: Omit<WhatsAppChatMessage, "id" | "timestamp">) {
