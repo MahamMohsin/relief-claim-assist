@@ -192,6 +192,22 @@ export type UIAction = { type: "open_mini_app"; app: MiniApp }
   | { type: "privacy_helper_consent_visual"; consent: "revoked" | "granted"; helperId?: string; helperName?: string }
   | { type: "search_app_visual"; app: "family" | "review" | "users"; query: string }
   | { type: "profile_add_sample_visual"; docType?: "cnic" | "utility" | "job" }
+  | { type: "switch_persona"; persona: Persona }
+  | { type: "switch_family_action"; citizenId?: string; familyName?: string }
+  | { type: "review_select_claim"; claimId?: string; citizenName?: string }
+  | { type: "review_produce_summary"; claimId?: string }
+  | { type: "review_decide_claim"; claimId?: string; decision: "approve" | "reject" | "more_proof"; reason?: string; reasonUr?: string }
+  | { type: "review_disburse"; claimId?: string; outcome?: "paid" | "failed" }
+  | { type: "review_filter"; filter: "all" | "accepted" | "rejected"; sort?: "asc" | "desc" }
+  | { type: "rules_update_config"; config: Partial<RuleConfig>; name?: string }
+  | { type: "rules_simulate"; config?: Partial<RuleConfig> }
+  | { type: "rules_publish"; config: RuleConfig; name?: string }
+  | { type: "rules_staff_decision"; userId: string; decision: "active" | "rejected" }
+  | { type: "budget_update"; totalPkr: number; reason: string }
+  | { type: "whatsapp_set_key"; key: string }
+  | { type: "close_window"; app: MiniApp }
+  | { type: "minimize_window"; app: MiniApp }
+  | { type: "toggle_feature"; feature: "lite" | "network_drop" }
   | { type: "show_jev_badge"; label: string; confidence: number; route: MiniApp | "clarification"; model: string }
   | { type: "ask_clarification"; question: string; options: MiniApp[] }
   | { type: "highlight_alert"; severity: "warning" | "info"; message: string };
