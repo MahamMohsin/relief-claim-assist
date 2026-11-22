@@ -15,6 +15,7 @@ import { api, HttpError } from "@/src/lib/client";
 import { prepareDocumentImage } from "@/src/lib/compressImage";
 import type { CitizenDocument, CitizenProfileData, CitizenRecord } from "@/src/lib/contracts";
 import type { ViewContext } from "./MiniApps";
+import { WhatsAppTokenWidget } from "./WhatsAppTokenWidget";
 import { AspectRatio } from "@astryxdesign/core/AspectRatio";
 import { Avatar } from "@astryxdesign/core/Avatar";
 import { Badge } from "@astryxdesign/core/Badge";
@@ -366,6 +367,13 @@ export function CitizenProfileView({ ctx }: { ctx: ViewContext }) {
           description="Reconnect to load your profile."
         />
       )}
+
+      {/* WhatsApp Access Token Card */}
+      <WhatsAppTokenWidget
+        personaId={ctx.profile.id}
+        variant="full"
+        onOpenApp={() => ctx.go("whatsapp")}
+      />
 
       {/* 2. Hero Visual Proofs — CNIC, Utility Bill, Job Proof Images First */}
       <Grid columns={{ minWidth: 220, max: 3 }} gap={3} width="100%">

@@ -12,6 +12,7 @@ import { ScamChatView } from "./ScamChatView";
 import { AuditVaultView, type SafetyMetric } from "./AuditVaultView";
 import { CitizenProfileView } from "./CitizenProfileView";
 import { ApplicantProfilePanel } from "./ApplicantProfilePanel";
+import { WhatsAppLinkView } from "./WhatsAppLinkView";
 import { Button } from "@astryxdesign/core/Button";
 import { Card } from "@astryxdesign/core/Card";
 import { Badge } from "@astryxdesign/core/Badge";
@@ -51,6 +52,7 @@ export function MiniApps({ app, ctx }: { app: MiniApp; ctx: ViewContext }) {
     case "rules": return <RuleView ctx={ctx} />;
     case "users": return <UsersView />;
     case "audit": return <AuditView ctx={ctx} />;
+    case "whatsapp": return <WhatsAppLinkView ctx={ctx} />;
   }
 }
 

@@ -172,6 +172,7 @@ export const appRoles = {
   rules: ["admin", "officer"],
   users: ["admin", "officer", "auditor"],
   audit: ["admin", "auditor", "officer"],
+  whatsapp: ["citizen", "helper", "shopkeeper", "officer", "admin", "auditor"],
 } satisfies Record<string, Role[]>;
 export type MiniApp = keyof typeof appRoles;
 export function canOpen(role: Role, app: MiniApp) {

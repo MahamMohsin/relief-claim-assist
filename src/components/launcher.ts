@@ -1,4 +1,4 @@
-import { BookOpen, ClipboardCheck, FileText, Fingerprint, IdCard, Scale, ShieldCheck, SlidersHorizontal, Users, UsersRound } from "lucide-react";
+import { BookOpen, ClipboardCheck, FileText, Fingerprint, IdCard, MessageSquareShare, Scale, ShieldCheck, SlidersHorizontal, Users, UsersRound } from "lucide-react";
 import type { MiniApp, Role } from "@/src/lib/contracts";
 
 export function appTitle(id: MiniApp, role?: Role): string {
@@ -103,5 +103,14 @@ export const apps = {
     color: "ios-rose",
     gradient: "from-[#134A41] to-[#0E3A33]",
     bg: "#E6F0ED"
+  },
+  whatsapp: {
+    title: "WhatsApp Link",
+    note: "Connect WhatsApp & chat with assistant",
+    badge: "Bot Gateway",
+    icon: MessageSquareShare,
+    color: "ios-green",
+    gradient: "from-[#25D366] to-[#128C7E]",
+    bg: "#E8F8F0"
   },
 } satisfies Record<MiniApp, { title: string; note: string; badge?: string; icon: typeof FileText; image?: string; color: string; gradient: string; bg: string }>;

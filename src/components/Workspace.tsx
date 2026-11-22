@@ -22,6 +22,7 @@ import type { UIAction } from "@/src/lib/contracts";
 
 import { PipLoginModal } from "./pip/PipLoginModal";
 import { WelcomeOverlay } from "./WelcomeOverlay";
+import { WhatsAppTokenWidget } from "./WhatsAppTokenWidget";
 
 const roleEntries = Object.entries(personas) as [Persona, (typeof personas)[Persona]][];
 type WindowPreset = "compact" | "default" | "wide";
@@ -693,6 +694,17 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                                 )}
                               </div>
                             </div>
+
+                            <div className="liquid-menu-divider" />
+
+                            <WhatsAppTokenWidget
+                              personaId={profile?.id || "fatima"}
+                              variant="compact"
+                              onOpenApp={() => {
+                                setUserDropdownOpen(false);
+                                openAppWindow("whatsapp");
+                              }}
+                            />
 
                             <div className="liquid-menu-divider" />
 

@@ -18,7 +18,7 @@ export const names = [
   "policy_rag_search",
   "escalate_to_officer",
 ];
-const appKeys = ["claim", "profile", "scam", "policy", "privacy", "family", "review", "rules", "users", "audit"] as const;
+const appKeys = ["claim", "profile", "scam", "policy", "privacy", "family", "review", "rules", "users", "audit", "whatsapp"] as const;
 export const miniApp = z.enum(appKeys);
 
 // Map whatever the model sends ("Scam Shield", "scam_shield", "open the scam app") to a canonical key.
@@ -35,6 +35,7 @@ Object.assign(appAliases, {
   rulestudio: "rules",
   registeredusers: "users", userdirectory: "users",
   auditvault: "audit",
+  whatsapp: "whatsapp", whatsapplink: "whatsapp", walink: "whatsapp", whatsap: "whatsapp", watsapp: "whatsapp",
 } satisfies Record<string, (typeof appKeys)[number]>);
 
 export function resolveApp(value: unknown): (typeof appKeys)[number] | null {
