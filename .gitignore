@@ -15,3 +15,4 @@ supabase/.temp/
 .whatsapp-state.json
 .whatsapp-command.json
 .whatsapp-messages.json
+.whatsapp-agent-keys.json

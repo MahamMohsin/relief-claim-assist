@@ -697,35 +697,15 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
 
                             <div className="liquid-menu-divider" />
 
-                            {profile?.role !== "admin" ? (
-                              <>
-                                <WhatsAppTokenWidget
-                                  personaId={profile?.id || "fatima"}
-                                  variant="compact"
-                                  onOpenApp={() => {
-                                    setUserDropdownOpen(false);
-                                    openAppWindow("whatsapp");
-                                  }}
-                                />
-                                <div className="liquid-menu-divider" />
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  type="button"
-                                  className="liquid-action-btn secondary wide"
-                                  onClick={() => {
-                                    setUserDropdownOpen(false);
-                                    openAppWindow("whatsapp");
-                                  }}
-                                  style={{ padding: "0.6rem 0.8rem", width: "100%", justifyContent: "center", display: "flex", gap: "0.5rem", alignItems: "center" }}
-                                >
-                                  <MessageSquare size={15} />
-                                  <span>Manage WhatsApp Gateway & Messages</span>
-                                </button>
-                                <div className="liquid-menu-divider" />
-                              </>
-                            )}
+                            <WhatsAppTokenWidget
+                              personaId={profile?.id || "fatima"}
+                              variant="compact"
+                              onOpenApp={() => {
+                                setUserDropdownOpen(false);
+                                openAppWindow("whatsapp");
+                              }}
+                            />
+                            <div className="liquid-menu-divider" />
 
                             <div className="liquid-action-buttons row">
                               <button

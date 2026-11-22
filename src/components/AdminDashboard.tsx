@@ -213,13 +213,8 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
   offline: boolean;
   onOpen: (app: MiniApp) => void;
 }) {
-  const [state, setState] = useState<WhatsAppState | null>(null);
-  const [loading, setLoading] = useState(!offline);
-  const [busy, setBusy] = useState(false);
-  const [showQr, setShowQr] = useState(false);
-  const [phoneInput, setPhoneInput] = useState("");
-  const [errorMsg, setErrorMsg] = useState("");
   const [agentInfo, setAgentInfo] = useState<{ isConfigured: boolean; agentName: string | null; maskedKey: string | null } | null>(null);
+  const [loading, setLoading] = useState(!offline);
 
   useEffect(() => {
     let active = true;
@@ -227,30 +222,13 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
       if (offline) return;
       try {
         setLoading(true);
-        const [res, agentRes] = await Promise.all([
-          fetch("/api/whatsapp/admin"),
-          fetch("/api/whatsapp/agent-key?persona=kamran"),
-        ]);
-        if (!res.ok) throw new Error("Could not load WhatsApp admin status");
-        const json = (await res.json()) as WhatsAppState;
-        if (active) {
-          setState(json);
-          if (json.adminPhone) setPhoneInput(json.adminPhone);
-        }
-        if (agentRes.ok) {
-          const aJson = await agentRes.json();
-          if (active) setAgentInfo(aJson);
+        const res = await fetch("/api/whatsapp/agent-key?persona=kamran");
+        if (res.ok) {
+          const json = await res.json();
+          if (active) setAgentInfo(json);
         }
       } catch {
-        if (active) {
-          setState({
-            status: "qr_ready",
-            adminPhone: null,
-            botName: "Relief Assist WhatsApp Official Bot",
-            qrDataUrl: null,
-            activeUsersCount: 0,
-          });
-        }
+        // Ignored
       } finally {
         if (active) setLoading(false);
       }
@@ -259,58 +237,23 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
     return () => { active = false; };
   }, [offline]);
 
-  async function triggerAction(action: "connect" | "disconnect" | "refresh_qr", phoneToUse?: string) {
-    if (busy || offline) return;
-    try {
-      setBusy(true);
-      setErrorMsg("");
-      const payload: { action: string; phone?: string } = { action };
-      if (action === "connect") {
-        const p = (phoneToUse ?? phoneInput).trim();
-        if (!p) {
-          setErrorMsg("Please enter your admin WhatsApp number to pair.");
-          setBusy(false);
-          return;
-        }
-        payload.phone = p;
-      }
-      const res = await fetch("/api/whatsapp/admin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const errJson = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(errJson.error || "Action failed");
-      }
-      const updated = (await res.json()) as WhatsAppState;
-      setState(updated);
-      if (action === "refresh_qr") setShowQr(true);
-      if (action === "disconnect") setPhoneInput("");
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Failed to execute WhatsApp action.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const isConnected = state?.status === "connected" && Boolean(state?.adminPhone);
+  const isConnected = Boolean(agentInfo?.isConfigured);
 
   return (
     <article className="audit-glass-card admin-whatsapp-card" aria-labelledby="admin-wa-heading">
       <header className="audit-glass-head">
         <h2 className="audit-glass-title-group audit-glass-title" id="admin-wa-heading">
           <i className={"audit-glass-dot " + (isConnected ? "green" : "amber")} aria-hidden="true" />
-          <span>WhatsApp MCP Gateway</span>
+          <span>Official WhatsApp AI Agent</span>
         </h2>
         <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
           <button
             type="button"
             className="audit-glass-open-btn"
             onClick={() => onOpen("whatsapp")}
-            title="Open WhatsApp Link mini-app"
+            title="Open WhatsApp Agent mini-app"
           >
-            Launch Link App <ArrowUpRight size={13} aria-hidden="true" />
+            Launch Agent App <ArrowUpRight size={13} aria-hidden="true" />
           </button>
         </div>
       </header>
@@ -334,193 +277,42 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
             </div>
             <div>
               <strong style={{ fontSize: "0.88rem", display: "block" }}>
-                {isConnected ? "WhatsApp Web Paired & Active" : "Admin Pairing Required"}
+                {isConnected ? `Agent Active: ${agentInfo?.agentName || "Ali"}` : "Agent API Key Required"}
               </strong>
               <small style={{ color: "rgba(255, 255, 255, 0.75)", fontSize: "0.74rem" }}>
-                {isConnected ? `Bot Line: ${state?.adminPhone}` : "Scan QR code or enter your WhatsApp phone number below"}
+                {isConnected ? "Direct Meta WhatsApp Agent API · Listening for messages" : "Connect your WhatsApp Agent API key in the mini-app to activate chat"}
               </small>
             </div>
           </div>
           <span style={{ fontSize: "0.75rem", background: "rgba(255, 255, 255, 0.15)", padding: "2px 8px", borderRadius: "9999px" }}>
-            Baileys MCP v0.4.1
+            Meta 3P Agent API
           </span>
         </div>
 
-        {errorMsg && (
-          <p style={{ color: "#f87171", fontSize: "0.75rem", margin: 0 }}>
-            {errorMsg}
-          </p>
-        )}
-
-        {/* Active Paired Device Card when Connected */}
-        {isConnected && !showQr && (
-          <div style={{
-            background: "rgba(0, 0, 0, 0.3)",
-            border: "1px solid rgba(37, 211, 102, 0.4)",
-            borderRadius: "12px",
-            padding: "0.85rem",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "0.75rem",
-            flexWrap: "wrap",
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
-              <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#25D366", color: "#fff", display: "grid", placeItems: "center" }}>
-                <CheckCircle2 size={18} />
-              </div>
-              <div>
-                <span style={{ fontSize: "0.7rem", color: "rgba(255, 255, 255, 0.65)", textTransform: "uppercase", letterSpacing: "0.04em", display: "block" }}>
-                  Active Bot Number (Multi-Device)
-                </span>
-                <strong style={{ fontSize: "1.05rem", color: "#ffffff", letterSpacing: "0.02em" }}>
-                  {state?.adminPhone || "+92 349 2587419"}
-                </strong>
-                <small style={{ display: "block", fontSize: "0.68rem", color: "rgba(37, 211, 102, 0.9)" }}>
-                  Connected · Ready for citizen /login commands &amp; relief queries
-                </small>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="audit-glass-open-btn"
-              onClick={() => onOpen("whatsapp")}
-              style={{ padding: "0.35rem 0.65rem", fontSize: "0.74rem" }}
-            >
-              View Messages Stream <ArrowUpRight size={12} />
-            </button>
-          </div>
-        )}
-
-        {/* WhatsApp QR Code Section (Only when not connected or explicitly toggled to re-pair) */}
-        {(!isConnected || showQr) && state?.qrDataUrl && (
-          <div style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: "0.5rem",
-            background: "#ffffff",
-            borderRadius: "14px",
-            padding: "0.85rem",
-            color: "#111827",
-            textAlign: "center",
-          }}>
-            <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "#065f46" }}>
-              {isConnected ? "Re-pair Secondary WhatsApp Session" : "Scan with WhatsApp on Admin Phone"}
-            </span>
-            <img
-              key={state.qrDataUrl.slice(-24)}
-              src={state.qrDataUrl}
-              alt="WhatsApp Web Pairing QR Code"
-              style={{ width: "160px", height: "160px", borderRadius: "8px", border: "1px solid #e5e7eb" }}
-            />
-            <small style={{ fontSize: "0.7rem", color: "#4b5563", maxWidth: "260px" }}>
-              Open <strong>WhatsApp &gt; Linked Devices &gt; Link a Device</strong> and point your camera at this QR code.
-            </small>
-          </div>
-        )}
-
-        {/* Dynamic Admin Phone Pairing Input (When not yet connected) */}
-        {!isConnected && (
-          <div style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.4rem",
-            background: "rgba(0, 0, 0, 0.25)",
-            padding: "0.75rem",
-            borderRadius: "10px",
-            border: "1px solid rgba(255, 255, 255, 0.12)",
-          }}>
-            <label style={{ fontSize: "0.74rem", color: "rgba(255, 255, 255, 0.85)", fontWeight: 500 }}>
-              Your WhatsApp Phone Number:
-            </label>
-            <div style={{ display: "flex", gap: "0.4rem" }}>
-              <input
-                type="tel"
-                value={phoneInput}
-                onChange={e => setPhoneInput(e.target.value)}
-                placeholder="+92 300 1234567"
-                style={{
-                  flex: 1,
-                  background: "rgba(0, 0, 0, 0.5)",
-                  border: "1px solid rgba(255, 255, 255, 0.25)",
-                  borderRadius: "8px",
-                  padding: "0.4rem 0.65rem",
-                  color: "#ffffff",
-                  fontSize: "0.82rem",
-                  outline: "none",
-                }}
-              />
-              <button
-                type="button"
-                className="audit-glass-open-btn"
-                disabled={busy || offline || !phoneInput.trim()}
-                onClick={() => void triggerAction("connect")}
-                style={{
-                  background: "#25D366",
-                  color: "#ffffff",
-                  border: "none",
-                  fontWeight: 600,
-                  padding: "0.4rem 0.85rem",
-                }}
-              >
-                Pair Phone
-              </button>
-            </div>
-            <small style={{ fontSize: "0.68rem", color: "rgba(255, 255, 255, 0.6)" }}>
-              Entering your number completes pairing with this instance. Users will message this line to log in.
-            </small>
-          </div>
-        )}
-
         {/* KPIs */}
         <dl className="admin-claim-kpis" style={{ margin: "0.25rem 0" }}>
-          <dt>Admin WhatsApp</dt>
-          <dd>{state?.adminPhone || "Not paired yet"}</dd>
-          <dt>Meta Agent API</dt>
-          <dd style={{ color: agentInfo?.isConfigured ? "#34d399" : "rgba(255, 255, 255, 0.7)" }}>
-            {agentInfo?.isConfigured ? `${agentInfo.agentName || "Ali"} (Active)` : "Not linked (Use Link App)"}
+          <dt>WhatsApp Agent</dt>
+          <dd style={{ color: isConnected ? "#34d399" : "rgba(255, 255, 255, 0.7)" }}>
+            {isConnected ? `${agentInfo?.agentName || "Ali"} (Online)` : "Not configured"}
           </dd>
-          <dt>Linked Citizens</dt>
-          <dd>{state?.activeUsersCount || 0} active</dd>
+          <dt>API Key Status</dt>
+          <dd>{isConnected ? `Connected (${agentInfo?.maskedKey})` : "Pending Key"}</dd>
+          <dt>Admin Role</dt>
+          <dd>Scheme Administrator</dd>
           <dt>LLM Engine</dt>
           <dd>MiMo Flash + Scoped Tools</dd>
         </dl>
 
-        {/* Control Buttons */}
+        {/* Control Button */}
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.25rem" }}>
-          {isConnected ? (
-            <>
-              <button
-                type="button"
-                className="audit-glass-open-btn"
-                disabled={busy || offline}
-                onClick={() => setShowQr(prev => !prev)}
-              >
-                <QrCode size={13} aria-hidden="true" />
-                <span>{showQr ? "Hide QR" : "Show Pairing QR"}</span>
-              </button>
-              <button
-                type="button"
-                className="audit-glass-open-btn"
-                disabled={busy || offline}
-                onClick={() => void triggerAction("disconnect")}
-              >
-                <Power size={13} aria-hidden="true" />
-                <span>Disconnect / Re-pair Number</span>
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="audit-glass-open-btn"
-              disabled={busy || offline}
-              onClick={() => void triggerAction("refresh_qr")}
-            >
-              <RefreshCw size={13} aria-hidden="true" className={busy ? "spin" : ""} />
-              <span>Generate Fresh QR Code</span>
-            </button>
-          )}
+          <button
+            type="button"
+            className="audit-glass-open-btn"
+            onClick={() => onOpen("whatsapp")}
+          >
+            <ArrowUpRight size={13} aria-hidden="true" />
+            <span>{isConnected ? "Manage Agent & Live Messages" : "Connect WhatsApp Agent API Key"}</span>
+          </button>
         </div>
       </div>
     </article>

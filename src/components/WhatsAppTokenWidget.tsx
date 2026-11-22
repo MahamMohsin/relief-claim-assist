@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Copy, Eye, EyeOff, KeyRound, LoaderCircle, MessageSquare, RotateCw } from "lucide-react";
+import { Bot, CheckCircle2, KeyRound, LoaderCircle, MessageSquare } from "lucide-react";
 
-type TokenData = {
-  userId: string;
-  token: string;
-  linkedPhone: string | null;
-  isLinked: boolean;
+type AgentKeyInfo = {
+  personaId: string;
+  isConfigured: boolean;
+  maskedKey: string | null;
+  agentName: string | null;
+  connectedAt: string | null;
 };
 
 export function WhatsAppTokenWidget({
@@ -19,78 +20,32 @@ export function WhatsAppTokenWidget({
   variant?: "full" | "compact";
   onOpenApp?: () => void;
 }) {
-  if (personaId === "kamran") {
-    return null;
-  }
-
-  const [data, setData] = useState<TokenData | null>(null);
+  const [data, setData] = useState<AgentKeyInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [revealed, setRevealed] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [resetting, setResetting] = useState(false);
-  const [statusMessage, setStatusMessage] = useState("");
 
   useEffect(() => {
     let active = true;
-    async function fetchToken() {
+    async function fetchAgentStatus() {
       try {
         setLoading(true);
-        const res = await fetch(`/api/whatsapp/token?persona=${encodeURIComponent(personaId)}`);
-        if (!res.ok) throw new Error("Failed to load WhatsApp token");
-        const json = (await res.json()) as TokenData;
-        if (active) setData(json);
-      } catch {
-        if (active) {
-          // Provide fallback demo token if network/mock drops
-          setData({
-            userId: personaId,
-            token: `rca_wa_live_${personaId}_demo`,
-            linkedPhone: null,
-            isLinked: false,
-          });
+        const res = await fetch(`/api/whatsapp/agent-key?persona=${encodeURIComponent(personaId)}`);
+        if (res.ok) {
+          const json = (await res.json()) as AgentKeyInfo;
+          if (active) setData(json);
         }
+      } catch {
+        // Ignored
       } finally {
         if (active) setLoading(false);
       }
     }
-    void fetchToken();
+    void fetchAgentStatus();
     return () => {
       active = false;
     };
   }, [personaId]);
 
-  async function handleReset() {
-    if (resetting) return;
-    try {
-      setResetting(true);
-      setStatusMessage("");
-      const res = await fetch("/api/whatsapp/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ persona: personaId }),
-      });
-      if (!res.ok) throw new Error("Failed to reset token");
-      const json = (await res.json()) as TokenData;
-      setData(json);
-      setStatusMessage("New token generated! Previous session unlinked.");
-      setTimeout(() => setStatusMessage(""), 3500);
-    } catch {
-      setStatusMessage("Could not reset token.");
-    } finally {
-      setResetting(false);
-    }
-  }
-
-  function handleCopy() {
-    if (!data?.token) return;
-    void navigator.clipboard.writeText(data.token);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  const maskedToken = data?.token
-    ? `${data.token.slice(0, 12)}••••••••••••••••`
-    : "••••••••••••••••••••••••";
+  const isConnected = Boolean(data?.isConfigured);
 
   if (variant === "compact") {
     return (
@@ -98,141 +53,57 @@ export function WhatsAppTokenWidget({
         padding: "0.65rem 0.75rem",
         borderRadius: "12px",
         background: "rgba(255, 255, 255, 0.08)",
-        border: "1px solid rgba(255, 255, 255, 0.14)",
+        border: `1px solid ${isConnected ? "rgba(52, 211, 153, 0.35)" : "rgba(255, 255, 255, 0.14)"}`,
         display: "flex",
         flexDirection: "column",
         gap: "0.5rem",
       }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "between", gap: "0.5rem" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flex: 1 }}>
-            <KeyRound size={13} style={{ color: "#34d399" }} />
+            <Bot size={14} style={{ color: isConnected ? "#34d399" : "#60a5fa" }} />
             <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "#ffffff" }}>
-              WhatsApp Session Key
+              WhatsApp AI Agent
             </span>
           </div>
-          {data?.isLinked ? (
-            <span style={{
-              fontSize: "0.65rem",
-              padding: "0.1rem 0.45rem",
-              borderRadius: "9999px",
-              background: "rgba(52, 211, 153, 0.25)",
-              color: "#34d399",
-              border: "1px solid rgba(52, 211, 153, 0.4)",
-            }}>
-              Linked
-            </span>
-          ) : (
-            <span style={{
-              fontSize: "0.65rem",
-              padding: "0.1rem 0.45rem",
-              borderRadius: "9999px",
-              background: "rgba(255, 255, 255, 0.12)",
-              color: "rgba(255, 255, 255, 0.75)",
-            }}>
-              Ready to link
-            </span>
-          )}
+          <span style={{
+            fontSize: "0.65rem",
+            padding: "0.1rem 0.45rem",
+            borderRadius: "9999px",
+            background: isConnected ? "rgba(52, 211, 153, 0.25)" : "rgba(255, 255, 255, 0.12)",
+            color: isConnected ? "#34d399" : "rgba(255, 255, 255, 0.75)",
+            border: `1px solid ${isConnected ? "rgba(52, 211, 153, 0.4)" : "rgba(255, 255, 255, 0.18)"}`,
+          }}>
+            {loading ? "Checking…" : isConnected ? "Active" : "Key Needed"}
+          </span>
         </div>
 
-        {/* Token row */}
         <div style={{
           display: "flex",
           alignItems: "center",
+          justifyContent: "space-between",
           gap: "0.4rem",
           background: "rgba(0, 0, 0, 0.35)",
-          padding: "0.3rem 0.5rem",
+          padding: "0.4rem 0.6rem",
           borderRadius: "8px",
-          border: "1px solid rgba(255, 255, 255, 0.1)",
         }}>
-          <code style={{
-            fontSize: "0.72rem",
-            color: "#e2e8f0",
-            fontFamily: "monospace",
-            flex: 1,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}>
-            {loading ? "Loading…" : revealed ? data?.token : maskedToken}
-          </code>
-
-          <button
-            type="button"
-            title={revealed ? "Hide token" : "Reveal token"}
-            onClick={() => setRevealed(v => !v)}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "rgba(255, 255, 255, 0.75)",
-              cursor: "pointer",
-              padding: "2px",
-              display: "flex",
-              alignItems: "center",
-            }}
-          >
-            {revealed ? <EyeOff size={13} /> : <Eye size={13} />}
-          </button>
-
-          <button
-            type="button"
-            title="Copy token"
-            onClick={handleCopy}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: copied ? "#34d399" : "rgba(255, 255, 255, 0.75)",
-              cursor: "pointer",
-              padding: "2px",
-              display: "flex",
-              alignItems: "center",
-            }}
-          >
-            {copied ? <Check size={13} /> : <Copy size={13} />}
-          </button>
-
-          <button
-            type="button"
-            title="Reset token"
-            onClick={() => void handleReset()}
-            disabled={resetting}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "rgba(255, 255, 255, 0.75)",
-              cursor: resetting ? "default" : "pointer",
-              padding: "2px",
-              display: "flex",
-              alignItems: "center",
-            }}
-          >
-            {resetting ? (
-              <LoaderCircle size={13} className="animate-spin" />
+          <div style={{ fontSize: "0.72rem", color: "#e2e8f0" }}>
+            {loading ? "Loading…" : isConnected ? (
+              <span>Agent: <strong>{data?.agentName || "Ali"}</strong> (Connected)</span>
             ) : (
-              <RotateCw size={13} />
+              <span>No agent API key linked yet</span>
             )}
-          </button>
-        </div>
-
-        {statusMessage && (
-          <span style={{ fontSize: "0.68rem", color: "#34d399" }}>
-            {statusMessage}
-          </span>
-        )}
-
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
-          <span style={{ fontSize: "0.68rem", color: "rgba(255, 255, 255, 0.65)" }}>
-            Send <code style={{ color: "#ffffff", background: "rgba(255,255,255,0.15)", padding: "1px 4px", borderRadius: "4px" }}>/login &lt;key&gt;</code> on WhatsApp
-          </span>
+          </div>
           {onOpenApp && (
             <button
               type="button"
               onClick={onOpenApp}
               style={{
-                fontSize: "0.68rem",
+                fontSize: "0.72rem",
                 color: "#6ee7b7",
                 background: "transparent",
                 border: "none",
                 cursor: "pointer",
+                fontWeight: 600,
                 textDecoration: "underline",
                 display: "inline-flex",
                 alignItems: "center",
@@ -240,8 +111,7 @@ export function WhatsAppTokenWidget({
                 padding: 0,
               }}
             >
-              <MessageSquare size={11} />
-              Open App
+              {isConnected ? "Manage" : "Connect"}
             </button>
           )}
         </div>
@@ -249,179 +119,74 @@ export function WhatsAppTokenWidget({
     );
   }
 
-  // Full variant (Astryx-styled card for CitizenProfileView)
+  // Full variant
   return (
     <div style={{
-      width: "100%",
       padding: "1rem",
       borderRadius: "14px",
-      background: "var(--color-surface-raised, rgba(255, 255, 255, 0.7))",
-      border: "1px solid var(--color-border-subtle, rgba(0, 0, 0, 0.08))",
-      boxShadow: "0 2px 10px rgba(0, 0, 0, 0.04)",
+      background: "var(--color-bg-secondary, #f8fafc)",
+      border: `1px solid ${isConnected ? "rgba(37, 211, 102, 0.4)" : "var(--color-border, #e2e8f0)"}`,
       display: "flex",
       flexDirection: "column",
       gap: "0.75rem",
+      width: "100%",
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <div style={{
-            width: "32px",
-            height: "32px",
-            borderRadius: "8px",
-            background: "#25D366",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "#ffffff",
+            width: "28px",
+            height: "28px",
+            borderRadius: "50%",
+            background: isConnected ? "#dcfce7" : "#e0f2fe",
+            color: isConnected ? "#15803d" : "#0369a1",
+            display: "grid",
+            placeItems: "center",
           }}>
-            <MessageSquare size={18} />
+            {isConnected ? <CheckCircle2 size={16} /> : <Bot size={16} />}
           </div>
           <div>
-            <div style={{ fontSize: "0.92rem", fontWeight: 700, color: "var(--color-text-primary, #1e293b)" }}>
-              WhatsApp Assistant & Session Key
-            </div>
-            <div style={{ fontSize: "0.78rem", color: "var(--color-text-secondary, #64748b)" }}>
-              Link your WhatsApp number to chat with your role-scoped MiMo AI assistant
-            </div>
+            <strong style={{ fontSize: "0.85rem", color: "var(--color-text-primary, #0f172a)" }}>
+              WhatsApp AI Agent Platform
+            </strong>
+            <small style={{ display: "block", fontSize: "0.72rem", color: "var(--color-text-secondary, #64748b)" }}>
+              {isConnected
+                ? `Connected to ${data?.agentName || "Ali"} · Ready to chat in WhatsApp`
+                : "Connect your Agent API key to chat directly from WhatsApp"}
+            </small>
           </div>
         </div>
 
-        {data?.isLinked ? (
-          <span style={{
-            fontSize: "0.72rem",
-            fontWeight: 600,
-            padding: "0.2rem 0.6rem",
-            borderRadius: "9999px",
-            background: "#dcfce7",
-            color: "#15803d",
-            border: "1px solid #86efac",
-          }}>
-            Linked: {data.linkedPhone}
-          </span>
-        ) : (
-          <span style={{
-            fontSize: "0.72rem",
-            fontWeight: 600,
-            padding: "0.2rem 0.6rem",
-            borderRadius: "9999px",
-            background: "var(--color-surface-sunken, #f1f5f9)",
-            color: "var(--color-text-secondary, #64748b)",
-          }}>
-            Ready to link
-          </span>
-        )}
+        <span style={{
+          fontSize: "0.72rem",
+          fontWeight: 600,
+          padding: "2px 8px",
+          borderRadius: "9999px",
+          background: isConnected ? "#dcfce7" : "#f1f5f9",
+          color: isConnected ? "#15803d" : "#64748b",
+        }}>
+          {loading ? "…" : isConnected ? "Online" : "Not Linked"}
+        </span>
       </div>
 
-      {/* Secret Token Field */}
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "0.5rem",
-        background: "var(--color-surface-sunken, #f8fafc)",
-        padding: "0.5rem 0.75rem",
-        borderRadius: "10px",
-        border: "1px solid var(--color-border-subtle, #e2e8f0)",
-        flexWrap: "wrap",
-      }}>
-        <div style={{ flex: 1, minWidth: "220px", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <KeyRound size={16} style={{ color: "#64748b" }} />
-          <code style={{
-            fontSize: "0.84rem",
-            fontFamily: "monospace",
-            color: "var(--color-text-primary, #0f172a)",
-            fontWeight: 600,
-            letterSpacing: revealed ? "0" : "0.1em",
-            wordBreak: "break-all",
-          }}>
-            {loading ? "Generating session token…" : revealed ? data?.token : maskedToken}
-          </code>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-          <button
-            type="button"
-            onClick={() => setRevealed(v => !v)}
-            style={{
-              padding: "0.35rem 0.65rem",
-              fontSize: "0.76rem",
-              borderRadius: "6px",
-              border: "1px solid #cbd5e1",
-              background: "#ffffff",
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.3rem",
-            }}
-          >
-            {revealed ? <EyeOff size={14} /> : <Eye size={14} />}
-            <span>{revealed ? "Hide" : "Reveal"}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleCopy}
-            style={{
-              padding: "0.35rem 0.65rem",
-              fontSize: "0.76rem",
-              borderRadius: "6px",
-              border: "1px solid #cbd5e1",
-              background: copied ? "#dcfce7" : "#ffffff",
-              color: copied ? "#15803d" : "inherit",
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.3rem",
-            }}
-          >
-            {copied ? <Check size={14} /> : <Copy size={14} />}
-            <span>{copied ? "Copied!" : "Copy key"}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => void handleReset()}
-            disabled={resetting}
-            style={{
-              padding: "0.35rem 0.65rem",
-              fontSize: "0.76rem",
-              borderRadius: "6px",
-              border: "1px solid #cbd5e1",
-              background: "#ffffff",
-              cursor: resetting ? "default" : "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.3rem",
-            }}
-          >
-            {resetting ? (
-              <LoaderCircle size={14} className="animate-spin" />
-            ) : (
-              <RotateCw size={14} />
-            )}
-            <span>Reset</span>
-          </button>
-        </div>
-      </div>
-
-      {statusMessage && (
-        <div style={{ fontSize: "0.78rem", color: "#16a34a", fontWeight: 500 }}>
-          {statusMessage}
-        </div>
-      )}
-
-      {/* Guide text & link */}
       <div style={{
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
         flexWrap: "wrap",
         gap: "0.5rem",
-        paddingTop: "0.2rem",
+        background: "#ffffff",
+        border: "1px solid #e2e8f0",
+        borderRadius: "10px",
+        padding: "0.55rem 0.75rem",
       }}>
-        <div style={{ fontSize: "0.76rem", color: "var(--color-text-secondary, #64748b)" }}>
-          Message the Admin bot line or connect your{" "}
-          <strong style={{ color: "#059669" }}>Official WhatsApp Agent API Key</strong> in the mini-app.
+        <div style={{ fontSize: "0.76rem", color: "#475569" }}>
+          {isConnected ? (
+            <span>Agent Key: <code>{data?.maskedKey}</code></span>
+          ) : (
+            <span>WhatsApp &gt; Settings &gt; Agents &gt; API key</span>
+          )}
         </div>
+
         {onOpenApp && (
           <button
             type="button"
@@ -436,11 +201,12 @@ export function WhatsAppTokenWidget({
               textDecoration: "underline",
               display: "inline-flex",
               alignItems: "center",
-              gap: "0.3rem",
+              gap: "4px",
+              padding: 0,
             }}
           >
             <MessageSquare size={13} />
-            Connect WhatsApp Agent / Link Mini-App
+            <span>{isConnected ? "Open Agent Mini-App" : "Connect Agent API Key"}</span>
           </button>
         )}
       </div>
