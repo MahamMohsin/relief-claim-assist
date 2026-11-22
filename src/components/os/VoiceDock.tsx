@@ -3,7 +3,7 @@
 import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import { ChevronDown, ChevronUp, Mic, Send, Volume2, X } from "lucide-react";
-import type { MiniApp, Profile, UIAction } from "@/src/lib/contracts";
+import { canOpen, type MiniApp, type Profile, type UIAction } from "@/src/lib/contracts";
 import { transcribe } from "@/src/lib/client";
 import { useVoiceStream } from "@/src/lib/useVoiceStream";
 import { apps } from "../launcher";
@@ -583,7 +583,7 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
           </div>
         ))}
       </div>
-      {clarify && <div><p className="clarify-title">{clarify.question}</p><div className="voice-options">{clarify.options.map(app => <button type="button" key={app} onClick={() => choose(app)}>{apps[app].title}</button>)}</div></div>}
+      {clarify && <div><p className="clarify-title">{clarify.question}</p><div className="voice-options">{clarify.options.filter(app => canOpen(profile.role, app)).map(app => <button type="button" key={app} onClick={() => choose(app)}>{apps[app].title}</button>)}</div></div>}
       {error && <p className="voice-error" role="alert">{error}</p>}
     </div>}
     <div className="voice-glass-main">

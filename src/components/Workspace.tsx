@@ -225,6 +225,8 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
 
   useEffect(() => {
     if (!profile || offline || !["citizen", "helper"].includes(profile.role)) return;
+    // A helper sees claims only for a selected (consented) family; without one the server always answers 403.
+    if (profile.role === "helper" && !citizen) return;
     let activeController: AbortController | null = null;
     const storageKey = `relief_seen_citizen_claims_${profile.id}_${citizen ?? "self"}`;
     const isCitizenOrHelper = profile.role === "citizen" || profile.role === "helper";
@@ -449,7 +451,12 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   }
 
   function openAppWindow(appId: MiniApp) {
-    if (!profile || !canOpen(profile.role, appId)) return;
+    if (!profile) return;
+    if (!canOpen(profile.role, appId)) {
+      // Hidden apps can still be requested by voice/assistant or a stale alert: explain instead of failing silently.
+      setHeadMessage("Your role (" + profile.role + ") doesn't have access to " + (apps[appId]?.title ?? appId) + ".");
+      return;
+    }
     setAlert("");
     const iconEl = document.querySelector<HTMLElement>(`[data-cua="app-icon-${appId}"]`);
     if (iconEl) {
@@ -537,6 +544,12 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
     setAlertsOpen(false);
     setToastAlert(null);
     seenOfficerClaimsRef.current = null;
+    // Previous role's data (officer budget, audit feed, queue counts) must not carry into the next persona.
+    setOfficerBudget(null);
+    setAuditLogs([]);
+    setAuditSafety([]);
+    setUnsentByFamily({});
+    setSignOutUnsent(null);
     setPending([]);
     setOpenApps([]);
     setMinimizedApps([]);

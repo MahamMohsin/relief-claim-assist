@@ -164,17 +164,24 @@ export type CitizenRecord = {
 };
 export type CitizenProfileData = { citizen: CitizenRecord; documents: CitizenDocument[] };
 
+// Single source of truth for which apps each role sees (tiles, windows, assistant navigation, agent tools).
+// Kept within what the server allows (relief_action role checks + can_access); the server still enforces it.
+//   claim / privacy data: citizen (own record) or helper (consented family) only — can_access denies other roles.
+//   profile docs: citizen, helper (officers/admins see profiles inside the Review case, not as an app).
+//   scam check/report: server allows citizen, helper, shopkeeper, officer; shown to citizen, helper, shopkeeper.
+//   families/switch_family: helper. queue/review/disburse: officer. rules/simulate/publish/staff: admin.
+//   audit: admin, auditor. policy: everyone.
 export const appRoles = {
-  claim: ["citizen", "helper", "officer", "admin", "auditor"],
-  profile: ["citizen", "helper", "officer", "admin", "auditor"],
-  scam: ["citizen", "helper", "shopkeeper", "officer", "admin", "auditor"],
+  claim: ["citizen", "helper"],
+  profile: ["citizen", "helper"],
+  scam: ["citizen", "helper", "shopkeeper"],
   policy: ["citizen", "helper", "shopkeeper", "officer", "admin", "auditor"],
-  privacy: ["citizen", "helper", "officer", "admin", "auditor"],
-  family: ["helper", "officer", "admin"],
-  review: ["officer", "admin", "auditor"],
-  rules: ["admin", "officer"],
-  users: ["admin", "officer", "auditor"],
-  audit: ["admin", "auditor", "officer"],
+  privacy: ["citizen"],
+  family: ["helper"],
+  review: ["officer"],
+  rules: ["admin"],
+  users: ["admin"],
+  audit: ["admin", "auditor"],
   whatsapp: ["citizen", "helper", "shopkeeper", "officer", "admin", "auditor"],
   schemes: ["shopkeeper", "admin"],
 } satisfies Record<string, Role[]>;
