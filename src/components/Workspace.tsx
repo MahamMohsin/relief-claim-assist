@@ -31,7 +31,27 @@ import { WhatsAppTokenWidget } from "./WhatsAppTokenWidget";
 
 const roleEntries = Object.entries(personas) as [Persona, (typeof personas)[Persona]][];
 type WindowPreset = "compact" | "default" | "wide";
+type WorkspaceAlert = { id: string; title: string; subtitle: string; time: string; unread: boolean; targetApp: MiniApp };
 const tools = Object.keys(apps) as MiniApp[];
+
+function readSeenKeys(storageKey: string): Set<string> | null {
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? new Set(parsed.map(String)) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSeenKeys(storageKey: string, keys: Set<string>) {
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify([...keys].slice(-250)));
+  } catch {
+    // ignore storage quota errors
+  }
+}
 
 export function Workspace({ initialProfile, showLogin = false, demoRegistrationEnabled = false }: {
   initialProfile: Profile | null;
@@ -100,9 +120,9 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   const [claimsLoading, setClaimsLoading] = useState(false);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [officerQueue, setOfficerQueue] = useState<Claim[]>([]);
-  const [officerAlerts, setOfficerAlerts] = useState<{ id: string; citizen: string; status: string; time: string; unread: boolean }[]>([]);
+  const [officerAlerts, setOfficerAlerts] = useState<WorkspaceAlert[]>([]);
   const [alertsOpen, setAlertsOpen] = useState(false);
-  const [toastAlert, setToastAlert] = useState<{ id: string; citizen: string; status: string } | null>(null);
+  const [toastAlert, setToastAlert] = useState<WorkspaceAlert | null>(null);
   const seenOfficerClaimsRef = useRef<Set<string> | null>(null);
   const [auditLogs, setAuditLogs] = useState<Audit[]>([]);
   const [auditSafety, setAuditSafety] = useState<SafetyMetric[]>([]);
@@ -202,13 +222,55 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
 
   useEffect(() => {
     if (!profile || offline || !canOpen(profile.role, "claim")) return;
-    const controller = new AbortController();
-    setClaimsLoading(true);
-    api<Claim[]>("claims", citizen ? { citizenId: citizen } : {}, controller.signal)
-      .then(res => { if (!controller.signal.aborted && Array.isArray(res)) setPastClaims(res); })
-      .catch(() => {})
-      .finally(() => { if (!controller.signal.aborted) setClaimsLoading(false); });
-    return () => controller.abort();
+    let activeController: AbortController | null = null;
+    const storageKey = `relief_seen_citizen_claims_${profile.id}_${citizen ?? "self"}`;
+    const isCitizenOrHelper = profile.role === "citizen" || profile.role === "helper";
+
+    const loadClaims = (initial: boolean) => {
+      activeController?.abort();
+      const controller = new AbortController();
+      activeController = controller;
+      if (initial) setClaimsLoading(true);
+      api<Claim[]>("claims", citizen ? { citizenId: citizen } : {}, controller.signal)
+        .then(res => {
+          if (controller.signal.aborted || !Array.isArray(res)) return;
+          setPastClaims(res);
+          if (!isCitizenOrHelper) return;
+          const keys = res.map(c => `${c.id}:${c.status}:${c.payment_status}`);
+          const seen = readSeenKeys(storageKey);
+          if (!seen) {
+            writeSeenKeys(storageKey, new Set(keys));
+            return;
+          }
+          const changed = res.filter(c => !seen.has(`${c.id}:${c.status}:${c.payment_status}`));
+          if (changed.length > 0) {
+            keys.forEach(k => seen.add(k));
+            writeSeenKeys(storageKey, seen);
+            const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+            const nextAlerts: WorkspaceAlert[] = changed.slice(0, 6).map(c => ({
+              id: `${c.id}:${c.status}:${c.payment_status}`,
+              title: c.payment_status === "paid" ? "Payment issued" : `Claim ${c.status.replaceAll("_", " ")}`,
+              subtitle: `${c.citizen_name ?? "Your claim"} · ${c.amount_pkr ? "PKR " + c.amount_pkr.toLocaleString() : c.id.slice(0, 8)}`,
+              time: now,
+              unread: true,
+              targetApp: "claim",
+            }));
+            setOfficerAlerts(prev => {
+              const existing = new Set(prev.map(a => a.id));
+              return [...nextAlerts.filter(a => !existing.has(a.id)), ...prev].slice(0, 20);
+            });
+            setToastAlert(nextAlerts[0]);
+          }
+        })
+        .catch(() => {})
+        .finally(() => { if (initial && !controller.signal.aborted) setClaimsLoading(false); });
+    };
+    loadClaims(true);
+    const interval = isCitizenOrHelper ? window.setInterval(() => loadClaims(false), 10000) : null;
+    return () => {
+      if (interval !== null) window.clearInterval(interval);
+      activeController?.abort();
+    };
   }, [profile, citizen, offline, version]);
 
   useEffect(() => {
@@ -217,6 +279,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
       return;
     }
     let activeController: AbortController | null = null;
+    const storageKey = `relief_seen_officer_claims_${profile.id}`;
     const loadOfficer = () => {
       activeController?.abort();
       const controller = new AbortController();
@@ -228,28 +291,31 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
         .then(cases => {
           if (controller.signal.aborted || !Array.isArray(cases)) return;
           setOfficerQueue(cases);
-          if (seenOfficerClaimsRef.current === null) {
-            seenOfficerClaimsRef.current = new Set(cases.map(c => c.id));
+          const seen = seenOfficerClaimsRef.current ?? readSeenKeys(storageKey);
+          if (seen === null) {
+            const initialSet = new Set(cases.map(c => c.id));
+            seenOfficerClaimsRef.current = initialSet;
+            writeSeenKeys(storageKey, initialSet);
           } else {
-            const fresh = cases.filter(c => !seenOfficerClaimsRef.current!.has(c.id));
+            seenOfficerClaimsRef.current = seen;
+            const fresh = cases.filter(c => !seen.has(c.id));
             if (fresh.length > 0) {
-              fresh.forEach(c => seenOfficerClaimsRef.current!.add(c.id));
+              fresh.forEach(c => seen.add(c.id));
+              writeSeenKeys(storageKey, seen);
               const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-              setOfficerAlerts(prev => [
-                ...fresh.map(c => ({
-                  id: c.id,
-                  citizen: c.citizen_name ?? "New applicant",
-                  status: c.status,
-                  time: now,
-                  unread: true,
-                })),
-                ...prev,
-              ].slice(0, 20));
-              setToastAlert({
-                id: fresh[0].id,
-                citizen: fresh[0].citizen_name ?? "New applicant",
-                status: fresh[0].status,
+              const nextAlerts: WorkspaceAlert[] = fresh.map(c => ({
+                id: c.id,
+                title: c.citizen_name ?? "New applicant",
+                subtitle: `New claim on Review Desk · ${c.status.replaceAll("_", " ")}`,
+                time: now,
+                unread: true,
+                targetApp: "review",
+              }));
+              setOfficerAlerts(prev => {
+                const existing = new Set(prev.map(a => a.id));
+                return [...nextAlerts.filter(a => !existing.has(a.id)), ...prev].slice(0, 20);
               });
+              setToastAlert(nextAlerts[0]);
             }
           }
         })
@@ -270,22 +336,70 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   }, [toastAlert]);
 
   useEffect(() => {
-    if (!profile || offline || profile.role !== "auditor") return;
+    if (!profile || offline || !["auditor", "admin"].includes(profile.role)) return;
     let activeController: AbortController | null = null;
+    const storageKey = `relief_seen_audit_${profile.id}`;
+    const noteworthyEvents = new Set([
+      "submit",
+      "submit_claim",
+      "draft",
+      "draft_saved",
+      "officer_approve",
+      "officer_reject",
+      "tamper_detected",
+      "demo_registration",
+      "consent_revoked",
+      "report",
+    ]);
     const loadAudit = (initial: boolean) => {
       activeController?.abort();
       const controller = new AbortController();
       activeController = controller;
-      if (initial) setAuditLoading(true);
-      Promise.all([
+      if (initial && profile.role === "auditor") setAuditLoading(true);
+      const tasks: [Promise<Audit[] | null>, Promise<SafetyMetric[] | null>] = [
         api<Audit[]>("audit", {}, controller.signal).catch(() => null),
-        api<SafetyMetric[]>("safety", {}, controller.signal).catch(() => null),
-      ]).then(([logsRes, safetyRes]) => {
+        profile.role === "auditor"
+          ? api<SafetyMetric[]>("safety", {}, controller.signal).catch(() => null)
+          : Promise.resolve(null),
+      ];
+      Promise.all(tasks).then(([logsRes, safetyRes]) => {
         if (controller.signal.aborted) return;
-        if (Array.isArray(logsRes)) setAuditLogs(logsRes);
+        if (Array.isArray(logsRes)) {
+          if (profile.role === "auditor") setAuditLogs(logsRes);
+          const relevant = logsRes.filter(row => noteworthyEvents.has(row.event_type.toLowerCase()));
+          const seen = readSeenKeys(storageKey);
+          if (!seen) {
+            writeSeenKeys(storageKey, new Set(relevant.map(r => String(r.id))));
+          } else {
+            const fresh = relevant.filter(r => !seen.has(String(r.id)));
+            if (fresh.length > 0) {
+              fresh.forEach(r => seen.add(String(r.id)));
+              writeSeenKeys(storageKey, seen);
+              const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+              const nextAlerts: WorkspaceAlert[] = fresh.slice(0, 8).map(r => {
+                const ev = r.event_type.toLowerCase();
+                const isClaim = ["submit", "submit_claim", "draft", "draft_saved"].includes(ev);
+                const isStaff = ev === "demo_registration";
+                return {
+                  id: `audit-${r.id}`,
+                  title: isClaim ? "New claim activity" : isStaff ? "New account registered" : r.event_type.replaceAll("_", " ").replace(/^./, c => c.toUpperCase()),
+                  subtitle: `${r.actor_role} · ${r.outcome}${r.entity_id ? ` · ${r.entity_id.slice(0, 8)}` : ""}`,
+                  time: now,
+                  unread: true,
+                  targetApp: isStaff && profile.role === "admin" ? "rules" : "audit",
+                };
+              });
+              setOfficerAlerts(prev => {
+                const existing = new Set(prev.map(a => a.id));
+                return [...nextAlerts.filter(a => !existing.has(a.id)), ...prev].slice(0, 20);
+              });
+              setToastAlert(nextAlerts[0]);
+            }
+          }
+        }
         if (Array.isArray(safetyRes)) setAuditSafety(safetyRes);
       }).finally(() => {
-        if (initial && !controller.signal.aborted) setAuditLoading(false);
+        if (initial && !controller.signal.aborted && profile.role === "auditor") setAuditLoading(false);
       });
     };
     loadAudit(true);
@@ -408,6 +522,10 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
     setPastClaims([]);
     setOverview(null);
     setOfficerQueue([]);
+    setOfficerAlerts([]);
+    setAlertsOpen(false);
+    setToastAlert(null);
+    seenOfficerClaimsRef.current = null;
     setPending([]);
     setOpenApps([]);
     setMinimizedApps([]);
@@ -665,12 +783,12 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
         <nav className="macos-menu-center" />
 
         <div className="macos-menu-right">
-          {profile?.role === "officer" && (
+          {profile && (
             <div className="officer-bell-wrap">
               <button
                 type="button"
                 className="macos-menu-item officer-bell-btn"
-                aria-label="Review desk notifications"
+                aria-label="Notifications"
                 aria-expanded={alertsOpen}
                 onClick={() => setAlertsOpen(open => !open)}
               >
@@ -682,9 +800,17 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                 )}
               </button>
               {alertsOpen && (
-                <div className="officer-alerts-popover" role="region" aria-label="Review desk notifications">
+                <div className="officer-alerts-popover" role="region" aria-label="Notifications">
                   <div className="officer-alerts-head">
-                    <strong>Review Desk Alerts</strong>
+                    <strong>
+                      {profile.role === "officer"
+                        ? "Review Desk Alerts"
+                        : profile.role === "admin"
+                          ? "Scheme & Claim Alerts"
+                          : profile.role === "auditor"
+                            ? "Audit Activity Alerts"
+                            : "Claim Updates"}
+                    </strong>
                     {officerAlerts.some(a => a.unread) && (
                       <button
                         type="button"
@@ -696,7 +822,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                     )}
                   </div>
                   {officerAlerts.length === 0 ? (
-                    <p className="officer-alerts-empty">No new claims since you opened Review Desk.</p>
+                    <p className="officer-alerts-empty">No new notifications yet.</p>
                   ) : (
                     <div className="officer-alerts-list">
                       {officerAlerts.map(item => (
@@ -707,14 +833,14 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                           onClick={() => {
                             setOfficerAlerts(prev => prev.map(a => a.id === item.id ? { ...a, unread: false } : a));
                             setAlertsOpen(false);
-                            openAppWindow("review");
+                            openAppWindow(item.targetApp);
                           }}
                         >
                           <div className="officer-alert-title">
-                            <span>{item.citizen}</span>
+                            <span>{item.title}</span>
                             <small>{item.time}</small>
                           </div>
-                          <small>New claim on Review Desk · {item.status.replace("_", " ")}</small>
+                          <small>{item.subtitle}</small>
                         </button>
                       ))}
                     </div>
@@ -742,7 +868,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
       {(headMessage || failed) && <div className="top-notice"><p role="status">{headMessage || failed?.failure}</p><button onClick={() => setHeadMessage("")} aria-label="Dismiss update"><X size={17} /></button></div>}
 
       <AnimatePresence>
-        {toastAlert && profile?.role === "officer" && (
+        {toastAlert && profile && (
           <motion.div
             className="officer-toast"
             role="status"
@@ -751,9 +877,9 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
             exit={{ opacity: 0, y: -12, scale: 0.96 }}
           >
             <Bell size={16} />
-            <div className="officer-toast-copy" onClick={() => { setToastAlert(null); openAppWindow("review"); }}>
-              <strong>New claim on Review Desk</strong>
-              <small>{toastAlert.citizen} · {toastAlert.status.replace("_", " ")}</small>
+            <div className="officer-toast-copy" onClick={() => { setToastAlert(null); openAppWindow(toastAlert.targetApp); }}>
+              <strong>{toastAlert.title}</strong>
+              <small>{toastAlert.subtitle}</small>
             </div>
             <button type="button" onClick={() => setToastAlert(null)} aria-label="Dismiss notification">
               <X size={14} />
