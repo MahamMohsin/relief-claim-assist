@@ -2092,19 +2092,81 @@ function RuleView({ ctx }: { ctx: ViewContext }) {
     } catch (error) { setProblem(getMessage(error)); }
     finally { setBusy(false); }
   }
+  const changedImpact = impact ? impact.filter(row => row.before !== row.after).length : 0;
+  const impactPct = impact && impact.length > 0 ? Math.round((changedImpact / impact.length) * 100) : 0;
+  const thresholdPct = config ? Math.round(config.confidence_threshold * 100) : 80;
+
   return <div className="view-stack">
     <Notice text={problem || error} warning /><Notice text={notice} />
-    <Panel><div className="panel-head"><div><h2>Eligibility rules</h2><p>Publish a new version while keeping prior decisions tied to their rules.</p></div>{active && <span className="pill green">Active · v{active.version}</span>}</div>
+    <Panel>
+      <div className="panel-head">
+        <div><h2>Eligibility rules</h2><p>Live thresholds · versioned with zero code deploy.</p></div>
+        {active && <span className="pill green">Active · v{active.version}</span>}
+      </div>
+      {config && (
+        <VStack gap={2} paddingBlockEnd={3}>
+          <HStack gap={2} wrap="wrap" width="100%">
+            <Card variant="muted" padding={3}>
+              <HStack gap={1.5} vAlign="center">
+                <CircleDollarSign size={18} color="#0f766e" />
+                <VStack gap={0.5}><small>Income cap</small><strong>{currency(config.income_cap)}</strong></VStack>
+              </HStack>
+            </Card>
+            <Card variant="muted" padding={3}>
+              <HStack gap={1.5} vAlign="center">
+                <UsersRound size={18} color="#0f766e" />
+                <VStack gap={0.5}><small>Min household</small><strong>{config.minimum_household} people</strong></VStack>
+              </HStack>
+            </Card>
+            <Card variant="muted" padding={3}>
+              <HStack gap={1.5} vAlign="center">
+                <CheckCircle2 size={18} color="#16a34a" />
+                <VStack gap={0.5}><small>Payout</small><strong>{currency(config.amount_pkr)}</strong></VStack>
+              </HStack>
+            </Card>
+            <Card variant="muted" padding={3}>
+              <VStack gap={0.5}>
+                <HStack justify="between" gap={2}><small>AI safety gate</small><strong>{thresholdPct}%</strong></HStack>
+                <ProgressBar
+                  label={`AI confidence threshold ${thresholdPct}%`}
+                  value={thresholdPct}
+                  max={100}
+                  variant={thresholdPct >= 85 ? "success" : "warning"}
+                  isLabelHidden
+                />
+              </VStack>
+            </Card>
+          </HStack>
+        </VStack>
+      )}
       {config ? <form onSubmit={apply}><label>Rule name<input data-cua="rule-name-input" value={name || active?.name || ""} onChange={event => setName(event.target.value)} minLength={3} maxLength={100} required /></label>
         <div className="form-grid">{ruleLabels.map(([key, label, min, max, step]) => <label key={key}>{label}<input data-cua={`rule-input-${key}`} type="number" min={min} max={max} step={step} required
           value={config[key]} onChange={event => { setDraft({ ...config, [key]: +event.target.value }); setImpact(undefined); }} /></label>)}</div>
-        <div className="actions"><button className="secondary" value="simulate" disabled={busy || ctx.offline}>Simulate impact on historical cases</button>
-          <button className="primary" value="publish" disabled={busy || ctx.offline}>Publish version</button></div>
+        <div className="actions"><button className="secondary" value="simulate" disabled={busy || ctx.offline}>Simulate impact</button>
+          <button className="primary" value="publish" disabled={busy || ctx.offline}>Publish v{(active?.version ?? 0) + 1}</button></div>
       </form> : loading && <Spinner />}
     </Panel>
-    {impact && <Panel><div className="panel-head"><div><h2>Digital Twin results</h2><p>{impact.filter(row => row.before !== row.after).length} of {impact.length} historical cases would change eligibility.</p></div></div>
-      <div className="table-scroll"><table><thead><tr><th>Claim</th><th>Original rule</th><th>Before</th><th>With draft</th></tr></thead><tbody>
-        {impact.map(row => <tr key={row.claim_id}><td>{short(row.claim_id)}</td><td>v{row.rule_version}</td><td>{row.before ? "Eligible" : "Ineligible"}</td><td>{row.after ? "Eligible" : "Ineligible"}</td></tr>)}
+    {impact && <Panel>
+      <div className="panel-head">
+        <div><h2>Digital Twin impact</h2><p>{changedImpact} of {impact.length} historical cases ({impactPct}%) flip eligibility.</p></div>
+        <Badge label={`${impactPct}% changed`} variant={changedImpact > 0 ? "warning" : "success"} />
+      </div>
+      <VStack gap={2} paddingBlockEnd={2}>
+        <ProgressBar
+          label="Digital Twin impact"
+          value={Math.max(changedImpact > 0 ? 8 : 0, impactPct)}
+          max={100}
+          variant={changedImpact > 0 ? "warning" : "success"}
+          isLabelHidden
+        />
+      </VStack>
+      <div className="table-scroll"><table><thead><tr><th>Claim</th><th>Rule</th><th>Before</th><th>With draft</th></tr></thead><tbody>
+        {impact.map(row => <tr key={row.claim_id}>
+          <td>{short(row.claim_id)}</td>
+          <td>v{row.rule_version}</td>
+          <td><Badge label={row.before ? "Eligible" : "Ineligible"} variant={row.before ? "success" : "neutral"} /></td>
+          <td><Badge label={row.after ? "Eligible" : "Ineligible"} variant={row.after ? "success" : "warning"} /></td>
+        </tr>)}
       </tbody></table></div>
     </Panel>}
     <Panel><h2>Version history</h2><div className="rows">{data?.map(rule => <div className="list-row static" key={rule.id}>
