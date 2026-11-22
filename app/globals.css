@@ -7333,7 +7333,7 @@ button.active-cases-card:hover {
 }
 
 .officer-glass-suite .officer-budget-card {
-  grid-column: 1 / -1;
+  grid-column: auto;
 }
 
 .officer-budget-kpis {
@@ -7505,6 +7505,80 @@ button.active-cases-card:hover {
   display: none;
   width: 0;
   height: 0;
+}
+
+/* ========================================================
+   PAKISTAN CLAIMS MAP WIDGET (Dark Liquid Glass)
+   ======================================================== */
+.pk-map-layout {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.pk-map-svg {
+  width: 100%;
+  height: 112px;
+  display: block;
+}
+
+.pk-map-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  min-width: 0;
+}
+
+.pk-map-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.38rem;
+  padding: 0.22rem 0.42rem;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 0.7rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.pk-map-row.is-active,
+.pk-map-row:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.26);
+}
+
+.pk-map-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: rgba(255, 255, 255, 0.86);
+  font-weight: 500;
+}
+
+.pk-map-name i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.pk-map-row strong {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pk-map-row small {
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.56);
+  font-variant-numeric: tabular-nums;
 }
 
 

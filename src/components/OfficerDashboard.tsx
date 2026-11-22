@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ArrowUpRight } from "lucide-react";
 import type { Claim, Overview, SchemeBudget } from "@/src/lib/contracts";
+import { PakistanClaimsMapCard } from "./PakistanClaimsMapCard";
 
 const formatCompactPkr = (amount: number) => {
   if (amount >= 1_000_000) return `PKR ${(amount / 1_000_000).toFixed(1)}M`;
@@ -344,7 +345,10 @@ export function OfficerDashboard({
         );
       })()}
 
-      {/* CARD 3: Compact Overall Scheme Budget Strip (shared across Admin & Reviewer) */}
+      {/* CARD 3: Pakistan Claims Hotspot Map */}
+      <PakistanClaimsMapCard queue={queue} onOpenReview={onOpenReview} />
+
+      {/* CARD 4: Compact Overall Scheme Budget Card (read-only for Reviewer; Admin edits) */}
       {(() => {
         const reservedFallback = queue
           .filter(c => c.status === "approved" && c.payment_status !== "paid" && c.funding_status !== "awaiting_funds")
