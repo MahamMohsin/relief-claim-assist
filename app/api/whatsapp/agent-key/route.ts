@@ -91,7 +91,9 @@ export async function POST(request: Request) {
       if (!text) {
         return NextResponse.json({ error: "Message text is required." }, { status: 400 });
       }
-      const result = await runAgentTestMessage(owner, text);
+      const isVoice = Boolean((body as { isVoice?: boolean }).isVoice);
+      const preferredLocale = (body as { locale?: "en" | "ur" }).locale;
+      const result = await runAgentTestMessage(owner, text, { isVoice, preferredLocale });
       return NextResponse.json({
         success: true,
         ...result,

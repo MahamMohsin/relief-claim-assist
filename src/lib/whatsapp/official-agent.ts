@@ -4,9 +4,16 @@ import type { Persona, Role } from "@/src/lib/contracts";
 import { recordWhatsAppMessage } from "./server";
 import { runScopedAssistantTurn } from "./agent";
 import { inferDemoPersona, type ScopedUserIdentity } from "./scoped-gateway";
+import {
+  downloadWhatsAppMedia,
+  sendAgentAudioMessage,
+  synthesizeVoiceReply,
+  transcribeWhatsAppAudio,
+  uploadWhatsAppMedia,
+  WHATSAPP_AGENT_BASE_URL,
+} from "./audio";
 
 const AGENT_KEYS_FILE = path.resolve(process.cwd(), ".whatsapp-agent-keys.json");
-const WHATSAPP_AGENT_BASE_URL = "https://api.whatsapp.com/agent/v1";
 
 export type StoredAgentKey = {
   /** Authenticated Supabase profile.id — each user gets their own completely isolated entry */
@@ -403,12 +410,20 @@ function buildScopedIdentityFromEntry(entry: StoredAgentKey): ScopedUserIdentity
 }
 
 /**
- * Run an isolated in-app test message through this user's own scoped WhatsApp Agent
+ * Run an isolated in-app test message through this user's own scoped WhatsApp Agent.
+ * Optionally simulates a voice note by synthesizing Cartesia TTS audio.
  */
 export async function runAgentTestMessage(
   owner: SaveAgentKeyProfile,
   text: string,
-): Promise<{ reply: string; toolsUsed: string[]; agentName: string }> {
+  options?: { isVoice?: boolean; preferredLocale?: "en" | "ur" },
+): Promise<{
+  reply: string;
+  toolsUsed: string[];
+  agentName: string;
+  audioBase64?: string;
+  locale?: "en" | "ur";
+}> {
   refreshStoredAgentOwnerContext(owner);
   const store = readAgentKeyStore();
   const entry = store.keys[owner.userId];
@@ -427,27 +442,50 @@ export async function runAgentTestMessage(
         refreshToken: owner.refreshToken ?? null,
       };
 
+  const isVoice = Boolean(options?.isVoice);
+
   recordWhatsAppMessage({
     direction: "inbound",
     from: `${owner.userName} (Test Console)`,
     to: `${agentName} [${owner.userName}]`,
-    text,
+    text: isVoice ? `🎤 [Voice Note]: "${text}"` : text,
   });
 
   const turn = await runScopedAssistantTurn(scopedUser, text, "whatsapp");
+
+  let audioBase64: string | undefined;
+  let synthesizedLocale: "en" | "ur" | undefined;
+
+  if (isVoice) {
+    try {
+      const voiceRes = await synthesizeVoiceReply(turn.reply, options?.preferredLocale);
+      if (voiceRes?.audioBuffer) {
+        audioBase64 = voiceRes.audioBuffer.toString("base64");
+        synthesizedLocale = voiceRes.locale;
+      }
+    } catch (voiceErr) {
+      console.warn("[wa-agent] Test console voice synthesis error:", voiceErr);
+    }
+  }
+
+  const toolsWithAudio = isVoice && audioBase64
+    ? ["cartesia_voice_reply", ...(turn.toolsUsed.length ? turn.toolsUsed : ["official_agent_mimo"])]
+    : (turn.toolsUsed.length ? turn.toolsUsed : ["official_agent_mimo"]);
 
   recordWhatsAppMessage({
     direction: "outbound",
     from: `${agentName} [${owner.userName}]`,
     to: `${owner.userName} (Test Console)`,
-    text: turn.reply,
-    toolsUsed: turn.toolsUsed.length ? turn.toolsUsed : ["official_agent_mimo"],
+    text: isVoice && audioBase64 ? `🎙️ [Voice Note Reply]: "${turn.reply}"` : turn.reply,
+    toolsUsed: toolsWithAudio,
   });
 
   return {
     reply: turn.reply,
-    toolsUsed: turn.toolsUsed,
+    toolsUsed: toolsWithAudio,
     agentName,
+    audioBase64,
+    locale: synthesizedLocale,
   };
 }
 
@@ -530,21 +568,72 @@ export function startAgentPoller(entry: StoredAgentKey) {
               const messages = ch?.value?.messages || [];
 
               for (const msg of messages) {
-                if (msg.type !== "text" && !msg.text?.body) continue;
+                const isAudio = msg.type === "audio" && Boolean(msg.audio?.id);
+                const isText = msg.type === "text" && Boolean(msg.text?.body);
+                if (!isAudio && !isText) continue;
+
                 const senderId = msg.from;
-                const textBody = msg.text.body.trim();
                 const wamid = msg.id;
                 const ownerLabel = currentEntry.userName || currentEntry.personaId;
 
+                let textBody = "";
+                let isVoiceNote = false;
+                let detectedAudioLocale: "en" | "ur" = "en";
+
+                if (isAudio) {
+                  isVoiceNote = true;
+                  const mediaId = msg.audio.id;
+                  console.log(
+                    `[wa-agent] Inbound Voice Note from ${senderId} on ${currentEntry.agentName} [${ownerLabel}] (mediaId: ${mediaId})`,
+                  );
+
+                  const downloaded = await downloadWhatsAppMedia(currentEntry.apiKey, mediaId);
+                  if (!downloaded) {
+                    console.error(`[wa-agent] Failed to download voice note ${mediaId} from WhatsApp.`);
+                    await sendAgentMessage(
+                      currentEntry.apiKey,
+                      senderId,
+                      "⚠️ We received your voice message but were unable to download it. Please try sending it again or send a text message.",
+                    );
+                    continue;
+                  }
+
+                  try {
+                    const stt = await transcribeWhatsAppAudio(downloaded.buffer, downloaded.mimeType);
+                    textBody = stt.transcript;
+                    detectedAudioLocale = stt.locale;
+                    console.log(`[wa-agent] Transcribed voice note from ${senderId}: "${textBody}" (${detectedAudioLocale})`);
+                  } catch (sttErr) {
+                    console.error("[wa-agent] Voice transcription failed:", sttErr);
+                    await sendAgentMessage(
+                      currentEntry.apiKey,
+                      senderId,
+                      "⚠️ We could not transcribe your voice note clearly. Please speak closer to the microphone or send a text message.",
+                    );
+                    continue;
+                  }
+
+                  if (!textBody) {
+                    await sendAgentMessage(
+                      currentEntry.apiKey,
+                      senderId,
+                      "⚠️ The voice message appeared to be empty or silent. Please try recording again.",
+                    );
+                    continue;
+                  }
+                } else {
+                  textBody = msg.text.body.trim();
+                }
+
                 console.log(
-                  `[wa-agent] Inbound on ${currentEntry.agentName} [${ownerLabel}] from ${senderId}: "${textBody}"`,
+                  `[wa-agent] Inbound ${isVoiceNote ? "[Voice Note]" : ""} on ${currentEntry.agentName} [${ownerLabel}] from ${senderId}: "${textBody}"`,
                 );
 
                 recordWhatsAppMessage({
                   direction: "inbound",
                   from: senderId,
                   to: `${currentEntry.agentName} [${ownerLabel}]`,
-                  text: textBody,
+                  text: isVoiceNote ? `🎤 [Voice Note]: "${textBody}"` : textBody,
                 });
 
                 if (wamid) {
@@ -556,18 +645,56 @@ export function startAgentPoller(entry: StoredAgentKey) {
                   const scopedUser = buildScopedIdentityFromEntry(currentEntry);
                   const turn = await runScopedAssistantTurn(scopedUser, textBody, "whatsapp");
 
+                  let sentAudio = false;
+                  if (isVoiceNote) {
+                    try {
+                      // Synthesize voice reply via Cartesia TTS
+                      const voiceRes = await synthesizeVoiceReply(turn.reply, detectedAudioLocale);
+                      if (voiceRes) {
+                        // Upload MP3 voice note to WhatsApp
+                        const uploaded = await uploadWhatsAppMedia(
+                          currentEntry.apiKey,
+                          voiceRes.audioBuffer,
+                          "audio/mpeg",
+                          "voice_reply.mp3",
+                        );
+                        if (uploaded?.mediaId) {
+                          // Send voice note message back to user!
+                          const audioSend = await sendAgentAudioMessage(
+                            currentEntry.apiKey,
+                            senderId,
+                            uploaded.mediaId,
+                          );
+                          if (audioSend.success) {
+                            sentAudio = true;
+                            console.log(
+                              `[wa-agent] Sent Voice Note reply to ${senderId} (mediaId: ${uploaded.mediaId})`,
+                            );
+                          }
+                        }
+                      }
+                    } catch (voiceErr) {
+                      console.warn("[wa-agent] Error synthesizing/uploading voice reply:", voiceErr);
+                    }
+                  }
+
+                  // Send text reply as well so user has written reference for numbers, IDs, and details
                   const sendRes = await sendAgentMessage(currentEntry.apiKey, senderId, turn.reply);
+
+                  const toolsUsed = isVoiceNote && sentAudio
+                    ? ["cartesia_voice_reply", ...(turn.toolsUsed.length ? turn.toolsUsed : ["official_agent_mimo"])]
+                    : (turn.toolsUsed.length ? turn.toolsUsed : ["official_agent_mimo"]);
 
                   recordWhatsAppMessage({
                     direction: "outbound",
                     from: `${currentEntry.agentName} [${ownerLabel}]`,
                     to: senderId,
-                    text: turn.reply,
-                    toolsUsed: turn.toolsUsed.length ? turn.toolsUsed : ["official_agent_mimo"],
+                    text: sentAudio ? `🎙️ [Voice Note Reply]: "${turn.reply}"` : turn.reply,
+                    toolsUsed,
                   });
 
                   console.log(
-                    `[wa-agent] Reply sent via ${currentEntry.agentName} [${ownerLabel}] to ${senderId} (messageId: ${sendRes.messageId || "ok"})`,
+                    `[wa-agent] Reply sent via ${currentEntry.agentName} [${ownerLabel}] to ${senderId} (audio: ${sentAudio}, messageId: ${sendRes.messageId || "ok"})`,
                   );
                 } catch (aiErr) {
                   console.error("[wa-agent] Error generating/sending scoped AI reply:", aiErr);

@@ -13,9 +13,11 @@ import {
   KeyRound,
   LoaderCircle,
   MessageSquare,
+  Mic,
   Power,
   Send,
   Sparkles,
+  Volume2,
 } from "lucide-react";
 import { Button } from "@astryxdesign/core/Button";
 import { Card } from "@astryxdesign/core/Card";
@@ -63,7 +65,9 @@ export function WhatsAppAgentKeySection({
   // Test Simulator
   const [testText, setTestText] = useState("");
   const [testBusy, setTestBusy] = useState(false);
-  const [testReplies, setTestReplies] = useState<Array<{ sender: "user" | "agent"; text: string; time: string }>>([]);
+  const [testReplies, setTestReplies] = useState<
+    Array<{ sender: "user" | "agent"; text: string; time: string; isVoice?: boolean; audioUrl?: string }>
+  >([]);
 
   useEffect(() => {
     // Immediately reset state on persona change so switching Fatima -> Tariq -> Zainab never flashes stale keys or chat
@@ -173,14 +177,14 @@ export function WhatsAppAgentKeySection({
     }
   }
 
-  async function handleSendTestMessage(overrideText?: string) {
+  async function handleSendTestMessage(overrideText?: string, isVoice = false) {
     const text = (overrideText ?? testText).trim();
     if (!text || testBusy) return;
     setTestBusy(true);
     setTestText("");
 
     const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    setTestReplies(prev => [...prev, { sender: "user", text, time: now }]);
+    setTestReplies(prev => [...prev, { sender: "user", text, time: now, isVoice }]);
 
     try {
       const res = await fetch("/api/whatsapp/agent-key", {
@@ -189,15 +193,19 @@ export function WhatsAppAgentKeySection({
         body: JSON.stringify({
           action: "test_chat",
           text,
+          isVoice,
         }),
       });
       const data = await res.json();
+      const audioUrl = data.audioBase64 ? `data:audio/mp3;base64,${data.audioBase64}` : undefined;
       setTestReplies(prev => [
         ...prev,
         {
           sender: "agent",
           text: data.reply || data.error || "Agent responded successfully.",
           time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          isVoice: Boolean(audioUrl),
+          audioUrl,
         },
       ]);
     } catch {
@@ -358,6 +366,9 @@ export function WhatsAppAgentKeySection({
             }}>
               ✅ <strong>Active &amp; Ready in WhatsApp:</strong> Open WhatsApp on your phone and start chatting with <strong>{info?.agentName || "Ali"}</strong>.
               Your messages are answered automatically by MiMo using your <strong>{roleTitle}</strong> tools.
+              <div style={{ marginTop: "0.3rem", display: "flex", alignItems: "center", gap: "6px", fontSize: "0.76rem", color: "#047857" }}>
+                <span>🎙️ <strong>Bidirectional Voice Notes:</strong> Send voice messages in English or Urdu — {info?.agentName || "Ali"} listens via Deepgram Nova-3 and replies with Cartesia voice notes.</span>
+              </div>
             </div>
           </div>
         ) : (
@@ -515,7 +526,7 @@ export function WhatsAppAgentKeySection({
             </div>
 
             {testReplies.length > 0 && (
-              <div style={{ maxHeight: "150px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.35rem", marginBottom: "0.5rem", padding: "0.4rem", background: "#f8fafc", borderRadius: "8px" }}>
+              <div style={{ maxHeight: "170px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.35rem", marginBottom: "0.5rem", padding: "0.4rem", background: "#f8fafc", borderRadius: "8px" }}>
                 {testReplies.map((r, i) => (
                   <div
                     key={i}
@@ -529,14 +540,21 @@ export function WhatsAppAgentKeySection({
                       maxWidth: "85%",
                     }}
                   >
-                    <strong>{r.sender === "user" ? "You" : (info?.agentName || "Ali")}: </strong>
+                    <strong>
+                      {r.sender === "user" ? (r.isVoice ? "🎤 You (Voice)" : "You") : (r.isVoice ? `🎙️ ${info?.agentName || "Ali"} (Voice)` : (info?.agentName || "Ali"))}:{" "}
+                    </strong>
                     <span>{r.text}</span>
+                    {r.audioUrl && (
+                      <div style={{ marginTop: "0.3rem" }}>
+                        <audio controls src={r.audioUrl} style={{ height: "26px", maxWidth: "230px", display: "block" }} />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
 
-            <div style={{ display: "flex", gap: "0.4rem" }}>
+            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
               <input
                 data-cua="whatsapp-test-input"
                 type="text"
@@ -546,6 +564,7 @@ export function WhatsAppAgentKeySection({
                 onKeyDown={e => { if (e.key === "Enter") void handleSendTestMessage(); }}
                 style={{
                   flex: 1,
+                  minWidth: "180px",
                   padding: "0.35rem 0.65rem",
                   borderRadius: "6px",
                   border: "1px solid #cbd5e1",
@@ -569,6 +588,28 @@ export function WhatsAppAgentKeySection({
                 }}
               >
                 {testBusy ? "Thinking…" : "Test"}
+              </button>
+              <button
+                type="button"
+                disabled={testBusy || !testText.trim()}
+                onClick={() => void handleSendTestMessage(undefined, true)}
+                style={{
+                  background: "#0284c7",
+                  color: "#fff",
+                  border: "none",
+                  padding: "0.35rem 0.65rem",
+                  borderRadius: "6px",
+                  fontSize: "0.78rem",
+                  fontWeight: 600,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  cursor: testBusy || !testText.trim() ? "not-allowed" : "pointer",
+                }}
+                title="Simulate Voice Note (generates Cartesia audio speech reply)"
+              >
+                <Mic size={13} />
+                <span>Voice Test</span>
               </button>
             </div>
           </div>

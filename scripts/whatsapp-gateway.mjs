@@ -238,6 +238,65 @@ async function connectSocket() {
     }
   });
 
+async function transcribeAudioBuffer(buffer, mimetype = "audio/ogg") {
+  const deepgramKey = process.env.DEEPGRAM_API_KEY || "f80cd66b7c2c1ce663cac7e17ee8160226c3934d";
+  const cleanMime = (mimetype || "audio/ogg").split(";")[0].trim();
+  const res = await fetch("https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&detect_language=true", {
+    method: "POST",
+    headers: {
+      Authorization: `Token ${deepgramKey}`,
+      "Content-Type": cleanMime,
+    },
+    body: buffer,
+    signal: AbortSignal.timeout(25000),
+  });
+  if (!res.ok) throw new Error(`Deepgram failed HTTP ${res.status}`);
+  const json = await res.json();
+  return json?.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
+}
+
+async function synthesizeVoiceCartesia(text) {
+  const cartesiaKey = process.env.CARTESIA_API_KEY || "sk_car_nNECv8QNwBPffXCWpBaeiX";
+  const isUrdu = /[\u0600-\u06FF]/.test(text);
+  const voiceId = isUrdu
+    ? (process.env.CARTESIA_VOICE_UR || "a86bc28d-c3a1-405b-ad29-6a07417250f3")
+    : (process.env.CARTESIA_VOICE_EN || "55f006ff-520f-4413-8c01-b37d4555b194");
+  const spokenText = text
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/[*_~#>]/g, "")
+    .replace(/\s+/g, " ")
+    .slice(0, 1000)
+    .trim();
+  if (!spokenText) return null;
+
+  try {
+    const res = await fetch("https://api.cartesia.ai/tts/bytes", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${cartesiaKey}`,
+        "Cartesia-Version": "2025-04-16",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model_id: "sonic-3.6",
+        transcript: spokenText,
+        language: isUrdu ? "ur" : "en",
+        voice: { mode: "id", id: voiceId },
+        output_format: { container: "mp3", sample_rate: 44100, bit_rate: 128000 },
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) return null;
+    const arrayBuffer = await res.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch {
+    return null;
+  }
+}
+
   // Handle incoming WhatsApp messages
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
     if (type !== "notify") return;
@@ -249,15 +308,36 @@ async function connectSocket() {
       if (!remoteJid || remoteJid.endsWith("@g.us")) continue; // direct chats
 
       const senderPhone = cleanPhone(remoteJid);
-      const text =
+      const isAudio = Boolean(msg.message?.audioMessage);
+      let text =
         msg.message?.conversation ||
         msg.message?.extendedTextMessage?.text ||
         msg.message?.imageMessage?.caption ||
         "";
 
+      let isVoice = false;
+      if (isAudio) {
+        try {
+          console.log(`[wa-gateway] Inbound voice note from ${senderPhone}. Downloading and transcribing...`);
+          const downloadFn = baileysPkg.downloadMediaMessage || baileysPkg.default?.downloadMediaMessage;
+          if (downloadFn) {
+            const buffer = await downloadFn(msg, "buffer", {}, { logger: makeSilentLogger() });
+            text = await transcribeAudioBuffer(buffer, msg.message?.audioMessage?.mimetype);
+            isVoice = true;
+            console.log(`[wa-gateway] Transcribed voice note from ${senderPhone}: "${text}"`);
+          }
+        } catch (err) {
+          console.error("[wa-gateway] Failed to transcribe incoming audio:", err.message);
+          await sock.sendMessage(remoteJid, {
+            text: "⚠️ We could not transcribe your voice note clearly. Please try speaking closer to the microphone or send a text message.",
+          });
+          continue;
+        }
+      }
+
       if (!text.trim()) continue;
 
-      console.log(`[wa-gateway] Inbound message from ${senderPhone}: "${text}"`);
+      console.log(`[wa-gateway] Inbound ${isVoice ? "[Voice Note]" : "message"} from ${senderPhone}: "${text}"`);
 
       try {
         const res = await fetch("http://127.0.0.1:3000/api/whatsapp/webhook", {
@@ -272,6 +352,18 @@ async function connectSocket() {
         if (res.ok) {
           const data = await res.json();
           if (data.reply) {
+            if (isVoice) {
+              console.log(`[wa-gateway] Synthesizing voice reply for ${senderPhone}...`);
+              const mp3Buffer = await synthesizeVoiceCartesia(data.reply);
+              if (mp3Buffer) {
+                console.log(`[wa-gateway] Sending PTT voice note reply to ${senderPhone}...`);
+                await sock.sendMessage(remoteJid, {
+                  audio: mp3Buffer,
+                  mimetype: "audio/mp4",
+                  ptt: true,
+                });
+              }
+            }
             console.log(`[wa-gateway] Sending bot response to ${senderPhone}...`);
             await sock.sendMessage(remoteJid, { text: data.reply });
           }

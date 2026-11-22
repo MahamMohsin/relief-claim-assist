@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "next typegen && tsc --noEmit",
-    "test:unit": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test tests/jev.test.mjs",
+    "test:unit": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test tests/jev.test.mjs tests/whatsapp-audio.test.mjs",
     "test:e2e": "node --env-file=.env.local tests/workflow.mjs",
     "whatsapp:gateway": "node scripts/whatsapp-gateway.mjs",
     "sms:gateway": "node scripts/google-messages-gateway.mjs"

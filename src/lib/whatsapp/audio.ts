@@ -1,4 +1,4 @@
-import { WHATSAPP_AGENT_BASE_URL } from "./official-agent-constants";
+export const WHATSAPP_AGENT_BASE_URL = "https://api.whatsapp.com/agent/v1";
 
 export interface TranscribeResult {
   transcript: string;
