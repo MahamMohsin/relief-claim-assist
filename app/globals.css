@@ -1892,11 +1892,11 @@ th { background: var(--faint); color: var(--forest); }
   color: #ffffff;
 }
 
-/* Rounded rectangular glowing boundary ONLY appears when speaking / listening */
+/* Keep dock calm and clean without orange glow when recording */
 .voice-dock-glass.is-recording {
-  border-radius: 20px;
-  border-color: rgba(224, 123, 82, 0.8);
-  box-shadow: 0 0 0 3px rgba(224, 123, 82, 0.25), 0 20px 48px rgba(0, 0, 0, 0.2);
+  border-radius: 22px;
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 .voice-dock-glass.is-working {
@@ -2458,10 +2458,10 @@ th { background: var(--faint); color: var(--forest); }
 }
 
 .glass-action-btn.recording {
-  background: linear-gradient(135deg, var(--accent-500) 0%, var(--accent-600) 100%);
+  background: linear-gradient(180deg, #0a84ff 0%, #007aff 100%);
   color: #fff;
-  box-shadow: 0 4px 16px rgba(224, 123, 82, 0.55);
-  animation: pulse-red 1.2s infinite alternate;
+  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  animation: pulse-blue 1.2s infinite alternate;
 }
 
 .glass-mic-btn {
@@ -2489,14 +2489,14 @@ th { background: var(--faint); color: var(--forest); }
 }
 
 .glass-mic-btn.recording {
-  background: linear-gradient(135deg, var(--accent-500) 0%, var(--accent-600) 100%);
-  box-shadow: 0 4px 14px rgba(224, 123, 82, 0.5);
-  animation: pulse-red 1.2s infinite alternate;
+  background: linear-gradient(180deg, #0a84ff 0%, #007aff 100%);
+  box-shadow: 0 4px 14px rgba(0, 122, 255, 0.5);
+  animation: pulse-blue 1.2s infinite alternate;
 }
 
-@keyframes pulse-red {
-  from { transform: scale(1); }
-  to { transform: scale(1.08); }
+@keyframes pulse-blue {
+  from { transform: scale(1); box-shadow: 0 4px 14px rgba(0, 122, 255, 0.45); }
+  to { transform: scale(1.08); box-shadow: 0 4px 20px rgba(0, 122, 255, 0.7); }
 }
 
 .glass-lang-pill {
@@ -5782,7 +5782,7 @@ button.hero-button { background: var(--accent-600); color: var(--surface); }
 button.persona-card, button.kanban-card { background: var(--surface); }
 .glass-action-btn { background: #ffffff; color: #0b1512; }
 .glass-action-btn.has-text { background: linear-gradient(180deg, #0a84ff 0%, #007aff 100%); color: #fff; box-shadow: 0 4px 14px rgba(0, 122, 255, 0.45); }
-.glass-action-btn.recording { background: linear-gradient(135deg, var(--accent-500) 0%, var(--accent-600) 100%); color: #fff; }
+.glass-action-btn.recording { background: linear-gradient(180deg, #0a84ff 0%, #007aff 100%); color: #fff; box-shadow: 0 4px 14px rgba(0, 122, 255, 0.45); }
 .glass-lang-pill { background: rgba(19, 74, 65, 0.58); }
 .glass-lang-pill:hover { background: rgba(27, 92, 81, 0.68); }
 .liquid-action-btn { background: var(--bg); color: var(--brand-800); border-color: var(--border); }
