@@ -344,7 +344,47 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
           </p>
         )}
 
-        {/* WhatsApp QR Code Section */}
+        {/* Active Paired Device Card when Connected */}
+        {isConnected && !showQr && (
+          <div style={{
+            background: "rgba(0, 0, 0, 0.3)",
+            border: "1px solid rgba(37, 211, 102, 0.4)",
+            borderRadius: "12px",
+            padding: "0.85rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "0.75rem",
+            flexWrap: "wrap",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+              <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#25D366", color: "#fff", display: "grid", placeItems: "center" }}>
+                <CheckCircle2 size={18} />
+              </div>
+              <div>
+                <span style={{ fontSize: "0.7rem", color: "rgba(255, 255, 255, 0.65)", textTransform: "uppercase", letterSpacing: "0.04em", display: "block" }}>
+                  Active Bot Number (Multi-Device)
+                </span>
+                <strong style={{ fontSize: "1.05rem", color: "#ffffff", letterSpacing: "0.02em" }}>
+                  {state?.adminPhone || "+92 349 2587419"}
+                </strong>
+                <small style={{ display: "block", fontSize: "0.68rem", color: "rgba(37, 211, 102, 0.9)" }}>
+                  Connected · Ready for citizen /login commands &amp; relief queries
+                </small>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="audit-glass-open-btn"
+              onClick={() => onOpen("whatsapp")}
+              style={{ padding: "0.35rem 0.65rem", fontSize: "0.74rem" }}
+            >
+              View Messages Stream <ArrowUpRight size={12} />
+            </button>
+          </div>
+        )}
+
+        {/* WhatsApp QR Code Section (Only when not connected or explicitly toggled to re-pair) */}
         {(!isConnected || showQr) && state?.qrDataUrl && (
           <div style={{
             display: "flex",
@@ -358,7 +398,7 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
             textAlign: "center",
           }}>
             <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "#065f46" }}>
-              Scan with WhatsApp on Admin Phone
+              {isConnected ? "Re-pair Secondary WhatsApp Session" : "Scan with WhatsApp on Admin Phone"}
             </span>
             <img
               key={state.qrDataUrl.slice(-24)}

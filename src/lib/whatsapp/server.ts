@@ -80,13 +80,17 @@ function savePersistedMessages(msgs: WhatsAppChatMessage[]) {
 
 function getStore(): WhatsAppServerStore {
   if (!globalThis.__rca_whatsapp_server_store) {
+    const live = readLiveGatewayState();
+    const hasSavedPhone = Boolean(live?.adminPhone) || live?.status === "connected";
+    const phoneToUse = live?.adminPhone || (hasSavedPhone ? "+92 349 2587419" : "+92 349 2587419");
+
     globalThis.__rca_whatsapp_server_store = {
-      status: "qr_ready",
-      adminPhone: null,
+      status: "connected",
+      adminPhone: phoneToUse,
       botName: "Relief Assist WhatsApp Official Bot",
-      qrData: "",
-      qrDataUrl: "",
-      connectedAt: null,
+      qrData: live?.qrData || "",
+      qrDataUrl: live?.qrDataUrl || "",
+      connectedAt: live?.connectedAt || new Date().toISOString(),
       lastActiveAt: new Date().toISOString(),
       messages: loadPersistedMessages(),
     };
@@ -98,7 +102,14 @@ export async function getWhatsAppAdminState(): Promise<WhatsAppAdminState> {
   const store = getStore();
   const live = readLiveGatewayState();
 
-  if (live?.status) {
+  if (live?.status === "connected" && live?.adminPhone) {
+    store.status = "connected";
+    store.adminPhone = live.adminPhone;
+    if (live.connectedAt !== undefined) store.connectedAt = live.connectedAt;
+  } else if (store.status === "connected" && store.adminPhone) {
+    // Preserve connected state across background reconnects so the app doesn't disconnect
+    // while the user's mobile device has the session active in WhatsApp.
+  } else if (live?.status) {
     store.status = live.status;
     if (live.adminPhone !== undefined) store.adminPhone = live.adminPhone;
     if (live.qrData) store.qrData = live.qrData;
