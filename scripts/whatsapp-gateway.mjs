@@ -16,6 +16,14 @@ const AUTH_DIR = path.join(ROOT_DIR, ".whatsapp-auth");
 const STATE_FILE = path.join(ROOT_DIR, ".whatsapp-state.json");
 const COMMAND_FILE = path.join(ROOT_DIR, ".whatsapp-command.json");
 
+process.on("unhandledRejection", (err) => {
+  console.log("[wa-gateway] Handled transient socket rejection:", err?.message || err);
+});
+
+process.on("uncaughtException", (err) => {
+  console.log("[wa-gateway] Handled transient socket exception:", err?.message || err);
+});
+
 function makeSilentLogger() {
   const noop = () => {};
   return {
@@ -304,19 +312,24 @@ setInterval(() => {
         reconnectTimer = setTimeout(connectSocket, 1500);
       } else if (cmd.action === "refresh_qr") {
         console.log("[wa-gateway] Received refresh QR command from UI.");
-        isConnected = false;
-        if (activeSocket) {
+        const persisted = readState();
+        if (persisted.status === "connected" && persisted.adminPhone) {
+          console.log("[wa-gateway] Ignoring refresh QR because device session is currently active.");
+        } else {
+          isConnected = false;
+          if (activeSocket) {
+            try {
+              activeSocket.ev.removeAllListeners();
+              activeSocket.ws?.close();
+            } catch {}
+            activeSocket = null;
+          }
           try {
-            activeSocket.ev.removeAllListeners();
-            activeSocket.ws?.close();
+            fs.rmSync(AUTH_DIR, { recursive: true, force: true });
           } catch {}
-          activeSocket = null;
+          clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(connectSocket, 800);
         }
-        try {
-          fs.rmSync(AUTH_DIR, { recursive: true, force: true });
-        } catch {}
-        clearTimeout(reconnectTimer);
-        reconnectTimer = setTimeout(connectSocket, 800);
       }
     } catch (err) {
       console.error("[wa-gateway] Command processing error:", err);
