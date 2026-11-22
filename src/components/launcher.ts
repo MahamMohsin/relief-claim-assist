@@ -105,9 +105,9 @@ export const apps = {
     bg: "#E6F0ED"
   },
   whatsapp: {
-    title: "WhatsApp Link",
-    note: "Connect WhatsApp & chat with assistant",
-    badge: "Bot Gateway",
+    title: "WhatsApp & SMS",
+    note: "Private AI Agent & Google Messages SMS",
+    badge: "Messaging",
     icon: MessageSquareShare,
     color: "ios-green",
     gradient: "from-[#25D366] to-[#128C7E]",

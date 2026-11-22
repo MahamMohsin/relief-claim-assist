@@ -263,6 +263,7 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
   onOpen: (app: MiniApp) => void;
 }) {
   const [agentInfo, setAgentInfo] = useState<{ isConfigured: boolean; agentName: string | null; maskedKey: string | null } | null>(null);
+  const [gmInfo, setGmInfo] = useState<{ status: string; adminPhone: string | null; activeSmsSessions?: number } | null>(null);
   const [loading, setLoading] = useState(!offline);
 
   useEffect(() => {
@@ -271,10 +272,17 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
       if (offline) return;
       try {
         setLoading(true);
-        const res = await fetch("/api/whatsapp/agent-key", { cache: "no-store" });
-        if (res.ok) {
-          const json = await res.json();
+        const [waRes, gmRes] = await Promise.all([
+          fetch("/api/whatsapp/agent-key", { cache: "no-store" }),
+          fetch("/api/google-messages/status", { cache: "no-store" }),
+        ]);
+        if (waRes.ok) {
+          const json = await waRes.json();
           if (active) setAgentInfo(json);
+        }
+        if (gmRes.ok) {
+          const json = await gmRes.json();
+          if (active) setGmInfo(json);
         }
       } catch {
         // Ignored
@@ -287,6 +295,7 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
   }, [offline]);
 
   const isConnected = Boolean(agentInfo?.isConfigured);
+  const isSmsPaired = gmInfo?.status === "connected";
 
   return (
     <article className="audit-glass-card admin-whatsapp-card" aria-labelledby="admin-wa-heading">
@@ -344,12 +353,14 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
           <dd style={{ color: isConnected ? "#34d399" : "rgba(255, 255, 255, 0.7)" }}>
             {isConnected ? `${agentInfo?.agentName || "Ali"} (Online)` : "Not configured"}
           </dd>
-          <dt>API Key Status</dt>
-          <dd>{isConnected ? `Connected (${agentInfo?.maskedKey})` : "Pending Key"}</dd>
-          <dt>Admin Role</dt>
-          <dd>Scheme Administrator</dd>
+          <dt>Google Messages SMS</dt>
+          <dd style={{ color: isSmsPaired ? "#34d399" : "#fbbf24" }}>
+            {isSmsPaired ? `Paired (${gmInfo?.adminPhone || "Live"})` : "Not paired"}
+          </dd>
+          <dt>Active SMS Logins</dt>
+          <dd>{gmInfo?.activeSmsSessions ?? 0}</dd>
           <dt>LLM Engine</dt>
-          <dd>MiMo Flash + Scoped Tools</dd>
+          <dd>MiMo Flash + Isolated Tools</dd>
         </dl>
 
         {/* Control Button */}
@@ -360,7 +371,7 @@ function WhatsAppGatewayCard({ offline, onOpen }: {
             onClick={() => onOpen("whatsapp")}
           >
             <ArrowUpRight size={13} aria-hidden="true" />
-            <span>{isConnected ? "Manage Agent & Live Messages" : "Connect WhatsApp Agent API Key"}</span>
+            <span>{isSmsPaired ? "Manage WhatsApp & SMS Gateway" : "Pair Google Messages & Manage Agent"}</span>
           </button>
         </div>
       </div>

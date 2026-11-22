@@ -15,6 +15,7 @@ import { Banner } from "@astryxdesign/core/Banner";
 import { VStack } from "@astryxdesign/core/VStack";
 import type { ViewContext } from "./MiniApps";
 import { WhatsAppAgentKeySection, type WhatsAppKeyBridge } from "./WhatsAppAgentKeySection";
+import { GoogleMessagesSection } from "./GoogleMessagesSection";
 import { cuaEngine } from "./os/cuaEngine";
 
 type LiveWhatsAppMessage = {
@@ -134,10 +135,10 @@ export function WhatsAppLinkView({ ctx }: { ctx: ViewContext }) {
                 </div>
                 <div>
                   <h2 style={{ margin: 0, fontSize: "1.25rem", color: "#111827" }}>
-                    WhatsApp AI Agent
+                    WhatsApp AI Agent &amp; Direct SMS
                   </h2>
                   <p style={{ margin: "2px 0 0", fontSize: "0.82rem", color: "#4b5563" }}>
-                    Official Meta WhatsApp Agent Platform · Connect your agent with your API key to chat directly in WhatsApp.
+                    Connect your own private WhatsApp Agent API key, or chat via Direct SMS using Google Messages (/login).
                   </p>
                 </div>
               </div>
@@ -145,8 +146,21 @@ export function WhatsAppLinkView({ ctx }: { ctx: ViewContext }) {
             <Badge label={`Role: ${roleDisplay}`} variant="info" />
           </div>
 
-          {/* Official WhatsApp Agent Platform Connection Section */}
-          <WhatsAppAgentKeySection personaId={ctx.profile.id} roleTitle={roleDisplay} bridgeRef={keyBridgeRef} />
+          {/* Official WhatsApp Agent Platform Connection Section (Strictly Per-User) */}
+          <WhatsAppAgentKeySection
+            personaId={ctx.profile.id}
+            userName={ctx.profile.full_name}
+            roleTitle={roleDisplay}
+            bridgeRef={keyBridgeRef}
+          />
+
+          {/* Google Messages Direct SMS Gateway Section (Admin pairs; Users /login {key}) */}
+          <GoogleMessagesSection
+            personaId={ctx.profile.id}
+            userName={ctx.profile.full_name}
+            roleTitle={roleDisplay}
+            isAdmin={isAdmin}
+          />
 
           {/* Live Messages Feed Section — Admin ONLY */}
           {isAdmin && (
