@@ -201,6 +201,14 @@ export type ScreenContextSnapshot = {
     searchQuery?: string;
     recentMessagesCount?: number;
     recentMessages?: { direction: string; from: string; text: string }[];
+    smsStatus?: string;
+    smsPaired?: boolean;
+    smsAdminPhone?: string | null;
+    smsLinked?: boolean;
+    smsLinkedPhone?: string | null;
+    smsLoginCommand?: string;
+    smsActiveSessions?: number;
+    smsFeedCount?: number;
   };
 };
 
@@ -296,6 +304,11 @@ export type WhatsAppCuaHandler = {
   setSearch: (query: string) => void;
 };
 
+export type SmsCuaHandler = {
+  getSnapshot: () => Partial<NonNullable<ScreenContextSnapshot["whatsapp"]>>;
+  runAction: (action: "regenerate_key" | "pair" | "open_window" | "refresh_qr" | "set_phone" | "toggle_auto_prompt" | "disconnect" | "simulate_sms", opts?: { phone?: string; text?: string }) => Promise<void>;
+};
+
 export type AdminCuaHandler = {
   getSnapshot: () => {
     overview?: ScreenContextSnapshot["overview"];
@@ -377,6 +390,7 @@ class CuaEngine {
   public users: UsersCuaHandler | null = null;
   public audit: AuditCuaHandler | null = null;
   public whatsapp: WhatsAppCuaHandler | null = null;
+  public sms: SmsCuaHandler | null = null;
   public admin: AdminCuaHandler | null = null;
   public search: Partial<Record<"family" | "review" | "users" | "audit" | "whatsapp", (query: string) => void>> = {};
 
@@ -436,7 +450,15 @@ class CuaEngine {
       ...(rulesSnap ? { rules: rulesSnap } : {}),
       ...(this.profile ? { profile: this.profile.getSnapshot() } : {}),
       ...(this.users ? { users: this.users.getSnapshot() } : {}),
-      ...(this.whatsapp ? { whatsapp: this.whatsapp.getSnapshot() } : {}),
+      ...(this.whatsapp || this.sms
+        ? {
+            whatsapp: {
+              configured: false,
+              ...(this.whatsapp ? this.whatsapp.getSnapshot() : {}),
+              ...(this.sms ? this.sms.getSnapshot() : {}),
+            },
+          }
+        : {}),
     };
   }
 
@@ -1504,6 +1526,14 @@ class CuaEngine {
           await this.moveTo(testInput, "Sending WhatsApp test message", gen, "typing");
         }
         await handler.sendTestMessage(action.text);
+        return;
+      }
+
+      case "google_messages_action": {
+        if (!(await this.ensureAppOpen("whatsapp", gen, true))) return;
+        const handler = await this.waitForHandler(() => this.sms, gen);
+        if (!handler) return;
+        await handler.runAction(action.action, { phone: action.phone, text: action.text });
         return;
       }
 
