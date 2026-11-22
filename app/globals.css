@@ -7112,6 +7112,190 @@ button.active-cases-card:hover {
   }
 }
 
+/* ========================================================
+   OFFICER SAAS LIQUID GLASS DASHBOARD (Donut, Sparkline, Triage Bars)
+   ======================================================== */
+.officer-glass-card {
+  cursor: pointer;
+}
+
+.officer-donut-row {
+  display: grid;
+  grid-template-columns: 98px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.officer-donut-wrap {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  display: grid;
+  place-items: center;
+}
+
+.officer-donut-svg {
+  width: 100%;
+  height: 100%;
+}
+
+.officer-donut-center {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.officer-donut-center strong {
+  font-size: 1.35rem;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  color: #ffffff;
+}
+
+.officer-donut-center small {
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.58);
+  margin-top: 2px;
+}
+
+.officer-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem 0.6rem;
+}
+
+.officer-kpi-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 11px;
+  padding: 0.36rem 0.5rem;
+}
+
+.officer-kpi-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.64);
+  font-weight: 500;
+}
+
+.officer-kpi-label i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.officer-kpi-cell strong {
+  font-size: 0.96rem;
+  font-weight: 700;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+.officer-spark-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.officer-spark-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.officer-payout-pill,
+.officer-meta-chip {
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.84);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  padding: 0.16rem 0.48rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.officer-spark-svg {
+  width: 100%;
+  height: 40px;
+  display: block;
+}
+
+.officer-triage-metrics {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr 1fr;
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.officer-triage-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.officer-big-stat {
+  font-size: 1.75rem;
+  font-weight: 760;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+.officer-mid-stat {
+  font-size: 1.15rem;
+  font-weight: 720;
+  line-height: 1.1;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+}
+
+.officer-mid-stat.is-warn {
+  color: #ff7854;
+}
+
+.officer-mid-stat.is-ok {
+  color: #34d399;
+}
+
+.officer-sub-stat {
+  font-size: 0.64rem;
+  color: rgba(255, 255, 255, 0.56);
+  font-variant-numeric: tabular-nums;
+}
+
+.officer-bars-wrap {
+  width: 100%;
+  padding-top: 0.15rem;
+}
+
+@media (max-width: 480px) {
+  .officer-donut-row {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+  }
+
+  .officer-kpi-grid {
+    width: 100%;
+  }
+}
+
 
 /* Claim status banner (citizen claim view): colors follow the live claim status. */
 .claim-status[data-tone="approved"] .astryx-banner { background: var(--success-bg); color: var(--success-text); }

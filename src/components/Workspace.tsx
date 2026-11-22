@@ -19,6 +19,7 @@ import { apps, appTitle } from "./launcher";
 import { MiniApps, type ViewContext } from "./MiniApps";
 import { AuditorGlassSuite, type SafetyMetric } from "./AuditVaultView";
 import { AdminDashboard } from "./AdminDashboard";
+import { OfficerDashboard } from "./OfficerDashboard";
 import { DesktopWindow, type LaunchOrigin } from "./DesktopWindow";
 import { VoiceDock } from "./os/VoiceDock";
 import { AgentCursor } from "./os/AgentCursor";
@@ -1052,52 +1053,12 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                 {profile.role === "admin" && <AdminDashboard key={profile.id} offline={offline} version={version} onOpen={openAppWindow} />}
 
                 {profile.role === "officer" && (
-                  overview ? <div className="overview-stats-suite">
-                    <button type="button" className="overview-card active-cases-card"
-                      onClick={() => openAppWindow("review")}>
-                      <div className="overview-card-header">
-                        <span className="overview-card-title">Active cases</span>
-                        <span className="overview-live-badge"><span className="live-dot" />{overview.review} in review</span>
-                      </div>
-                      {clusterPeople.length > 0 && <div className="overview-cluster-wrap"><div className="bubble-cluster">
-                        {clusterPeople.map((person, index) =>
-                          <div className={`cluster-avatar a${index + 1}`} key={person.name + index} title={person.name}>{person.initials}</div>)}
-                        {queueCitizens.length > 6 && <div className="cluster-counter" title="More applicants">+{queueCitizens.length - 6}</div>}
-                      </div></div>}
-                      <div className="overview-card-footer">
-                        <strong className="overview-big-num">{overview.active.toLocaleString()}</strong>
-                        <span className="overview-sub-meta">{overview.proof} awaiting evidence{queueDocs.length > 0 && ` · ${verifiedPct}% docs verified`}</span>
-                      </div>
-                    </button>
-                    <button type="button" className="overview-card bubbles-breakdown-card"
-                      onClick={() => openAppWindow("review")}>
-                      <span className="overview-card-title">Claims by status</span>
-                      <div className="proportional-bubbles-stage">
-                        {([["Approved", overview.approved, "big"], ["In review", overview.review, "medium"],
-                          ["Needs proof", overview.proof, "small"], ["Rejected", overview.rejected, "mini"]] as const).map(([label, count, size]) => (
-                          <div className={"prop-bubble " + size} key={label}><strong>{count}</strong><small>{label}</small></div>
-                        ))}
-                      </div>
-                      <div className="bubbles-legend-footer">{overview.paid} paid · {overview.closed} closed</div>
-                    </button>
-                    <div className="overview-stack-col">
-                      <div className="overview-card stack-metric-card">
-                        <span className="overview-card-title">New this month</span>
-                        <div className="stack-metric-row">
-                          <strong className="stack-metric-num">{overview.new_this_month}</strong>
-                          {newCitizens.length > 0 && <div className="stack-mini-avatars" aria-hidden="true">
-                            {initialsFor(newCitizens, 3).map((initials, index) =>
-                              <span className={`mini-av av-${index + 1}`} key={initials + index}>{initials}</span>)}
-                            {newCitizens.length > 3 && <span className="mini-av av-4">+{newCitizens.length - 3}</span>}
-                          </div>}
-                        </div>
-                      </div>
-                      <div className="overview-card stack-metric-card">
-                        <span className="overview-card-title">Priority review</span>
-                        <strong className="stack-metric-num">{overview.priority}</strong>
-                      </div>
-                    </div>
-                  </div> : <p role="status">{offline ? "Overview reconnects when you are online." : "Loading claim overview…"}</p>
+                  <OfficerDashboard
+                    overview={overview}
+                    queue={officerQueue}
+                    offline={offline}
+                    onOpenReview={() => openAppWindow("review")}
+                  />
                 )}
 
                 {/* Right Side Widgets: Status Progress Card + Recent Claim Preview Card (for Citizens and Helpers) */}
