@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import QRCode from "qrcode";
 import { getAllActiveSessionsCount } from "./session";
 
@@ -41,49 +43,58 @@ declare global {
   var __rca_whatsapp_server_store: WhatsAppServerStore | undefined;
 }
 
+function readLiveGatewayState(): Partial<WhatsAppAdminState> | null {
+  try {
+    const statePath = path.resolve(process.cwd(), ".whatsapp-state.json");
+    if (fs.existsSync(statePath)) {
+      const content = fs.readFileSync(statePath, "utf-8");
+      return JSON.parse(content);
+    }
+  } catch {}
+  return null;
+}
+
+function sendGatewayCommand(cmd: Record<string, unknown>) {
+  try {
+    const cmdPath = path.resolve(process.cwd(), ".whatsapp-command.json");
+    fs.writeFileSync(cmdPath, JSON.stringify(cmd), "utf-8");
+  } catch {}
+}
+
 function getStore(): WhatsAppServerStore {
   if (!globalThis.__rca_whatsapp_server_store) {
-    const defaultQrData = `2@${Buffer.from(crypto.randomUUID()).toString("base64")},${Buffer.from("relief-assist-admin-pubkey").toString("base64")},${Buffer.from("token-" + Date.now()).toString("base64")}`;
     globalThis.__rca_whatsapp_server_store = {
-      status: "qr_ready", // Starts ready for admin to scan QR code
-      adminPhone: null, // Dynamic: configured by admin scanning QR code
+      status: "qr_ready",
+      adminPhone: null,
       botName: "Relief Assist WhatsApp Official Bot",
-      qrData: defaultQrData,
+      qrData: "",
       qrDataUrl: "",
       connectedAt: null,
       lastActiveAt: new Date().toISOString(),
       messages: [],
     };
-    // Initialize QR Code data URL asynchronously
-    void QRCode.toDataURL(defaultQrData, {
-      margin: 1,
-      width: 256,
-      color: { dark: "#064e3b", light: "#ffffff" },
-    }).then(url => {
-      if (globalThis.__rca_whatsapp_server_store) {
-        globalThis.__rca_whatsapp_server_store.qrDataUrl = url;
-      }
-    });
   }
   return globalThis.__rca_whatsapp_server_store;
 }
 
 export async function getWhatsAppAdminState(): Promise<WhatsAppAdminState> {
   const store = getStore();
-  if (!store.qrDataUrl && store.qrData) {
-    store.qrDataUrl = await QRCode.toDataURL(store.qrData, {
-      margin: 1,
-      width: 256,
-      color: { dark: "#064e3b", light: "#ffffff" },
-    }).catch(() => "");
+  const live = readLiveGatewayState();
+
+  if (live?.status) {
+    store.status = live.status;
+    if (live.adminPhone !== undefined) store.adminPhone = live.adminPhone;
+    if (live.qrData) store.qrData = live.qrData;
+    if (live.qrDataUrl) store.qrDataUrl = live.qrDataUrl;
+    if (live.connectedAt !== undefined) store.connectedAt = live.connectedAt;
   }
 
   return {
     status: store.status,
     adminPhone: store.adminPhone,
     botName: store.botName,
-    qrData: store.qrData,
-    qrDataUrl: store.qrDataUrl,
+    qrData: store.qrData || null,
+    qrDataUrl: store.qrDataUrl || null,
     connectedAt: store.connectedAt,
     lastActiveAt: store.lastActiveAt,
     activeUsersCount: getAllActiveSessionsCount(),
@@ -92,16 +103,7 @@ export async function getWhatsAppAdminState(): Promise<WhatsAppAdminState> {
 }
 
 export async function refreshAdminPairingQr(): Promise<WhatsAppAdminState> {
-  const store = getStore();
-  const rawQr = `2@${Buffer.from(crypto.randomUUID()).toString("base64")},${Buffer.from("relief-assist-admin-pubkey").toString("base64")},${Buffer.from("token-" + Date.now()).toString("base64")}`;
-  store.qrData = rawQr;
-  store.qrDataUrl = await QRCode.toDataURL(rawQr, {
-    margin: 1,
-    width: 256,
-    color: { dark: "#064e3b", light: "#ffffff" },
-  });
-  store.status = "qr_ready";
-  store.lastActiveAt = new Date().toISOString();
+  sendGatewayCommand({ action: "refresh_qr" });
   return getWhatsAppAdminState();
 }
 
@@ -119,12 +121,13 @@ export async function connectAdminWhatsApp(phone: string): Promise<WhatsAppAdmin
 }
 
 export async function disconnectAdminWhatsApp(): Promise<WhatsAppAdminState> {
+  sendGatewayCommand({ action: "disconnect" });
   const store = getStore();
   store.status = "qr_ready";
   store.adminPhone = null;
   store.connectedAt = null;
   store.lastActiveAt = new Date().toISOString();
-  return refreshAdminPairingQr();
+  return getWhatsAppAdminState();
 }
 
 export function recordWhatsAppMessage(message: Omit<WhatsAppChatMessage, "id" | "timestamp">) {

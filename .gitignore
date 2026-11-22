@@ -11,3 +11,6 @@ supabase/.temp/
 .tmp-tegaki/
 .tmp-chat/
 .tmp-voice/
+.whatsapp-auth/
+.whatsapp-state.json
+.whatsapp-command.json
