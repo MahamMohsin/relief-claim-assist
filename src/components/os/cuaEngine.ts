@@ -870,6 +870,195 @@ class CuaEngine {
         await this.sleep(400, gen);
         return;
       }
+
+      case "switch_persona": {
+        if (this.bridge?.switchPersona) {
+          const dockItem = await this.waitForElement(`.persona-macos-dock-item:has(img[src*="${action.persona}"])`, gen, 600);
+          if (dockItem) {
+            await this.clickElement(dockItem, `Switching persona to ${action.persona}`, gen, async () => {
+              await this.bridge?.switchPersona?.(action.persona);
+            });
+          } else {
+            await this.bridge.switchPersona(action.persona);
+          }
+        }
+        return;
+      }
+
+      case "switch_family_action": {
+        if (!(await this.ensureAppOpen("family", gen, true))) return;
+        const handler = await this.waitForHandler(() => this.family, gen);
+        if (handler && (action.citizenId || action.familyName)) {
+          await handler.switchFamily(action.citizenId || action.familyName!);
+        }
+        return;
+      }
+
+      case "review_select_claim": {
+        if (!(await this.ensureAppOpen("review", gen, true))) return;
+        const handler = await this.waitForHandler(() => this.review, gen);
+        if (handler) {
+          if (action.claimId) handler.selectClaim(action.claimId);
+          else if (action.citizenName) handler.selectClaim(action.citizenName);
+        }
+        return;
+      }
+
+      case "review_produce_summary": {
+        if (!(await this.ensureAppOpen("review", gen, true))) return;
+        const handler = await this.waitForHandler(() => this.review, gen);
+        if (handler) {
+          if (action.claimId) handler.selectClaim(action.claimId);
+          await this.sleep(200, gen);
+          const produceBtn = await this.waitForElement(".ai-summary-produce-btn", gen, 1200);
+          if (produceBtn) {
+            await this.clickElement(produceBtn, "Producing AI Summary", gen, async () => {
+              await handler.produceSummary();
+            });
+          } else {
+            await handler.produceSummary();
+          }
+        }
+        return;
+      }
+
+      case "review_decide_claim": {
+        if (!(await this.ensureAppOpen("review", gen, true))) return;
+        const handler = await this.waitForHandler(() => this.review, gen);
+        if (handler) {
+          if (action.claimId) handler.selectClaim(action.claimId);
+          await this.sleep(200, gen);
+          const btnSelector = action.decision === "approve" ? ".btn-quick-accept" : action.decision === "reject" ? ".btn-quick-reject" : ".btn-quick-proof";
+          const decideBtn = await this.waitForElement(btnSelector, gen, 1200);
+          if (decideBtn) {
+            await this.clickElement(decideBtn, `Recording ${action.decision} decision`, gen, async () => {
+              await handler.decide(action.decision, action.reason, action.reasonUr);
+            });
+          } else {
+            await handler.decide(action.decision, action.reason, action.reasonUr);
+          }
+        }
+        return;
+      }
+
+      case "review_disburse": {
+        if (!(await this.ensureAppOpen("review", gen, true))) return;
+        const handler = await this.waitForHandler(() => this.review, gen);
+        if (handler) {
+          if (action.claimId) handler.selectClaim(action.claimId);
+          await this.sleep(200, gen);
+          await handler.disburse(action.outcome);
+        }
+        return;
+      }
+
+      case "review_filter": {
+        if (!(await this.ensureAppOpen("review", gen, true))) return;
+        const handler = await this.waitForHandler(() => this.review, gen);
+        if (handler) {
+          handler.setFilter(action.filter);
+          if (action.sort) handler.setSort(action.sort);
+        }
+        return;
+      }
+
+      case "rules_update_config": {
+        if (!(await this.ensureAppOpen("rules", gen, true))) return;
+        const handler = await this.waitForHandler(() => this.rules, gen);
+        if (handler) {
+          handler.updateConfig(action.config, action.name);
+        }
+        return;
+      }
+
+      case "rules_simulate": {
+        if (!(await this.ensureAppOpen("rules", gen, true))) return;
+        const handler = await this.waitForHandler(() => this.rules, gen);
+        if (handler) {
+          if (action.config) handler.updateConfig(action.config);
+          await this.sleep(150, gen);
+          const simBtn = await this.waitForElement('button[value="simulate"]', gen, 1200);
+          if (simBtn) {
+            await this.clickElement(simBtn, "Simulating rule on Digital Twin", gen, async () => {
+              await handler.simulate();
+            });
+          } else {
+            await handler.simulate();
+          }
+        }
+        return;
+      }
+
+      case "rules_publish": {
+        if (!(await this.ensureAppOpen("rules", gen, true))) return;
+        const handler = await this.waitForHandler(() => this.rules, gen);
+        if (handler) {
+          handler.updateConfig(action.config, action.name);
+          await this.sleep(150, gen);
+          const pubBtn = await this.waitForElement('button[value="publish"]', gen, 1200);
+          if (pubBtn) {
+            await this.clickElement(pubBtn, "Publishing new rule version", gen, async () => {
+              await handler.publish(action.name, action.config);
+            });
+          } else {
+            await handler.publish(action.name, action.config);
+          }
+        }
+        return;
+      }
+
+      case "rules_staff_decision": {
+        if (!(await this.ensureAppOpen("rules", gen, true))) return;
+        const handler = await this.waitForHandler(() => this.rules, gen);
+        if (handler) {
+          await handler.decideStaff(action.userId, action.decision);
+        }
+        return;
+      }
+
+      case "budget_update": {
+        try {
+          const { api } = await import("@/src/lib/client");
+          const current = await api<{ total_pkr: number }>("scheme_budget").catch(() => ({ total_pkr: 0 }));
+          await api("set_scheme_budget", {
+            totalPkr: action.totalPkr,
+            expectedTotalPkr: current.total_pkr,
+            reason: action.reason,
+          });
+          this.bridge?.refresh();
+        } catch (err) {
+          console.warn("Failed to set scheme budget via CUA", err);
+        }
+        return;
+      }
+
+      case "whatsapp_set_key": {
+        if (!(await this.ensureAppOpen("whatsapp", gen, true))) return;
+        const handler = await this.waitForHandler(() => this.whatsapp, gen);
+        if (handler) {
+          await handler.setApiKey(action.key);
+        }
+        return;
+      }
+
+      case "close_window": {
+        this.bridge?.closeApp?.(action.app);
+        return;
+      }
+
+      case "minimize_window": {
+        this.bridge?.minimizeApp?.(action.app);
+        return;
+      }
+
+      case "toggle_feature": {
+        if (action.feature === "lite") {
+          this.bridge?.toggleLite?.();
+        } else if (action.feature === "network_drop") {
+          this.bridge?.toggleNetworkDrop?.();
+        }
+        return;
+      }
     }
   }
 }
