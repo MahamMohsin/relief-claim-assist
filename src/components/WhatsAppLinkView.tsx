@@ -27,8 +27,9 @@ type LiveWhatsAppMessage = {
 };
 
 export function WhatsAppLinkView({ ctx }: { ctx: ViewContext }) {
+  const isAdmin = ctx.profile.role === "admin";
   const [messages, setMessages] = useState<LiveWhatsAppMessage[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(isAdmin);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -40,6 +41,7 @@ export function WhatsAppLinkView({ ctx }: { ctx: ViewContext }) {
         : ctx.profile.role.charAt(0).toUpperCase() + ctx.profile.role.slice(1);
 
   async function loadMessages() {
+    if (!isAdmin) return;
     try {
       const res = await fetch("/api/whatsapp/webhook?limit=50");
       if (res.ok) {
@@ -55,12 +57,17 @@ export function WhatsAppLinkView({ ctx }: { ctx: ViewContext }) {
   }
 
   useEffect(() => {
+    if (!isAdmin) {
+      setMessages([]);
+      setLoading(false);
+      return;
+    }
     void loadMessages();
     const interval = setInterval(() => {
       void loadMessages();
     }, 4000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isAdmin]);
 
   const filteredMessages = messages.filter(m => {
     if (!searchQuery.trim()) return true;
@@ -99,7 +106,8 @@ export function WhatsAppLinkView({ ctx }: { ctx: ViewContext }) {
           {/* Official WhatsApp Agent Platform Connection Section */}
           <WhatsAppAgentKeySection personaId={ctx.profile.id} roleTitle={roleDisplay} />
 
-          {/* Live Messages Feed Section */}
+          {/* Live Messages Feed Section — Admin ONLY */}
+          {isAdmin && (
           <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "16px", padding: "1.25rem", width: "100%" }}>
             <VStack gap={3}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
@@ -216,6 +224,7 @@ export function WhatsAppLinkView({ ctx }: { ctx: ViewContext }) {
               </div>
             </VStack>
           </div>
+          )}
         </VStack>
       </Card>
     </div>

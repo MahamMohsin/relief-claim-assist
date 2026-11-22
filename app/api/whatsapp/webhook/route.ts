@@ -1,10 +1,26 @@
 import { NextResponse } from "next/server";
+import { gateway } from "@/src/lib/server";
+import type { Profile } from "@/src/lib/contracts";
 import { processIncomingWhatsAppMessage } from "@/src/lib/whatsapp/agent";
 import { getRecentWhatsAppMessages, getWhatsAppAdminState, recordWhatsAppMessage } from "@/src/lib/whatsapp/server";
 
 export async function GET(request: Request) {
+  let profile: Profile | null = null;
+  try {
+    profile = await gateway<Profile>("profile");
+  } catch {
+    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  }
+
+  if (profile?.role !== "admin") {
+    return NextResponse.json(
+      { error: "Only administrators can view the Live WhatsApp Messages Feed." },
+      { status: 403 }
+    );
+  }
+
   const url = new URL(request.url);
-  const limit = Number(url.searchParams.get("limit") || 30);
+  const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") || 30)));
   const messages = getRecentWhatsAppMessages(limit);
   return NextResponse.json({ messages });
 }
