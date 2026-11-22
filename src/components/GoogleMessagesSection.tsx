@@ -475,11 +475,14 @@ export function GoogleMessagesSection({
                 <Card padding={4}>
                   <VStack gap={3} hAlign="center" width="100%">
                     <Heading level={4}>Scan with Google Messages on Your Android Phone</Heading>
-                    <img
-                      src={gmStatus.qrDataUrl}
-                      alt="Google Messages Web Device Pairing QR Code"
-                      className="w-60 h-60 rounded-xl border bg-white p-2 object-contain"
-                    />
+                    <Card padding={2}>
+                      <img
+                        src={gmStatus.qrDataUrl}
+                        alt="Google Messages Web Device Pairing QR Code"
+                        width={240}
+                        height={240}
+                      />
+                    </Card>
                     <Text size="sm" color="secondary">
                       On your phone: open <strong>Google Messages</strong> → tap your <strong>Profile / Menu</strong> →{" "}
                       <strong>Device pairing</strong> → <strong>QR code scanner</strong> → scan this code.
