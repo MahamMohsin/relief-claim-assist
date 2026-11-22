@@ -1915,35 +1915,13 @@ th { background: var(--faint); color: var(--forest); }
   border-radius: 22px;
 }
 
-/* Minimal floating restore button (simple up arrow on white circle bg) */
+/* Minimal floating restore button ("Show chat" pill matching "Hide chat") */
 .voice-bring-back-bar {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.15rem;
+  padding: 0 0.15rem;
   width: 100%;
-}
-
-.voice-chat-restore-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: #ffffff;
-  color: #0b1512;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28), 0 1px 3px rgba(0, 0, 0, 0.15);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease;
-}
-
-.voice-chat-restore-btn:hover {
-  transform: translateY(-2px) scale(1.1);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.36);
-}
-
-.voice-chat-restore-btn:active {
-  transform: scale(0.92);
 }
 
 .voice-reply-header {
@@ -1955,7 +1933,8 @@ th { background: var(--faint); color: var(--forest); }
   margin-bottom: 0.25rem;
 }
 
-.voice-hide-chat-btn {
+.voice-hide-chat-btn,
+.voice-show-chat-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
@@ -1971,7 +1950,8 @@ th { background: var(--faint); color: var(--forest); }
   margin-left: auto;
 }
 
-.voice-hide-chat-btn:hover {
+.voice-hide-chat-btn:hover,
+.voice-show-chat-btn:hover {
   background: rgba(255, 255, 255, 0.2);
   color: #ffffff;
   border-color: rgba(255, 255, 255, 0.3);

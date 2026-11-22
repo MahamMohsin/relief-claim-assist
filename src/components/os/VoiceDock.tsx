@@ -523,17 +523,18 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
   const lastAssistantId = [...filledTurns].reverse().find(turn => turn.role === "assistant")?.id;
 
   return <section className={"voice-dock-glass" + (hasEngagedVoice ? " voice-revealed" : "") + (recording ? " is-recording" : "") + (working ? " is-working" : "") + (clarify ? " clarifying" : "")} aria-label="Relief voice assistant">
-    {/* If chat has messages and is hidden by the user, show simple up button with white circle bg */}
+    {/* If chat has messages and is hidden by the user, show "Show chat" pill button like "Hide chat" */}
     {chatHidden && filledTurns.length > 0 && (
       <div className="voice-bring-back-bar">
         <button
           type="button"
-          className="voice-chat-restore-btn"
+          className="voice-hide-chat-btn"
           onClick={() => setChatHidden(false)}
-          aria-label="Show conversation"
-          title="Show conversation"
+          aria-label="Show chat"
+          title="Show chat"
         >
-          <ChevronUp size={16} strokeWidth={2.6} />
+          <ChevronUp size={14} />
+          <span>Show chat</span>
         </button>
       </div>
     )}
