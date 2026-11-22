@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bot,
   Check,
@@ -33,12 +33,21 @@ type AgentKeyInfo = {
   lastActiveAt: string | null;
 };
 
+export type WhatsAppKeyBridge = {
+  getInfo: () => { configured: boolean; agentName: string | null; maskedKey: string | null };
+  setApiKey: (key: string, agentName?: string) => Promise<void>;
+  disconnect: () => Promise<void>;
+  sendTestMessage: (text: string) => Promise<void>;
+};
+
 export function WhatsAppAgentKeySection({
   personaId,
   roleTitle,
+  bridgeRef,
 }: {
   personaId: string;
   roleTitle: string;
+  bridgeRef?: React.MutableRefObject<WhatsAppKeyBridge | null>;
 }) {
   const [info, setInfo] = useState<AgentKeyInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,12 +83,15 @@ export function WhatsAppAgentKeySection({
     void loadKeyInfo();
   }, [personaId]);
 
-  async function handleConnect() {
-    const key = apiKeyInput.trim();
+  async function handleConnect(overrideKey?: string, overrideAgentName?: string) {
+    const key = (overrideKey ?? apiKeyInput).trim();
+    const chosenName = (overrideAgentName ?? agentNameInput).trim() || "Ali";
     if (!key) {
       setError("Please paste your WhatsApp Agent API key.");
       return;
     }
+    if (overrideKey !== undefined) setApiKeyInput(key);
+    if (overrideAgentName !== undefined) setAgentNameInput(chosenName);
     setBusy(true);
     setError("");
     setNotice("");
@@ -90,7 +102,7 @@ export function WhatsAppAgentKeySection({
         body: JSON.stringify({
           action: "connect",
           apiKey: key,
-          agentName: agentNameInput.trim() || "Ali",
+          agentName: chosenName,
           persona: personaId,
         }),
       });
@@ -104,7 +116,7 @@ export function WhatsAppAgentKeySection({
         personaId,
         isConfigured: true,
         maskedKey: data.maskedKey,
-        agentName: data.agentName || agentNameInput,
+        agentName: data.agentName || chosenName,
         connectedAt: data.connectedAt || new Date().toISOString(),
         lastActiveAt: new Date().toISOString(),
       });
@@ -147,8 +159,8 @@ export function WhatsAppAgentKeySection({
     }
   }
 
-  async function handleSendTestMessage() {
-    const text = testText.trim();
+  async function handleSendTestMessage(overrideText?: string) {
+    const text = (overrideText ?? testText).trim();
     if (!text || testBusy) return;
     setTestBusy(true);
     setTestText("");
@@ -189,6 +201,38 @@ export function WhatsAppAgentKeySection({
   }
 
   const isConnected = Boolean(info?.isConfigured);
+
+  const infoRef = useRef(info);
+  infoRef.current = info;
+  const connectRef = useRef(handleConnect);
+  connectRef.current = handleConnect;
+  const disconnectRef = useRef(handleDisconnect);
+  disconnectRef.current = handleDisconnect;
+  const testRef = useRef(handleSendTestMessage);
+  testRef.current = handleSendTestMessage;
+
+  useEffect(() => {
+    if (!bridgeRef) return;
+    bridgeRef.current = {
+      getInfo: () => ({
+        configured: Boolean(infoRef.current?.isConfigured),
+        agentName: infoRef.current?.agentName ?? null,
+        maskedKey: infoRef.current?.maskedKey ?? null,
+      }),
+      setApiKey: async (key, agentName) => {
+        await connectRef.current(key, agentName);
+      },
+      disconnect: async () => {
+        await disconnectRef.current();
+      },
+      sendTestMessage: async text => {
+        await testRef.current(text);
+      },
+    };
+    return () => {
+      bridgeRef.current = null;
+    };
+  }, [bridgeRef]);
 
   return (
     <div style={{
@@ -268,6 +312,7 @@ export function WhatsAppAgentKeySection({
 
               <button
                 type="button"
+                data-cua="whatsapp-disconnect-btn"
                 disabled={busy}
                 onClick={() => void handleDisconnect()}
                 style={{
@@ -374,6 +419,7 @@ export function WhatsAppAgentKeySection({
                   </label>
                   <div style={{ display: "flex", alignItems: "center", position: "relative" }}>
                     <input
+                      data-cua="whatsapp-key-input"
                       type={revealed ? "text" : "password"}
                       value={apiKeyInput}
                       onChange={e => setApiKeyInput(e.target.value)}
@@ -478,6 +524,7 @@ export function WhatsAppAgentKeySection({
 
             <div style={{ display: "flex", gap: "0.4rem" }}>
               <input
+                data-cua="whatsapp-test-input"
                 type="text"
                 value={testText}
                 onChange={e => setTestText(e.target.value)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bot,
   Inbox,
@@ -14,7 +14,8 @@ import { Badge } from "@astryxdesign/core/Badge";
 import { Banner } from "@astryxdesign/core/Banner";
 import { VStack } from "@astryxdesign/core/VStack";
 import type { ViewContext } from "./MiniApps";
-import { WhatsAppAgentKeySection } from "./WhatsAppAgentKeySection";
+import { WhatsAppAgentKeySection, type WhatsAppKeyBridge } from "./WhatsAppAgentKeySection";
+import { cuaEngine } from "./os/cuaEngine";
 
 type LiveWhatsAppMessage = {
   id: string;
@@ -32,6 +33,47 @@ export function WhatsAppLinkView({ ctx }: { ctx: ViewContext }) {
   const [loading, setLoading] = useState(isAdmin);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const keyBridgeRef = useRef<WhatsAppKeyBridge | null>(null);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const searchQueryRef = useRef(searchQuery);
+  searchQueryRef.current = searchQuery;
+
+  useEffect(() => {
+    cuaEngine.search.whatsapp = setSearchQuery;
+    cuaEngine.whatsapp = {
+      getSnapshot: () => {
+        const info = keyBridgeRef.current?.getInfo() ?? { configured: false, agentName: null, maskedKey: null };
+        return {
+          configured: info.configured,
+          agentName: info.agentName,
+          maskedKey: info.maskedKey,
+          searchQuery: searchQueryRef.current,
+          recentMessagesCount: messagesRef.current.length,
+          recentMessages: messagesRef.current.slice(0, 5).map(m => ({
+            direction: m.direction,
+            from: m.from,
+            text: m.text.slice(0, 120),
+          })),
+        };
+      },
+      setApiKey: async (key, agentName) => {
+        await keyBridgeRef.current?.setApiKey(key, agentName);
+      },
+      disconnect: async () => {
+        await keyBridgeRef.current?.disconnect();
+      },
+      sendTestMessage: async text => {
+        await keyBridgeRef.current?.sendTestMessage(text);
+        void loadMessages();
+      },
+      setSearch: query => setSearchQuery(query),
+    };
+    return () => {
+      delete cuaEngine.search.whatsapp;
+      if (cuaEngine.whatsapp) cuaEngine.whatsapp = null;
+    };
+  }, []);
 
   const roleDisplay =
     ctx.profile.role === "officer"
@@ -104,7 +146,7 @@ export function WhatsAppLinkView({ ctx }: { ctx: ViewContext }) {
           </div>
 
           {/* Official WhatsApp Agent Platform Connection Section */}
-          <WhatsAppAgentKeySection personaId={ctx.profile.id} roleTitle={roleDisplay} />
+          <WhatsAppAgentKeySection personaId={ctx.profile.id} roleTitle={roleDisplay} bridgeRef={keyBridgeRef} />
 
           {/* Live Messages Feed Section — Admin ONLY */}
           {isAdmin && (
@@ -122,6 +164,7 @@ export function WhatsAppLinkView({ ctx }: { ctx: ViewContext }) {
                   <div style={{ position: "relative" }}>
                     <Search size={14} style={{ position: "absolute", left: "8px", top: "8px", color: "#94a3b8" }} />
                     <input
+                      data-cua="whatsapp-search"
                       type="text"
                       placeholder="Search messages..."
                       value={searchQuery}
