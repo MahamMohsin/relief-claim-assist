@@ -6825,6 +6825,130 @@ button.active-cases-card:hover {
   }
 }
 
+/* ========================================================
+   MOBILE RESPONSIVE CANVAS, MENUBAR, APP GRID & VOICE DOCK (Commit 2)
+   ======================================================== */
+@media (max-width: 900px) {
+  .workspace {
+    height: auto;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .content {
+    overflow: visible;
+  }
+
+  .dashboard-canvas {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    min-height: calc(100dvh - 36px);
+    padding: 0.75rem 0.85rem 6.75rem;
+    gap: 1rem;
+  }
+
+  .ios-top-hero-row {
+    max-width: none;
+    max-height: none;
+    overflow: visible;
+    padding: 0;
+  }
+
+  .ios-top-widgets-group {
+    overflow: visible;
+  }
+
+  .dashboard-canvas > .ios-desktop-grid {
+    grid-column: 1;
+    justify-self: stretch;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    justify-items: center;
+    align-items: start;
+    width: 100%;
+    max-height: none;
+    gap: 1rem 0.65rem;
+    padding: 0.25rem 0 0.75rem;
+  }
+
+  .ios-desktop-app {
+    width: 100%;
+    max-width: 92px;
+  }
+}
+
+@media (max-width: 768px) {
+  .macos-menubar {
+    padding: 0 0.65rem;
+    gap: 0.4rem;
+  }
+
+  .macos-app-name {
+    font-size: 0.8rem;
+  }
+
+  .officer-alerts-popover {
+    width: min(340px, calc(100vw - 1.2rem));
+    right: -0.35rem;
+    max-height: 65dvh;
+  }
+
+  .officer-toast {
+    left: 0.65rem;
+    right: 0.65rem;
+    width: auto;
+    max-width: none;
+  }
+
+  .bottom-shell {
+    width: calc(100% - 0.9rem);
+    bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+
+  .voice-dock-glass {
+    border-radius: 18px;
+    padding: 0.36rem 0.45rem;
+  }
+
+  .voice-chat-history,
+  .voice-transcript-box {
+    max-height: 42dvh;
+  }
+
+  .voice-glass-form {
+    gap: 0.35rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .dashboard-canvas > .ios-desktop-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.9rem 0.5rem;
+  }
+
+  .ios-desktop-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+  }
+
+  .ios-desktop-icon svg {
+    width: 26px;
+    height: 26px;
+  }
+
+  .ios-desktop-label {
+    font-size: 0.74rem;
+  }
+}
+
+@media (max-width: 440px) {
+  .macos-clock {
+    display: none;
+  }
+}
+
 
 /* Claim status banner (citizen claim view): colors follow the live claim status. */
 .claim-status[data-tone="approved"] .astryx-banner { background: var(--success-bg); color: var(--success-text); }
