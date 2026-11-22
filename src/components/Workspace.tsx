@@ -20,6 +20,7 @@ import { MiniApps, type ViewContext } from "./MiniApps";
 import { AuditorGlassSuite, type SafetyMetric } from "./AuditVaultView";
 import { AdminDashboard } from "./AdminDashboard";
 import { OfficerDashboard } from "./OfficerDashboard";
+import { ShopkeeperDashboard } from "./ShopkeeperDashboard";
 import { DesktopWindow, type LaunchOrigin } from "./DesktopWindow";
 import { VoiceDock } from "./os/VoiceDock";
 import { AgentCursor } from "./os/AgentCursor";
@@ -1068,6 +1069,14 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                     budget={officerBudget}
                     offline={offline}
                     onOpenReview={() => openAppWindow("review")}
+                  />
+                )}
+
+                {profile.role === "shopkeeper" && (
+                  <ShopkeeperDashboard
+                    offline={offline}
+                    version={version}
+                    onOpen={openAppWindow}
                   />
                 )}
 
