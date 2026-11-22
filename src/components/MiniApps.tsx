@@ -547,6 +547,48 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
         </HStack>
         <FileInput label="Upload or take a picture of a synthetic document" value={file} onChange={next => { const picked = Array.isArray(next) ? next[0] ?? null : next; setFile(picked); void readImage(picked ?? undefined); }} accept="image/png,image/jpeg,image/webp" mode="dropzone" isOptional />
         {evidenceShown && <p className="muted" lang={lang} dir={dirFor(lang)}>{pick(strings.latestEvidence, lang)}: {evidenceShown}</p>}
+        {(draft?.documents?.length ?? 0) > 0 && (
+          <VStack gap={1.5} width="100%">
+            <HStack gap={2} vAlign="center">
+              <small style={{ fontWeight: 600, color: "#4b5563" }}>Attached documents</small>
+              <Badge label={String(draft!.documents!.length)} variant="neutral" />
+            </HStack>
+            {draft!.documents!.map(doc => {
+              const fields = Object.entries(doc.ocr_json?.fields ?? {}).filter(([, v]) => String(v).trim().length > 0);
+              const sampleTag = doc.fixture ?? doc.ocr_json?.fixture;
+              return (
+                <Card key={doc.id} variant="muted" padding={3}>
+                  <HStack justify="between" vAlign="start" gap={2} wrap="wrap">
+                    <HStack gap={2} vAlign="start">
+                      {doc.file_url && (
+                        <img
+                          src={doc.file_url}
+                          alt={title(doc.doc_type)}
+                          style={{ width: 52, height: 38, objectFit: "cover", borderRadius: 6, flexShrink: 0 }}
+                        />
+                      )}
+                      <VStack gap={0.5}>
+                        <HStack gap={1.5} vAlign="center" wrap="wrap">
+                          <strong>{doc.doc_type === "identity" ? "Mock identity card" : doc.doc_type === "income" ? "Mock income slip" : title(doc.doc_type)}</strong>
+                          {sampleTag && <small style={{ color: "#6b7280" }}>· {title(sampleTag)} sample</small>}
+                        </HStack>
+                        {(doc.tamper_reason || doc.ocr_json?.summary) && (
+                          <small style={{ color: "#4b5563" }}>{doc.tamper_reason ?? doc.ocr_json?.summary}</small>
+                        )}
+                        {fields.length > 0 && (
+                          <small style={{ color: "#6b7280" }}>
+                            {fields.map(([k, v]) => `${title(k)}: ${v}`).join(" · ")}
+                          </small>
+                        )}
+                      </VStack>
+                    </HStack>
+                    <Badge label={title(doc.verified_status)} variant={badge(doc.verified_status)} />
+                  </HStack>
+                </Card>
+              );
+            })}
+          </VStack>
+        )}
         <HStack gap={2} wrap="wrap">
           <span data-cua="claim-attach-btn" style={{ display: "inline-flex" }}>
             {claimId || pendingDraft
@@ -565,6 +607,56 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
           <Card variant="muted" padding={3}><VStack gap={0.5}><small>Household size</small><strong>{details.household_size} people</strong></VStack></Card>
           <Card variant="muted" padding={3}><VStack gap={0.5}><small>Evidence</small><strong lang={evidenceShown ? lang : undefined}>{evidenceShown || "Awaiting proof"}</strong></VStack></Card>
         </HStack>
+        {(draft?.documents?.length ?? 0) > 0 && (
+          <VStack gap={1.5} width="100%">
+            <HStack gap={2} vAlign="center">
+              <small style={{ fontWeight: 600, color: "#4b5563" }}>Attached documents</small>
+              <Badge label={String(draft!.documents!.length)} variant="neutral" />
+            </HStack>
+            {draft!.documents!.map(doc => {
+              const fields = Object.entries(doc.ocr_json?.fields ?? {}).filter(([, v]) => String(v).trim().length > 0);
+              const sampleTag = doc.fixture ?? doc.ocr_json?.fixture;
+              return (
+                <Card key={doc.id} variant="muted" padding={3}>
+                  <HStack justify="between" vAlign="start" gap={2} wrap="wrap">
+                    <HStack gap={2} vAlign="start">
+                      {doc.file_url && (
+                        <img
+                          src={doc.file_url}
+                          alt={title(doc.doc_type)}
+                          style={{ width: 56, height: 42, objectFit: "cover", borderRadius: 6, flexShrink: 0 }}
+                        />
+                      )}
+                      <VStack gap={0.5}>
+                        <HStack gap={1.5} vAlign="center" wrap="wrap">
+                          <strong>{doc.doc_type === "identity" ? "Mock identity card" : doc.doc_type === "income" ? "Mock income slip" : title(doc.doc_type)}</strong>
+                          {sampleTag && <small style={{ color: "#6b7280" }}>· {title(sampleTag)} sample</small>}
+                        </HStack>
+                        {(doc.tamper_reason || doc.ocr_json?.summary) && (
+                          <small style={{ color: "#4b5563" }}>{doc.tamper_reason ?? doc.ocr_json?.summary}</small>
+                        )}
+                        {fields.length > 0 && (
+                          <small style={{ color: "#6b7280" }}>
+                            {fields.map(([k, v]) => `${title(k)}: ${v}`).join(" · ")}
+                          </small>
+                        )}
+                        {doc.file_url && (
+                          <a className="text-link" href={doc.file_url} target="_blank" rel="noreferrer" style={{ fontSize: "0.8rem" }}>
+                            Open synthetic image
+                          </a>
+                        )}
+                      </VStack>
+                    </HStack>
+                    <Badge label={title(doc.verified_status)} variant={badge(doc.verified_status)} />
+                  </HStack>
+                </Card>
+              );
+            })}
+          </VStack>
+        )}
+        {details.notes.trim().length > 0 && (
+          <Card variant="muted" padding={3}><VStack gap={0.5}><small>Additional details</small><span>{details.notes}</span></VStack></Card>
+        )}
         <p className="muted">A reviewer reviews every claim before any simulated payment can be issued.</p>
         <HStack gap={2}>
           <span data-cua="claim-submit-btn" style={{ display: "inline-flex" }}>
