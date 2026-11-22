@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Briefcase,
   Expand,
@@ -16,6 +16,7 @@ import { prepareDocumentImage } from "@/src/lib/compressImage";
 import type { CitizenDocument, CitizenProfileData, CitizenRecord } from "@/src/lib/contracts";
 import type { ViewContext } from "./MiniApps";
 import { WhatsAppTokenWidget } from "./WhatsAppTokenWidget";
+import { cuaEngine } from "./os/cuaEngine";
 import { AspectRatio } from "@astryxdesign/core/AspectRatio";
 import { Avatar } from "@astryxdesign/core/Avatar";
 import { Badge } from "@astryxdesign/core/Badge";
@@ -230,6 +231,46 @@ export function CitizenProfileView({ ctx }: { ctx: ViewContext }) {
     [photoDocs],
   );
 
+  const profileSnapshotRef = useRef({
+    citizenName: citizen?.full_name,
+    cnicMock: citizen?.cnic_mock,
+    monthlyIncome: citizen?.monthly_income_mock,
+    householdSize: citizen?.household_size,
+    phone: citizen?.phone,
+    villageArea: citizen?.village_area,
+    uploadedDocKinds: [...new Set(documents.map(d => d.doc_type))],
+    photoDocKinds: DOC_ORDER.filter(k => Boolean(heroPhotoByKind[k]?.file_url)),
+    documentsCount: documents.length,
+  });
+  profileSnapshotRef.current = {
+    citizenName: citizen?.full_name,
+    cnicMock: citizen?.cnic_mock,
+    monthlyIncome: citizen?.monthly_income_mock,
+    householdSize: citizen?.household_size,
+    phone: citizen?.phone,
+    villageArea: citizen?.village_area,
+    uploadedDocKinds: [...new Set(documents.map(d => d.doc_type))],
+    photoDocKinds: DOC_ORDER.filter(k => Boolean(heroPhotoByKind[k]?.file_url)),
+    documentsCount: documents.length,
+  };
+  const addSampleRef = useRef<(kind: ProfileDocKind) => Promise<void>>(async () => {});
+  const viewDocRef = useRef<(kind?: ProfileDocKind) => void>(() => {});
+
+  useEffect(() => {
+    cuaEngine.profile = {
+      getSnapshot: () => ({ ...profileSnapshotRef.current }),
+      addSampleDoc: async kind => {
+        await addSampleRef.current(kind);
+      },
+      viewDocument: kind => {
+        viewDocRef.current(kind);
+      },
+    };
+    return () => {
+      if (cuaEngine.profile) cuaEngine.profile = null;
+    };
+  }, []);
+
   if (!ctx.citizen) {
     return (
       <Card padding={6}>
@@ -316,6 +357,14 @@ export function CitizenProfileView({ ctx }: { ctx: ViewContext }) {
     }
   }
 
+  addSampleRef.current = async kind => {
+    await runExtraction(true, kind);
+  };
+  viewDocRef.current = kind => {
+    const target = kind ? heroPhotoByKind[kind] : photoDocs[0];
+    if (target) openLightboxFor(target.id);
+  };
+
   return (
     <VStack gap={4} width="100%">
       {migrationMissing && (
@@ -396,13 +445,15 @@ export function CitizenProfileView({ ctx }: { ctx: ViewContext }) {
                     align="end"
                     content={
                       <HStack justify="between" vAlign="center" width="100%" gap={2}>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          label="Zoom"
-                          icon={<Icon icon={Expand} size="sm" />}
-                          onClick={() => openLightboxFor(photoDoc.id)}
-                        />
+                        <span data-cua={`profile-zoom-${kind}`} style={{ display: "inline-flex" }}>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            label="Zoom"
+                            icon={<Icon icon={Expand} size="sm" />}
+                            onClick={() => openLightboxFor(photoDoc.id)}
+                          />
+                        </span>
                         <span data-cua={`profile-add-${kind}`} style={{ display: "inline-flex" }}>
                           <Button
                             variant="secondary"
