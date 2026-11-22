@@ -141,7 +141,7 @@ function isClaimEvent(row: Audit): boolean {
 function isConsentEvent(row: Audit): boolean {
   const ev = row.event_type.toLowerCase();
   return (
-    ["consent_granted", "consent_revoked", "switch_family", "access_denied", "evidence_viewed"].includes(
+    ["consent_granted", "consent_revoked", "switch_family", "evidence_viewed", "profile_viewed", "profile_doc_viewed"].includes(
       ev,
     ) || row.entity_type === "consent"
   );

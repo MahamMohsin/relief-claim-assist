@@ -7,7 +7,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Award, Bell, CheckCircle2, ChevronDown, Clock, Cloud, CloudOff, Fingerprint, HandHeart, House,
   LoaderCircle, LogOut, Maximize2, MessageSquare, Minimize2, Minus, Radio, ShieldCheck, Trophy, UserPlus, UserRound, Users, Wifi, X } from "lucide-react";
 import { canOpen, personas, type Audit, type Claim, type Family, type MiniApp, type Overview, type Persona, type Profile, type SchemeBudget } from "@/src/lib/contracts";
-import { api, jsonRequest } from "@/src/lib/client";
+import { api, HttpError, jsonRequest } from "@/src/lib/client";
 import { pick, strings, useLang, waitingToSend } from "@/src/lib/i18n";
 import { countByCitizen, queued, queuedForOwner, pushMutation, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
 import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
@@ -281,6 +281,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
       return;
     }
     let activeController: AbortController | null = null;
+    let budgetBlocked = false;
     const storageKey = `relief_seen_officer_claims_${profile.id}`;
     const loadOfficer = () => {
       activeController?.abort();
@@ -289,9 +290,13 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
       api<Overview>("overview", {}, controller.signal)
         .then(res => { if (!controller.signal.aborted) setOverview(res); })
         .catch(() => {});
-      api<SchemeBudget>("scheme_budget", {}, controller.signal)
-        .then(res => { if (!controller.signal.aborted && res) setOfficerBudget(res); })
-        .catch(() => {});
+      if (!budgetBlocked) {
+        api<SchemeBudget>("scheme_budget", {}, controller.signal)
+          .then(res => { if (!controller.signal.aborted && res) setOfficerBudget(res); })
+          .catch(err => {
+            if (err instanceof HttpError && err.status === 403) budgetBlocked = true;
+          });
+      }
       api<Claim[]>("queue", {}, controller.signal)
         .then(cases => {
           if (controller.signal.aborted || !Array.isArray(cases)) return;
