@@ -34,12 +34,14 @@ Drop screenshots into `docs/screenshots/` using the filenames below — they wil
 
 | Role | Demo Persona | Key Capabilities |
 |---|---|---|
-| **Citizen** | Fatima Bibi | Urdu/English voice & chat assistant, 3-step visual Relief Claim with live progress bar, Offline-First draft/outbox sync, image-first My Profile (VLM CNIC/bill/job extraction), My Privacy consent grant/revoke & record fixes, Policy Ask, Scam Shield |
+| **Citizen** | Fatima Bibi | Urdu/English voice and chat assistant, three-step **Relief Claim** with progress tracking and multiple evidence attachments, offline drafts and sync, image-first **My Profile** (VLM CNIC, bill, and job extraction), **My Privacy** for consent and record corrections, Policy Ask, Scam Shield |
 | **Community Helper** | Zainab Health Worker | Shared-phone **Family Switch** across households with per-family consent enforcement, **Family Profile**, assisted claims & offline outbox per family |
-| **Shopkeeper** | Tariq Karyana Store | Multimodal **Scam Shield** (SMS + screenshot OCR + Raast rail lookup + missing payment reports), **Business Schemes** (small & large business catalog + voice/agentic eligibility matcher), Policy Ask, WhatsApp & Direct SMS |
-| **Department Officer** | Reviewer Bilal | SaaS Liquid Glass analytics dashboard (status donut, 7-day intake sparkline, AI reliability histogram), priority & confidence-sorted **Review Desk** Kanban, **Applicant Full Profile** with zoomable proofs & mismatch badges, AI Case Summary, Approve/Reject/More Proof, separate simulated Raast disbursement |
+| **Shopkeeper** | Tariq Karyana Store | Dashboard shortcuts to **Scam Shield** (SMS and screenshot checks, Raast receipt verification, and missing-payment reports) and **Business Schemes** (small and large business catalog with voice-assisted eligibility matching), plus Policy Ask, WhatsApp, and Direct SMS |
+| **Department Officer** | Reviewer Bilal | Dashboard with a claim status chart, **Top Claimants** chart, **Pakistan Claims Hotspot Map**, and **Scheme Budget** snapshot. **Review Desk** shows background checks, review scores, repeat-claim warnings, applicant profiles with zoomable evidence, and AI case summaries. Officers can approve, reject, request more proof, and issue separate simulated Raast payments. |
 | **Administrator** | Admin Sana | Live Admin Dashboard, **Rule Studio** with **Digital Twin** historical impact simulation & zero-code version publishing, **Scheme Budget**, pending staff approvals, Users directory, Audit Vault, WhatsApp & Direct SMS gateway management |
 | **Auditor** | Auditor Kamran | Read-only **Audit Stream** (Claims/AI/Consent/Flagged bar chart) & GitHub-style **Audit Activity** (Hourly/Monthly streak), append-only **Audit Vault** with live polling, **Decision Safety Eval** (`0.9` vs `0.7` threshold trade-offs) |
+
+The workspace shows apps for the signed-in role. Citizens and helpers see personal claim widgets. The top-bar notification bell shows unread counts and can display alerts as toasts for citizens, helpers, reviewers, administrators, and auditors.
 
 ---
 
@@ -47,9 +49,9 @@ Drop screenshots into `docs/screenshots/` using the filenames below — they wil
 
 | Challenge / Bonus | How It Is Implemented |
 |---|---|
-| **01 · Cost of Being Wrong** | No auto-approvals; every payout requires an explicit officer decision + separate disbursement. Strict (`0.9`) vs. relaxed (`0.7`) trade-offs measured live in **Decision Safety Eval**. |
+| **01 · Cost of Being Wrong** | Every payout requires an explicit officer decision and a separate simulated disbursement. Approved claims show **Awaiting funds** when the scheme budget runs short. Administrators can increase the budget, and officers can issue payment once funds are reserved. **Decision Safety Eval** compares strict (`0.9`) and relaxed (`0.7`) thresholds. |
 | **02 · Saying "I Am Not Sure"** | Policy Ask abstains with dated citations when a question is outside the rulebook; low-confidence/blurry/tampered claims automatically route to human review with handoff notes. |
-| **03 · Bad Data** | Handles missing fields, phonetic name variants, blurry/altered docs, and highlights income/household mismatches directly inside the Reviewer's Applicant Profile panel. |
+| **03 · Bad Data** | Handles missing fields, phonetic name variants, and blurry or altered documents. **Review Desk** shows the original AI routing confidence, background job history, and a review score that can reflect mismatches with the applicant profile. A **Possible duplicate claim** warning appears when the applicant has other submitted claims. Expand **Other submitted claims** to view their statuses and open them for comparison. |
 | **04 · Rules That Change** | **Rule Studio** publishes versioned eligibility rules (`vN+1`) live in Postgres with zero code changes; prior claims remain permanently tied to their original `rule_version_used`. |
 | **05 · Explain & Audit** | Plain-language English & Urdu explanations for citizens; full append-only `audit_logs` trace (actor, entity, rule version, model version, confidence, outcome) for auditors. |
 | **06 · Consent & Take-Back** | Citizens grant or revoke helper access in **My Privacy**; withdrawal immediately enforces server-side `403` via PostgreSQL `relief_gateway` and logs `consent_revoked` + `access_denied`. |
@@ -57,7 +59,7 @@ Drop screenshots into `docs/screenshots/` using the filenames below — they wil
 | **08 · Scams & Fake Docs** | Multimodal **Scam Shield** (JEV + MiMo Vision + Policy RAG + Raast check) and VLM tamper/blur inspection with honest false-alarm/miss metrics. |
 | **Bonus · Digital Twin** | Admin simulates draft rule changes against historical claims before publishing. |
 | **Bonus · Helper Mode** | Fast shared-phone switching in **Family Switch** with isolated drafts, outbox counts, and per-family consent. |
-| **Bonus · Offline-First Sync** | IndexedDB outbox + background job queue + idempotent retries (`Idempotency-Key`) + simulated network-drop toggle. |
+| **Bonus · Offline-First Sync** | IndexedDB outbox, background job queue, idempotent retries (`Idempotency-Key`), and a simulated network-drop toggle. The offline fallback page lists queued actions in English and Urdu. The app attempts to sync when connectivity returns. |
 
 ---
 
@@ -100,29 +102,11 @@ Drop screenshots into `docs/screenshots/` using the filenames below — they wil
 
 ### Direct SMS (Android via Google Messages) & WhatsApp
 - **Direct SMS**: Sign in as **Admin Sana** → open **WhatsApp & SMS** → click **Pair Google Messages** (or run `npm run sms:gateway` in a separate terminal) → on your Android phone open **Google Messages → Device pairing → QR code scanner** and scan the QR code. Once paired, any user copies their `/login <key>` command from **WhatsApp & SMS** and texts it via standard SMS to the paired Android number to use the full 31-tool AI agent over SMS (no internet needed on the citizen's phone!).
-- **WhatsApp**: Run `npm run whatsapp:gateway` or use the simulator inside **WhatsApp & SMS**.
+- **WhatsApp**: Run `npm run whatsapp:gateway` or use the simulator inside **WhatsApp & SMS**. The paired gateway transcribes incoming voice notes with **Deepgram Nova-3** and can send a spoken reply alongside the text response when **Cartesia** is configured. Structured responses use layouts designed for mobile chat.
 
 ---
 
 ## Judge Demo Guides
 - [Rubric Checklist](docs/rubric-checklist.md) — maps every feature and automated check to the 100-point rubric.
 - [Manual Workflow Test Guide](docs/manual-workflow-test.md) — step-by-step test script and synthetic fixtures.
-
-## Recent Features
-
-### Review Desk and Scheme Budget
-
-- **Repeat-claim review.** Open a claim in **Review Desk** to see a **Possible duplicate claim** warning when the same applicant has other submitted claims. Expand **Other submitted claims** to compare their statuses, see which ones are paid, and open them directly. The list starts collapsed. Each submission still receives an officer decision.
-- **Background checks and review score.** Claim details show background job history and the review score alongside the original AI routing confidence. Officers can see why the score changed when claim details differ from the applicant profile.
-- **Reviewer dashboard.** The current dashboard includes the **Top Claimants** chart, a **Pakistan Claims Hotspot Map**, and a **Scheme Budget** snapshot. Administrators can increase the budget when approved claims show **Awaiting funds**. Once funds are reserved, the officer can issue a separate simulated payment.
-
-### Citizen and Shopkeeper Workflows
-
-- **Multiple evidence attachments.** Save a draft, attach an **Identity card**, then select **Income slip** and attach it separately before reviewing the claim. Use the [synthetic ID card](tests/fixtures/synthetic-id-card.png) and [synthetic income slip](tests/fixtures/synthetic-income.png) to test uploads.
-- **Offline outbox.** The offline fallback page shows actions already queued on the device, with English and Urdu labels. The app attempts to sync when connectivity returns.
-- **Shopkeeper dashboard and role-specific apps.** Tariq's dashboard gives him direct access to **Scam Shield** and **Business Schemes**. The workspace shows apps based on the signed-in role, and personal claim widgets are available to citizens and helpers.
-- **Live notifications.** The top-bar bell shows unread counts, and incoming alerts can appear as toasts for citizens, helpers, reviewers, administrators, and auditors.
-
-### WhatsApp Voice Notes
-
-- The paired WhatsApp gateway transcribes incoming voice notes with **Deepgram Nova-3**. With **Cartesia** configured, it can send a spoken reply alongside the text response. Structured replies use mobile-friendly layouts in WhatsApp.
+- **Evidence upload demo.** Save a draft and attach the [synthetic ID card](tests/fixtures/synthetic-id-card.png) as **Identity card**. Then select **Income slip**, attach the [synthetic income slip](tests/fixtures/synthetic-income.png), and open **Review claim** to check both files.
