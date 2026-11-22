@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useLang } from "@/src/lib/i18n";
 import { BookOpen, RotateCcw, Sparkles, Volume2 } from "lucide-react";
 import { api } from "@/src/lib/client";
 import type { PolicyAnswer } from "@/src/lib/contracts";
@@ -107,6 +108,7 @@ function CopyAnswerButton({ text }: { text: string }) {
 }
 
 export function PolicyChatView({ ctx }: { ctx: ViewContext }) {
+  const { lang } = useLang();
   const [turns, setTurns] = useState<PolicyTurn[]>([]);
   const [draft, setDraft] = useState("");
   const [inputError, setInputError] = useState("");
@@ -484,7 +486,7 @@ export function PolicyChatView({ ctx }: { ctx: ViewContext }) {
                                   onClick={() =>
                                     void speakText(
                                       turn.result!.answer,
-                                      ctx.voiceLang,
+                                      lang,
                                       ctx.lite || ctx.offline,
                                     )
                                   }

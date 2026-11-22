@@ -20,6 +20,7 @@ import { cuaEngine } from "./os/cuaEngine";
 import type { UIAction } from "@/src/lib/contracts";
 
 import { PipLoginModal } from "./pip/PipLoginModal";
+import { pick, strings, useLang, waitingToSend } from "@/src/lib/i18n";
 
 const roleEntries = Object.entries(personas) as [Persona, (typeof personas)[Persona]][];
 type WindowPreset = "compact" | "default" | "wide";
@@ -58,6 +59,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   const [fixtureOnline, setFixtureOnline] = useState(true);
   const [browserOnline, setBrowserOnline] = useState(true);
   const [lite, setLite] = useState(false);
+  const { lang } = useLang(); // app-wide language, toggled by the voice dock pill
   const [pending, setPending] = useState<Mutation[]>([]);
   const [busy, setBusy] = useState<Persona | "signout" | null>(null);
   const [headMessage, setHeadMessage] = useState("");
@@ -463,7 +465,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   const status = offline ? "Offline" : "Online";
   const failed = pending.find(item => item.failure);
   const context: ViewContext | null = profile ? {
-    profile, citizen, offline, version, enqueue, selectFamily, prefill, stepNav, voiceLang: profile.locale,
+    profile, citizen, offline, version, enqueue, selectFamily, prefill, stepNav,
     go: changeApp, refresh: () => setVersion(current => current + 1), lite,
   } : null;
 
@@ -652,7 +654,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                             <div className="liquid-status-section">
                               <div className="liquid-status-head">
                                 <span className={"liquid-net-pill" + (offline ? " is-offline" : "")} role="status">
-                                  {offline ? "Offline" : "Online"}{pending.length > 0 ? " · " + pending.length + " waiting to send" : ""}
+                                  {offline ? "Offline" : "Online"}{pending.length > 0 ? " · " + waitingToSend[lang](pending.length) : ""}
                                 </span>
                               </div>
                               <div className="liquid-action-buttons">
@@ -682,7 +684,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                                     onClick={() => void synchronize(true)}
                                   >
                                     <Cloud size={15} />
-                                    <span>{syncing ? "Syncing…" : "Sync now"}</span>
+                                    <span lang={lang}>{pick(syncing ? strings.syncing : strings.syncNow, lang)}</span>
                                   </button>
                                 )}
                               </div>
@@ -935,7 +937,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
               <div className="ios-desktop-grid">
                 {available.map(id => {
                   const item = apps[id];
-                  const title = appTitle(id, profile.role);
+                  const title = appTitle(id, profile.role, lang);
                   const Icon = item.icon;
                   const isRunning = openApps.includes(id);
                   const isMinimized = isRunning && minimizedApps.includes(id);
@@ -958,7 +960,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                           <Icon size={34} strokeWidth={2.1} />
                         )}
                       </div>
-                      <span className="ios-desktop-label">{title}</span>
+                      <span className="ios-desktop-label" lang={lang === "ur" && title !== item.title ? "ur" : undefined}>{title}</span>
                       {isRunning && <span className="ios-app-running-dot" />}
                     </motion.button>
                   );
@@ -1032,7 +1034,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                           <span className={"window-mini-icon " + appMeta.color}>
                             <Icon size={14} />
                           </span>
-                          <span className="window-title-text">{appTitle(appId, profile.role)}</span>
+                          <span className="window-title-text" lang={lang === "ur" && appTitle(appId, profile.role, lang) !== apps[appId].title ? "ur" : undefined}>{appTitle(appId, profile.role, lang)}</span>
                         </div>
 
                         {/* Window Quick Size & Close Options */}
@@ -1090,13 +1092,13 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
         <nav className="minimized-tray" aria-label="Minimized windows">
           {openApps.filter(id => minimizedApps.includes(id)).map(appId => {
             const meta = apps[appId];
-            const title = appTitle(appId, profile.role);
+            const title = appTitle(appId, profile.role, lang);
             const TrayIcon = meta.icon;
             return (
               <button key={appId} type="button" className="minimized-chip" aria-label={"Restore " + title + " window"}
                 onClick={() => openAppWindow(appId)}>
                 <span className={"window-mini-icon " + meta.color} aria-hidden="true"><TrayIcon size={14} /></span>
-                <span className="minimized-chip-label">{title}</span>
+                <span className="minimized-chip-label" lang={lang === "ur" && title !== meta.title ? "ur" : undefined}>{title}</span>
               </button>
             );
           })}

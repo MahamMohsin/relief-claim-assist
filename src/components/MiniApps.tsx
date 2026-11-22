@@ -24,6 +24,7 @@ import { Selector } from "@astryxdesign/core/Selector";
 import { FileInput } from "@astryxdesign/core/FileInput";
 import { HStack } from "@astryxdesign/core/HStack";
 import { VStack } from "@astryxdesign/core/VStack";
+import { claimStepHelp, dirFor, evidenceText, pick, stageText, statusText, strings, toneText, useLang, type ClaimTone, type EvidenceLabel, type Lang } from "@/src/lib/i18n";
 
 export type ViewContext = {
   profile: Profile;
@@ -34,7 +35,6 @@ export type ViewContext = {
   selectFamily: (family: Family) => Promise<void>;
   prefill: Extract<UIAction, { type: "prefill_fields" }> | null;
   stepNav: "evidence" | "review" | "submit" | null;
-  voiceLang: "en" | "ur";
   go: (app: MiniApp | null) => void;
   refresh: () => void;
   lite: boolean;
@@ -106,16 +106,16 @@ function useActionList<T>(action: Action, ctx: ViewContext, withFamily = false) 
 const clean: Payload = { monthly_income: 14500, household_size: 3, notes: "" };
 const claimIsChecking = (claim: Claim) => claim.ai_route === "checking" || Boolean(claim.documents?.some(doc => doc.verified_status === "processing"));
 // Citizen-facing stage: Received → Checking documents → Checked / Needs proof / With officer.
-function claimStage(claim: Claim) {
+const statusLabel = (status: string, lang: Lang) => statusText[status] ? pick(statusText[status], lang) : title(status);
+function claimStage(claim: Claim, lang: Lang) {
   if (claim.status === "draft") return null;
-  if (claimIsChecking(claim)) return "Checking documents";
-  if (claim.ai_route === "human_review") return "With officer (automatic check failed)";
-  if (claim.status === "needs_proof") return "Needs proof";
-  if (claim.status === "submitted" || claim.status === "in_review") return "Checked · With officer";
-  return title(claim.status);
+  if (claimIsChecking(claim)) return pick(stageText.checking, lang);
+  if (claim.ai_route === "human_review") return pick(stageText.failedToOfficer, lang);
+  if (claim.status === "needs_proof") return pick(stageText.needsProof, lang);
+  if (claim.status === "submitted" || claim.status === "in_review") return pick(stageText.withOfficer, lang);
+  return statusLabel(claim.status, lang);
 }
 // Status banner after submit / evidence upload, driven by the live (polled) claim.
-type ClaimTone = "processing" | "needs_proof" | "in_review" | "approved" | "rejected";
 function claimTone(claim: Claim): ClaimTone | null {
   if (claimIsChecking(claim)) return "processing";
   if (claim.status === "needs_proof") return "needs_proof";
@@ -127,35 +127,34 @@ function claimTone(claim: Claim): ClaimTone | null {
 }
 const evidenceTone = (status: string): ClaimTone | null =>
   status === "processing" ? "processing" : ["unreadable", "incomplete", "unverified"].includes(status) ? "needs_proof" : null;
-const toneText: Record<ClaimTone, { en: string; ur: string }> = {
-  processing: { en: "Received. Checking your documents…", ur: "درخواست موصول ہو گئی۔ آپ کے کاغذات کی جانچ ہو رہی ہے۔" },
-  needs_proof: { en: "Your documents need attention. Please update your evidence.", ur: "آپ کے کاغذات پر توجہ درکار ہے۔ براہ کرم اپنا ثبوت اپ ڈیٹ کریں۔" },
-  in_review: { en: "Checks done. An officer is reviewing your claim.", ur: "جانچ مکمل ہو گئی۔ ایک افسر آپ کی درخواست کا جائزہ لے رہا ہے۔" },
-  approved: { en: "Approved.", ur: "منظور ہو گئی۔" },
-  rejected: { en: "Your claim was not approved.", ur: "آپ کی درخواست منظور نہیں ہوئی۔" },
-};
+// "Latest evidence" label from the live document (same polled data as the banner and claim card).
+function evidenceLabel(doc: { verified_status: string; tamper_flag?: boolean }): EvidenceLabel | null {
+  if (doc.verified_status === "processing") return "checking";
+  if (doc.tamper_flag || ["flagged", "tampered"].includes(doc.verified_status)) return "flagged";
+  if (["readable", "verified"].includes(doc.verified_status)) return "verified";
+  if (["unreadable", "incomplete", "blurry", "blurred", "needs_proof"].includes(doc.verified_status)) return "clearer";
+  if (["unverified", "failed"].includes(doc.verified_status)) return "failed";
+  return null;
+}
 const toneStatus: Record<ClaimTone, "success" | "warning" | "info" | "error"> = {
   processing: "success", needs_proof: "warning", in_review: "info", approved: "success", rejected: "error",
 };
-const savedOnPhone = {
-  en: "Saved on this phone. Will send when signal returns.",
-  ur: "یہ اس فون پر محفوظ ہے۔ سگنل واپس آنے پر بھیج دیا جائے گا۔",
-} as const;
 const progressSteps = ["Household", "Evidence", "Review & submit"];
-const claimStepHelp = {
-  en: [
-    "Enter your total monthly household income and the number of people in your household. Then continue to evidence.",
-    "Attach a readable synthetic document. You can pick a sample or upload an image. Then select Review claim.",
-    "Check the details and evidence. Select Submit claim when you are ready. An officer will review it.",
-  ],
-  ur: [
-    "گھر کی کل ماہانہ آمدنی اور گھر کے افراد کی تعداد درج کریں۔ پھر ثبوت کے مرحلے پر جائیں۔",
-    "واضح فرضی دستاویز منسلک کریں۔ آپ نمونہ منتخب کر سکتے ہیں یا تصویر لگا سکتے ہیں۔ پھر درخواست کا جائزہ لیں۔",
-    "تفصیلات اور ثبوت دیکھ لیں، پھر درخواست جمع کریں۔ ایک افسر اس کا جائزہ لے گا۔",
-  ],
-};
+// Decision reason: the selected language first, the other one small underneath.
+function DecisionReason({ en, ur, lang }: { en: string | null; ur: string | null; lang: Lang }) {
+  const other: Lang = lang === "ur" ? "en" : "ur";
+  const text = { en, ur };
+  const firstLang = text[lang] ? lang : other;
+  const first = text[firstLang];
+  const second = text[lang] ? text[other] : null;
+  return <>
+    {first && <p lang={firstLang} dir={dirFor(firstLang)}>{first}</p>}
+    {second && <small className="muted" lang={other} dir={dirFor(other)}>{second}</small>}
+  </>;
+}
 
 function ClaimView({ ctx }: { ctx: ViewContext }) {
+  const { lang } = useLang();
   const { data: claims, error, loading } = useActionList<Claim[]>("claims", ctx, true);
   // While background checks run, refresh the claim status (every 10s, or 30s in 2G Lite).
   const checking = Boolean(claims?.some(claimIsChecking));
@@ -321,6 +320,13 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
 
   if (!ctx.citizen) return <FamilyRequired ctx={ctx} />;
   const draft = claims?.find(item => item.id === claimId);
+  // Latest evidence from the live polled claim (agrees with the banner and the claim card).
+  // While it is still processing, the polling effect above keeps refreshing (10s, 30s in 2G Lite).
+  const liveDoc = draft?.documents?.at(-1);
+  const liveLabel = liveDoc ? evidenceLabel(liveDoc) : null;
+  const evidenceShown = attached === "Queued evidence" ? pick(strings.queuedEvidence, lang)
+    : liveDoc ? (liveLabel ? pick(evidenceText[liveLabel], lang) : title(liveDoc.verified_status))
+    : attached;
 
   function start(item?: Claim) {
     setClaimId(item?.id ?? null);
@@ -358,7 +364,7 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
           setEditing(false);
           await wipeDraft(ctx.profile.id, scope).catch(() => {});
         }
-        setMessage(savedOnPhone[ctx.voiceLang] ?? savedOnPhone.en);
+        setMessage(pick(strings.savedOnPhone, lang));
       };
       if (ctx.offline || (!currentId && pendingDraft)) {
         await queueInOutbox();
@@ -385,7 +391,7 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
           await wipeDraft(ctx.profile.id, scope).catch(() => {});
           setOpened(saved.id);
           setTracked({ id: saved.id, fallback: claimTone(saved), live: false });
-        } else setMessage("Draft saved.");
+        } else setMessage(pick(strings.draftSaved, lang));
       }
       ctx.refresh();
     } catch (error) {
@@ -414,11 +420,11 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
     : ["needs_proof", "revoked", "unreadable"].includes(status) ? "warning" as const
     : ["submitted", "in_review"].includes(status) ? "info" as const : "neutral" as const;
 
-  return <div className="view-stack">
+  return <div className="view-stack" data-app-lang={lang}>
     {(error || fault) && <Banner status="error" title="Something went wrong" description={error || fault} />}
     {tracked && tone
-      ? <section key={tracked.id + tone} className="claim-status" data-tone={tone} lang={ctx.voiceLang} dir={ctx.voiceLang === "ur" ? "rtl" : "ltr"}>
-          <Banner status={toneStatus[tone]} title={toneText[tone][ctx.voiceLang] ?? toneText[tone].en} isDismissable dismissLabel="Dismiss" onDismiss={() => setTracked(null)} />
+      ? <section key={tracked.id + tone} className="claim-status" data-tone={tone} lang={lang} dir={dirFor(lang)}>
+          <Banner status={toneStatus[tone]} title={pick(toneText[tone], lang)} isDismissable dismissLabel={lang === "ur" ? "بند کریں" : "Dismiss"} onDismiss={() => setTracked(null)} />
         </section>
       : message && <Banner status="success" title={message} />}
     {editing ? <Card padding={6}>
@@ -427,7 +433,7 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
           <h2>{draft?.status === "needs_proof" ? "Replace evidence" : "Prepare a claim"}</h2>
           <p>Use synthetic details and pretend documents only.</p>
         </VStack>
-        <Button variant="secondary" label="Back to claims" onClick={() => setEditing(false)} />
+        <Button variant="secondary" label={pick(strings.backToClaims, lang)} onClick={() => setEditing(false)} />
       </HStack>
       <HStack gap={1} wrap="wrap" paddingBlockStart={3}>
         {progressSteps.map((label, index) => (
@@ -435,9 +441,9 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
         ))}
       </HStack>
       <VStack gap={2} paddingBlockStart={3}>
-        <p lang={ctx.voiceLang} dir={ctx.voiceLang === "ur" ? "rtl" : "ltr"}>{claimStepHelp[ctx.voiceLang][step]}</p>
+        <p lang={lang} dir={dirFor(lang)}>{claimStepHelp[lang][step]}</p>
         <Button variant="secondary" label="Listen to this step" icon={<AudioLines size={16} />} onClick={() =>
-          void speakText(claimStepHelp[ctx.voiceLang][step], ctx.voiceLang, ctx.lite || ctx.offline).then(setMessage)} />
+          void speakText(claimStepHelp[lang][step], lang, ctx.lite || ctx.offline).then(setMessage)} />
       </VStack>
       {step === 0 && <form onSubmit={event => { event.preventDefault(); setStep(1); }}>
         <VStack gap={3} paddingBlockStart={3}>
@@ -454,10 +460,10 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
           </div>
           <HStack gap={2} wrap="wrap">
             <span data-cua="claim-continue-evidence" style={{ display: "inline-flex" }}>
-              <Button type="submit" variant="primary" label="Continue to evidence" endContent={<ChevronRight size={16} />} />
+              <Button type="submit" variant="primary" label={pick(strings.continueToEvidence, lang)} endContent={<ChevronRight size={16} />} />
             </span>
             <span data-cua="claim-save-draft" style={{ display: "inline-flex" }}>
-              <Button variant="secondary" label="Save draft" isDisabled={busy} onClick={() => void run("draft")} />
+              <Button variant="secondary" label={pick(strings.saveDraft, lang)} isDisabled={busy} onClick={() => void run("draft")} />
             </span>
           </HStack>
         </VStack>
@@ -472,31 +478,31 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
           </div>
         </HStack>
         <FileInput label="Upload or take a picture of a synthetic document" value={file} onChange={next => { const picked = Array.isArray(next) ? next[0] ?? null : next; setFile(picked); void readImage(picked ?? undefined); }} accept="image/png,image/jpeg,image/webp" mode="dropzone" isOptional />
-        {attached && <p className="muted">Latest evidence: {attached}</p>}
+        {evidenceShown && <p className="muted" lang={lang} dir={dirFor(lang)}>{pick(strings.latestEvidence, lang)}: {evidenceShown}</p>}
         <HStack gap={2} wrap="wrap">
           <span data-cua="claim-attach-btn" style={{ display: "inline-flex" }}>
             {claimId || pendingDraft
-              ? <Button variant="secondary" label={busy ? "Processing…" : "Attach evidence"} isDisabled={busy} onClick={() => void run("evidence")} />
-              : <Button variant="secondary" label="Save draft to attach evidence" isDisabled={busy} onClick={() => void run("draft")} />}
+              ? <Button variant="secondary" label={pick(busy ? strings.processing : liveDoc ? strings.updateEvidence : strings.attachEvidence, lang)} isDisabled={busy} onClick={() => void run("evidence")} />
+              : <Button variant="secondary" label={pick(strings.saveDraftToAttach, lang)} isDisabled={busy} onClick={() => void run("draft")} />}
           </span>
           <span data-cua="claim-review-btn" style={{ display: "inline-flex" }}>
-            <Button variant="primary" label="Review claim" isDisabled={busy} onClick={() => setStep(2)} />
+            <Button variant="primary" label={pick(strings.reviewClaim, lang)} isDisabled={busy} onClick={() => setStep(2)} />
           </span>
-          <Button variant="ghost" label="Back" onClick={() => setStep(0)} />
+          <Button variant="ghost" label={pick(strings.back, lang)} onClick={() => setStep(0)} />
         </HStack>
       </VStack>}
       {step === 2 && <VStack gap={3} paddingBlockStart={3}>
         <HStack gap={2} wrap="wrap">
           <Card variant="muted" padding={3}><VStack gap={0.5}><small>Monthly income</small><strong>{currency(details.monthly_income)}</strong></VStack></Card>
           <Card variant="muted" padding={3}><VStack gap={0.5}><small>Household size</small><strong>{details.household_size} people</strong></VStack></Card>
-          <Card variant="muted" padding={3}><VStack gap={0.5}><small>Evidence</small><strong>{attached || "Awaiting proof"}</strong></VStack></Card>
+          <Card variant="muted" padding={3}><VStack gap={0.5}><small>Evidence</small><strong lang={evidenceShown ? lang : undefined}>{evidenceShown || "Awaiting proof"}</strong></VStack></Card>
         </HStack>
         <p className="muted">An officer reviews every claim before any simulated payment can be issued.</p>
         <HStack gap={2}>
           <span data-cua="claim-submit-btn" style={{ display: "inline-flex" }}>
-            <Button variant="primary" label={busy ? "Submitting…" : ctx.offline ? "Queue claim" : "Submit claim"} isDisabled={busy} onClick={() => void run("submit")} />
+            <Button variant="primary" label={pick(busy ? strings.submitting : ctx.offline ? strings.queueClaim : strings.submitClaim, lang)} isDisabled={busy} onClick={() => void run("submit")} />
           </span>
-          <Button variant="ghost" label="Back" onClick={() => setStep(1)} />
+          <Button variant="ghost" label={pick(strings.back, lang)} onClick={() => setStep(1)} />
         </HStack>
       </VStack>}
     </Card> : <Card padding={6}>
@@ -506,7 +512,7 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
           <p>Follow applications, officer requests, and payment receipts.</p>
         </VStack>
         <span data-cua="claim-new-btn" style={{ display: "inline-flex" }}>
-          <Button variant="primary" label="New claim" icon={<Plus size={16} />} onClick={() => start()} />
+          <Button variant="primary" label={pick(strings.newClaim, lang)} icon={<Plus size={16} />} onClick={() => start()} />
         </span>
       </HStack>
       {loading && !claims ? <Spinner /> : !claims?.length ? <p className="empty">{ctx.offline ? "Saved drafts are available offline. Reconnect to see submitted claims." : "This family has no claims yet."}</p> :
@@ -514,20 +520,24 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
           {claims.map(item => <Card key={item.id} variant="muted" padding={3}>
             <VStack gap={2}>
               <HStack gap={2} justify="between" wrap="wrap">
-                <HStack gap={2} wrap="wrap"><strong>Claim {short(item.id)}</strong><Badge label={title(item.status)} variant={badge(item.status)} /></HStack>
+                <HStack gap={2} wrap="wrap"><strong>Claim {short(item.id)}</strong><Badge label={<span lang={lang}>{statusLabel(item.status, lang)}</span>} variant={badge(item.status)} /></HStack>
                 <Button variant="ghost" size="sm" label={opened === item.id ? "Hide details" : "View details"} onClick={() => { if (tracked && tracked.id !== item.id) setTracked(null); setOpened(opened === item.id ? undefined : item.id); }} />
               </HStack>
               <small>{new Date(item.updated_at).toLocaleDateString()} · {item.amount_pkr ? currency(item.amount_pkr) : "Draft amount pending"}</small>
-              {claimStage(item) && <small className="muted">Received → {claimStage(item)}</small>}
+              {claimStage(item, lang) && <small className="muted" lang={lang} dir={dirFor(lang)}>{pick(strings.received, lang)} → {claimStage(item, lang)}</small>}
               {opened === item.id && <VStack gap={2}>
                 <ol className="timeline"><li>Draft created</li>{item.status !== "draft" && <li>Submitted to the relief scheme</li>}<li>{title(item.status)}{item.rule_version_used ? " · Rule v" + item.rule_version_used : ""}</li>{item.payment && <li>Payment {item.payment.status}</li>}</ol>
-                {item.citizen_reason_en && <p>{item.citizen_reason_en}</p>}
-                {item.citizen_reason_ur && <p lang="ur" dir="rtl">{item.citizen_reason_ur}</p>}
+                <DecisionReason en={item.citizen_reason_en} ur={item.citizen_reason_ur} lang={lang} />
                 <p className="muted breakable">Claim ID: {item.id}</p>
                 {item.payment && <p className="receipt"><CircleDollarSign size={21} /> {currency(item.payment.amount_pkr)} · <strong>{item.payment.raast_ref}</strong> · {title(item.payment.status)}</p>}
                 <HStack gap={2} wrap="wrap">
-                  {["draft", "needs_proof"].includes(item.status) && <Button variant="primary" label={item.status === "draft" ? "Edit draft" : "Update evidence"} onClick={() => start(item)} />}
-                  {item.citizen_reason_en && <Button variant="secondary" label="Play decision" icon={<AudioLines size={16} />} onClick={() => void speakText(item.citizen_reason_ur || item.citizen_reason_en!, item.citizen_reason_ur ? "ur" : "en", ctx.lite || ctx.offline).then(setMessage)} />}
+                  {["draft", "needs_proof"].includes(item.status) && <Button variant="primary" label={item.status === "draft" ? "Edit draft" : pick(strings.updateEvidence, lang)} onClick={() => start(item)} />}
+                  {(item.citizen_reason_en || item.citizen_reason_ur) && <Button variant="secondary" label={pick(strings.playDecision, lang)} icon={<AudioLines size={16} />} onClick={() => {
+                    // Speak the decision in the selected language, falling back to the other one.
+                    const own = lang === "ur" ? item.citizen_reason_ur : item.citizen_reason_en;
+                    const spoken: Lang = own ? lang : lang === "ur" ? "en" : "ur";
+                    void speakText((own ?? item.citizen_reason_en ?? item.citizen_reason_ur)!, spoken, ctx.lite || ctx.offline).then(setMessage);
+                  }} />}
                 </HStack>
               </VStack>}
             </VStack>
@@ -577,6 +587,7 @@ function FamilyView({ ctx }: { ctx: ViewContext }) {
 }
 
 function PrivacyView({ ctx }: { ctx: ViewContext }) {
+  const { lang } = useLang();
   const { data, error, loading } = useActionList<Privacy>("privacy", ctx, true);
   const [field, setField] = useState("full_name");
   const [value, setValue] = useState("");
@@ -606,7 +617,7 @@ function PrivacyView({ ctx }: { ctx: ViewContext }) {
     try {
       const args = { ...body, citizenId: ctx.citizen };
       const key = crypto.randomUUID();
-      const queued = async () => { await ctx.enqueue(action, args, { key }); setMessage(savedOnPhone[ctx.voiceLang] ?? savedOnPhone.en); };
+      const queued = async () => { await ctx.enqueue(action, args, { key }); setMessage(pick(strings.savedOnPhone, lang)); };
       if (ctx.offline) await queued();
       else {
         try {

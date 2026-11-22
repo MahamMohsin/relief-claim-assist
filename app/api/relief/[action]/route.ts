@@ -1,7 +1,7 @@
 import { after } from "next/server";
 import { actions, type Action, type Profile } from "@/src/lib/contracts";
 import { callJobs, enqueueJob, jobsAvailable, runJobs } from "@/src/lib/jobs";
-import { apiError, ApiError, gateway, readJson } from "@/src/lib/server";
+import { apiError, ApiError, authClient, gateway, readJson } from "@/src/lib/server";
 import { answerPolicy } from "@/src/lib/ai/rag";
 import { inspectEvidence } from "@/src/lib/ai/ocr";
 import { extractProfileDocument } from "@/src/lib/ai/profileVlm";
@@ -107,6 +107,15 @@ export async function POST(request: Request, context: RouteContext<"/api/relief/
         result = operation === "job_history"
           ? await callJobs("history", { claimId: actions.job_history.parse(body).claimId })
           : await callJobs("stats");
+        break;
+      }
+      case "set_locale": {
+        // Saves the app language on the caller's own profile (relief_set_locale uses auth.uid()).
+        const { locale } = actions.set_locale.parse(body);
+        const { data, error } = await (await authClient()).rpc("relief_set_locale", { p_locale: locale });
+        if (error) throw new ApiError(error.code === "PGRST202" ? 503 : 502, "Could not save your language.");
+        if (data && typeof data.status === "number") throw new ApiError(data.status, String(data.error ?? "Could not save your language."));
+        result = data;
         break;
       }
       case "safety":

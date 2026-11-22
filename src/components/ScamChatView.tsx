@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useLang } from "@/src/lib/i18n";
 import {
   AlertTriangle,
   CircleDollarSign,
@@ -144,6 +145,7 @@ function CopyVerdictButton({ text }: { text: string }) {
 }
 
 export function ScamChatView({ ctx }: { ctx: ViewContext }) {
+  const { lang } = useLang();
   const [turns, setTurns] = useState<ScamTurn[]>([]);
   const [draft, setDraft] = useState("");
   const [attachment, setAttachment] = useState<PendingImage | null>(null);
@@ -806,7 +808,7 @@ export function ScamChatView({ ctx }: { ctx: ViewContext }) {
                                   onClick={() =>
                                     void speakText(
                                       spokenSummary,
-                                      ctx.voiceLang,
+                                      lang,
                                       ctx.lite || ctx.offline,
                                     )
                                   }

@@ -5076,3 +5076,7 @@ button.persona-card, button.kanban-card { background: var(--surface); }
 .claim-status[data-tone="in_review"] .astryx-banner { background: var(--review-bg); color: var(--review-text); }
 .claim-status[data-tone="rejected"] .astryx-banner { background: var(--error-bg); color: var(--error-text); }
 .claim-status .astryx-banner-icon { color: inherit; }
+
+/* Urdu text uses Nastaliq. Button labels are plain text, so the citizen claim view sets data-app-lang. */
+[lang="ur"], [lang="ur"] * { font-family: "Noto Nastaliq Urdu", var(--font); }
+[data-app-lang="ur"] .astryx-button { font-family: "Noto Nastaliq Urdu", var(--font); }

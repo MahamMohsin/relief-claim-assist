@@ -9,6 +9,7 @@ import { apps } from "../launcher";
 import { receiveActions } from "./UIActionBus";
 import { queueSpeakSegment, speakText, stopSpeaking } from "./speech";
 import { cuaEngine } from "./cuaEngine";
+import { useLang } from "@/src/lib/i18n";
 
 type VoiceProps = {
   profile: Profile;
@@ -20,8 +21,8 @@ type VoiceProps = {
   onQueueAudio: (audio: Blob, locale: "en" | "ur") => Promise<string>;
 };
 
-export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAction, onQueueAudio }: VoiceProps) {
-  const [lang, setLang] = useState(profile.locale);
+export function VoiceDock({ citizenId, offline, lite, transcript, onAction, onQueueAudio }: VoiceProps) {
+  const { lang, setLang } = useLang(); // app-wide language: drives Deepgram input and Cartesia replies
   const [input, setInput] = useState("");
   const [working, setWorking] = useState(false);
   const [stage, setStage] = useState("Relief assistant");
@@ -403,8 +404,9 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
             <span className="inline-stage-text">{displayedStage}</span>
           </span>
         )}
-        <button type="button" className="glass-lang-pill" aria-label="Switch voice language" onClick={() => setLang(value => value === "en" ? "ur" : "en")}>
-          {lang === "ur" ? "اردو" : "EN"}
+        <button type="button" className="glass-lang-pill" aria-label="Switch language" onClick={() => setLang(lang === "en" ? "ur" : "en")}>
+          {/* Shows the language you can switch to */}
+          {lang === "ur" ? "EN" : "اردو"}
         </button>
         {working && <button type="button" className="glass-icon-btn stop" aria-label="Stop assistant" onClick={stop}><StopCircle size={18} /></button>}
         {/* Unified Record / Stop-and-Send / Send Action Button */}
