@@ -1,5 +1,10 @@
+import fs from "node:fs";
+import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { personas, type Persona, type Role } from "@/src/lib/contracts";
+import { inferDemoPersona } from "./scoped-gateway";
+
+const SESSIONS_FILE = path.resolve(process.cwd(), ".sms-sessions.json");
 
 export type UserSessionInfo = {
   userId: string;
@@ -7,169 +12,298 @@ export type UserSessionInfo = {
   role: Role;
   name: string;
   citizenId: string | null;
+  email?: string | null;
+  accessToken?: string | null;
+  refreshToken?: string | null;
   linkedPhone?: string | null;
+  linkedThread?: string | null;
   token: string;
   createdAt: string;
+  updatedAt?: string;
 };
 
-// Global in-memory storage for WhatsApp session tokens and phone mappings
-// Preserved across hot reloads in development via globalThis
-interface WhatsAppSessionStore {
-  userTokens: Map<string, string>; // userId/persona -> token
-  tokenToUser: Map<string, UserSessionInfo>; // token -> UserSessionInfo
-  phoneToUser: Map<string, UserSessionInfo>; // phone -> UserSessionInfo
+interface PersistedSessionStore {
+  /** userId -> UserSessionInfo */
+  users: Record<string, UserSessionInfo>;
+  /** normalizedPhoneOrSender -> userId */
+  phoneToUserId: Record<string, string>;
 }
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __rca_whatsapp_store: WhatsAppSessionStore | undefined;
-}
-
-function getStore(): WhatsAppSessionStore {
-  if (!globalThis.__rca_whatsapp_store) {
-    globalThis.__rca_whatsapp_store = {
-      userTokens: new Map(),
-      tokenToUser: new Map(),
-      phoneToUser: new Map(),
-    };
-    initDefaultSessions(globalThis.__rca_whatsapp_store);
+function readStore(): PersistedSessionStore {
+  try {
+    if (fs.existsSync(SESSIONS_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(SESSIONS_FILE, "utf-8")) as Partial<PersistedSessionStore>;
+      return {
+        users: parsed.users || {},
+        phoneToUserId: parsed.phoneToUserId || {},
+      };
+    }
+  } catch (err) {
+    console.error("[sms-session] Failed to read session store:", err);
   }
-  return globalThis.__rca_whatsapp_store;
+  return { users: {}, phoneToUserId: {} };
 }
 
-function initDefaultSessions(store: WhatsAppSessionStore) {
-  const defaults: Record<Persona, { token: string; citizenId: string | null }> = {
-    fatima: { token: "rca_wa_live_fatima_c82e3f19", citizenId: "c37d5ff0-482a-4467-8c31-7e923e420d3b" },
-    zainab: { token: "rca_wa_live_zainab_49d107a6", citizenId: null },
-    tariq: { token: "rca_wa_live_tariq_17b35e82", citizenId: null },
-    bilal: { token: "rca_wa_live_bilal_9f0a44dc", citizenId: null },
-    sana: { token: "rca_wa_live_sana_e25c7710", citizenId: null },
-    kamran: { token: "rca_wa_live_kamran_3a8b9015", citizenId: null },
-  };
-
-  for (const [key, details] of Object.entries(personas) as [Persona, (typeof personas)[Persona]][]) {
-    const def = defaults[key];
-    const info: UserSessionInfo = {
-      userId: key,
-      persona: key,
-      role: details.role,
-      name: details.name,
-      citizenId: def.citizenId,
-      token: def.token,
-      createdAt: new Date().toISOString(),
-    };
-    store.userTokens.set(key, def.token);
-    store.tokenToUser.set(def.token, info);
+function writeStore(store: PersistedSessionStore) {
+  try {
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(store, null, 2), "utf-8");
+  } catch (err) {
+    console.error("[sms-session] Failed to write session store:", err);
   }
 }
 
-export function generateSessionToken(prefix = "rca_wa_live"): string {
-  return `${prefix}_${randomBytes(16).toString("hex")}`;
+export function generateSessionToken(role: Role = "citizen"): string {
+  const shortRole = role.slice(0, 3);
+  return `rca_${shortRole}_${randomBytes(6).toString("hex")}`;
 }
 
-export function getUserSessionToken(userIdOrPersona: string, fallbackProfile?: { full_name?: string; role?: Role; citizen_id?: string | null }): string {
-  const store = getStore();
-  const existing = store.userTokens.get(userIdOrPersona);
-  if (existing) return existing;
+export type SessionProfileInput = {
+  full_name?: string;
+  role?: Role;
+  citizen_id?: string | null;
+  email?: string | null;
+  accessToken?: string | null;
+  refreshToken?: string | null;
+};
 
-  const token = generateSessionToken();
-  const role: Role = fallbackProfile?.role ?? (userIdOrPersona in personas ? personas[userIdOrPersona as Persona].role : "citizen");
-  const name = fallbackProfile?.full_name ?? (userIdOrPersona in personas ? personas[userIdOrPersona as Persona].name : "Citizen User");
-  const persona: Persona | "custom" = userIdOrPersona in personas ? (userIdOrPersona as Persona) : "custom";
+export function getUserSessionToken(userId: string, profile?: SessionProfileInput): string {
+  const store = readStore();
+  const existing = store.users[userId];
 
+  const resolvedRole: Role =
+    profile?.role ?? existing?.role ?? (userId in personas ? personas[userId as Persona].role : "citizen");
+  const resolvedName =
+    profile?.full_name ?? existing?.name ?? (userId in personas ? personas[userId as Persona].name : "Relief User");
+  const inferred = inferDemoPersona({
+    email: profile?.email ?? existing?.email,
+    name: resolvedName,
+    role: resolvedRole,
+    persona: existing?.persona,
+  });
+  const resolvedPersona: Persona | "custom" = inferred ?? "custom";
+
+  if (existing) {
+    // Keep profile metadata & tokens fresh whenever the user opens the dashboard
+    let changed = false;
+    if (profile?.full_name && existing.name !== profile.full_name) {
+      existing.name = profile.full_name;
+      changed = true;
+    }
+    if (profile?.role && existing.role !== profile.role) {
+      existing.role = profile.role;
+      changed = true;
+    }
+    if (profile?.citizen_id !== undefined && existing.citizenId !== profile.citizen_id) {
+      existing.citizenId = profile.citizen_id;
+      changed = true;
+    }
+    if (profile?.email && existing.email !== profile.email) {
+      existing.email = profile.email;
+      changed = true;
+    }
+    if (profile?.accessToken && existing.accessToken !== profile.accessToken) {
+      existing.accessToken = profile.accessToken;
+      changed = true;
+    }
+    if (profile?.refreshToken && existing.refreshToken !== profile.refreshToken) {
+      existing.refreshToken = profile.refreshToken;
+      changed = true;
+    }
+    if (existing.persona !== resolvedPersona) {
+      existing.persona = resolvedPersona;
+      changed = true;
+    }
+    if (changed) {
+      existing.updatedAt = new Date().toISOString();
+      writeStore(store);
+    }
+    return existing.token;
+  }
+
+  const token = generateSessionToken(resolvedRole);
   const info: UserSessionInfo = {
-    userId: userIdOrPersona,
-    persona,
-    role,
-    name,
-    citizenId: fallbackProfile?.citizen_id ?? null,
+    userId,
+    persona: resolvedPersona,
+    role: resolvedRole,
+    name: resolvedName,
+    citizenId: profile?.citizen_id ?? null,
+    email: profile?.email ?? null,
+    accessToken: profile?.accessToken ?? null,
+    refreshToken: profile?.refreshToken ?? null,
+    linkedPhone: null,
+    linkedThread: null,
     token,
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 
-  store.userTokens.set(userIdOrPersona, token);
-  store.tokenToUser.set(token, info);
+  store.users[userId] = info;
+  writeStore(store);
   return token;
 }
 
-export function resetUserSessionToken(userIdOrPersona: string, fallbackProfile?: { full_name?: string; role?: Role; citizen_id?: string | null }): string {
-  const store = getStore();
-  const oldToken = store.userTokens.get(userIdOrPersona);
-  if (oldToken) {
-    const oldInfo = store.tokenToUser.get(oldToken);
-    store.tokenToUser.delete(oldToken);
-    if (oldInfo?.linkedPhone) {
-      store.phoneToUser.delete(oldInfo.linkedPhone);
+export function resetUserSessionToken(userId: string, profile?: SessionProfileInput): string {
+  const store = readStore();
+  const existing = store.users[userId];
+
+  // Disconnect any phone previously linked to this user
+  if (existing?.linkedPhone) {
+    delete store.phoneToUserId[normalizePhone(existing.linkedPhone)];
+  }
+  for (const [phoneKey, mappedId] of Object.entries(store.phoneToUserId)) {
+    if (mappedId === userId) {
+      delete store.phoneToUserId[phoneKey];
     }
   }
 
-  const newToken = generateSessionToken();
-  const role: Role = fallbackProfile?.role ?? (userIdOrPersona in personas ? personas[userIdOrPersona as Persona].role : "citizen");
-  const name = fallbackProfile?.full_name ?? (userIdOrPersona in personas ? personas[userIdOrPersona as Persona].name : "Citizen User");
-  const persona: Persona | "custom" = userIdOrPersona in personas ? (userIdOrPersona as Persona) : "custom";
+  const resolvedRole: Role =
+    profile?.role ?? existing?.role ?? (userId in personas ? personas[userId as Persona].role : "citizen");
+  const resolvedName =
+    profile?.full_name ?? existing?.name ?? (userId in personas ? personas[userId as Persona].name : "Relief User");
+  const inferred = inferDemoPersona({
+    email: profile?.email ?? existing?.email,
+    name: resolvedName,
+    role: resolvedRole,
+    persona: existing?.persona,
+  });
 
-  const info: UserSessionInfo = {
-    userId: userIdOrPersona,
-    persona,
-    role,
-    name,
-    citizenId: fallbackProfile?.citizen_id ?? null,
+  const newToken = generateSessionToken(resolvedRole);
+  store.users[userId] = {
+    userId,
+    persona: inferred ?? "custom",
+    role: resolvedRole,
+    name: resolvedName,
+    citizenId: profile?.citizen_id ?? existing?.citizenId ?? null,
+    email: profile?.email ?? existing?.email ?? null,
+    accessToken: profile?.accessToken ?? existing?.accessToken ?? null,
+    refreshToken: profile?.refreshToken ?? existing?.refreshToken ?? null,
+    linkedPhone: null,
+    linkedThread: null,
     token: newToken,
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 
-  store.userTokens.set(userIdOrPersona, newToken);
-  store.tokenToUser.set(newToken, info);
+  writeStore(store);
   return newToken;
 }
 
-export function normalizePhone(raw: string): string {
-  return raw.replace(/[^0-9+]/g, "").replace(/^00/, "+").replace(/^03/, "+923");
+export function updateUserSessionTokens(userId: string, tokens: { accessToken: string; refreshToken: string }) {
+  const store = readStore();
+  const user = store.users[userId];
+  if (!user) return;
+  user.accessToken = tokens.accessToken;
+  user.refreshToken = tokens.refreshToken;
+  user.updatedAt = new Date().toISOString();
+  writeStore(store);
 }
 
-export function authenticatePhoneWithToken(rawPhone: string, token: string): { success: boolean; user?: UserSessionInfo; error?: string } {
-  const store = getStore();
-  const cleanPhone = normalizePhone(rawPhone);
+/**
+ * Normalizes a phone number or Google Messages sender identifier.
+ * Keeps phone digits normalized (e.g. +923001234567) and falls back to lowercased contact name
+ * when Google Messages displays a saved contact name instead of raw digits.
+ */
+export function normalizePhone(raw: string): string {
+  const trimmed = raw.trim();
+  const digitsOnly = trimmed.replace(/[^0-9+]/g, "");
+  // If it looks like a phone number (at least 7 digits), normalize as phone
+  if (digitsOnly.replace(/\+/g, "").length >= 7) {
+    return digitsOnly.replace(/^00/, "+").replace(/^03/, "+923");
+  }
+  return trimmed.toLowerCase();
+}
+
+export function authenticatePhoneWithToken(
+  rawSender: string,
+  token: string,
+): { success: boolean; user?: UserSessionInfo; error?: string } {
+  const store = readStore();
+  const cleanSender = normalizePhone(rawSender);
   const cleanToken = token.trim();
 
-  const user = store.tokenToUser.get(cleanToken);
-  if (!user) {
-    return { success: false, error: "Invalid or expired session token. Please verify your token in the app." };
+  if (!cleanSender) {
+    return { success: false, error: "Could not determine sender phone number." };
   }
 
-  // Link phone to user
-  user.linkedPhone = cleanPhone;
-  store.phoneToUser.set(cleanPhone, user);
-  return { success: true, user };
-}
-
-export function unlinkPhone(rawPhone: string): boolean {
-  const store = getStore();
-  const cleanPhone = normalizePhone(rawPhone);
-  const user = store.phoneToUser.get(cleanPhone);
-  if (user) {
-    user.linkedPhone = null;
-    store.phoneToUser.delete(cleanPhone);
-    return true;
+  const matchedUser = Object.values(store.users).find(u => u.token === cleanToken);
+  if (!matchedUser) {
+    return {
+      success: false,
+      error: "Invalid or expired login key. Open Relief Assist -> WhatsApp & SMS to copy your active personal key.",
+    };
   }
-  return false;
+
+  // If this sender was previously logged in as another persona, unlink old user cleanly
+  const prevUserId = store.phoneToUserId[cleanSender];
+  if (prevUserId && prevUserId !== matchedUser.userId && store.users[prevUserId]) {
+    store.users[prevUserId].linkedPhone = null;
+    store.users[prevUserId].linkedThread = null;
+  }
+
+  // If this user was previously linked to another phone, unlink old phone mapping
+  if (matchedUser.linkedPhone) {
+    const oldNorm = normalizePhone(matchedUser.linkedPhone);
+    if (oldNorm !== cleanSender) {
+      delete store.phoneToUserId[oldNorm];
+    }
+  }
+
+  matchedUser.linkedPhone = rawSender.trim();
+  matchedUser.linkedThread = cleanSender;
+  matchedUser.updatedAt = new Date().toISOString();
+  store.phoneToUserId[cleanSender] = matchedUser.userId;
+  writeStore(store);
+
+  return { success: true, user: matchedUser };
 }
 
-export function getUserForPhone(rawPhone: string): UserSessionInfo | null {
-  const store = getStore();
-  const cleanPhone = normalizePhone(rawPhone);
-  return store.phoneToUser.get(cleanPhone) ?? null;
+export function unlinkPhone(rawSender: string): boolean {
+  const store = readStore();
+  const cleanSender = normalizePhone(rawSender);
+  const userId = store.phoneToUserId[cleanSender];
+  if (!userId) return false;
+
+  delete store.phoneToUserId[cleanSender];
+  if (store.users[userId]) {
+    store.users[userId].linkedPhone = null;
+    store.users[userId].linkedThread = null;
+    store.users[userId].updatedAt = new Date().toISOString();
+  }
+  writeStore(store);
+  return true;
 }
 
-export function getLinkedPhoneForUser(userIdOrPersona: string): string | null {
-  const store = getStore();
-  const token = store.userTokens.get(userIdOrPersona);
-  if (!token) return null;
-  const user = store.tokenToUser.get(token);
-  return user?.linkedPhone ?? null;
+export function getUserForPhone(rawSender: string): UserSessionInfo | null {
+  const store = readStore();
+  const cleanSender = normalizePhone(rawSender);
+  const userId = store.phoneToUserId[cleanSender];
+  if (!userId) return null;
+  return store.users[userId] ?? null;
+}
+
+export function getLinkedPhoneForUser(userId: string): string | null {
+  const store = readStore();
+  return store.users[userId]?.linkedPhone ?? null;
 }
 
 export function getAllActiveSessionsCount(): number {
-  const store = getStore();
-  return store.phoneToUser.size;
+  const store = readStore();
+  return Object.keys(store.phoneToUserId).length;
+}
+
+export function getAllActiveSessionsSummary(): Array<{
+  userId: string;
+  name: string;
+  role: Role;
+  linkedPhone: string | null;
+}> {
+  const store = readStore();
+  return Object.values(store.users)
+    .filter(u => Boolean(u.linkedPhone))
+    .map(u => ({
+      userId: u.userId,
+      name: u.name,
+      role: u.role,
+      linkedPhone: u.linkedPhone ?? null,
+    }));
 }

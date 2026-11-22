@@ -16,3 +16,8 @@ supabase/.temp/
 .whatsapp-command.json
 .whatsapp-messages.json
 .whatsapp-agent-keys.json
+.sms-sessions.json
+.google-messages-profile/
+.google-messages-state.json
+.google-messages-command.json
+.google-messages-messages.json
