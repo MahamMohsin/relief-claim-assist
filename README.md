@@ -1,6 +1,5 @@
 # Relief Claim Assist — *The Last Mile: AI on Public Rails*
 
-**Live Demo:** [https://relief-claim-assist.vercel.app](https://relief-claim-assist.vercel.app) · **API Docs (Swagger):** [https://relief-claim-assist.vercel.app/docs](https://relief-claim-assist.vercel.app/docs)
 
 > **PROTOTYPE ONLY.** Built for **Coder's Cup '26 — Hagrid's Hackathon (ACM FAST-NUCES Karachi)**. Every household record, CNIC, payment reference, business scheme, and public rail in this repository is **100% synthetic/simulated**. It is not an official government or banking service.
 
