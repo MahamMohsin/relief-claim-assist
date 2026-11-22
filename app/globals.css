@@ -3567,6 +3567,159 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
+.admin-dashboard .audit-glass-card {
+  gap: 0.85rem;
+  min-height: 15rem;
+}
+
+.admin-dashboard .audit-glass-open-btn {
+  min-height: 2.25rem;
+}
+
+.admin-claim-kpis {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 0.22rem 0.65rem;
+  align-items: end;
+  margin: 0;
+  padding: 0.45rem 0;
+}
+
+.admin-claim-kpis dt, .admin-active-rule small {
+  color: color-mix(in srgb, var(--white) 80%, transparent);
+  font-size: 0.76rem;
+  line-height: 1.25;
+}
+
+.admin-claim-kpis dd {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 650;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-dashboard .admin-claim-kpis .audit-score-num {
+  font-size: 1.65rem;
+}
+
+.admin-claim-breakdown {
+  display: grid;
+  gap: 0.38rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.admin-claim-breakdown li {
+  display: grid;
+  grid-template-columns: minmax(6.8rem, 1fr) minmax(0, 2fr) 2.35rem;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.76rem;
+}
+
+.admin-claim-breakdown strong {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-claim-breakdown meter {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 0.38rem;
+  border: 0;
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--white) 16%, transparent);
+}
+
+.admin-claim-breakdown meter::-webkit-meter-bar {
+  border: 0;
+  background: transparent;
+}
+
+.admin-claim-breakdown meter::-webkit-meter-optimum-value {
+  background: var(--plum);
+  border-radius: 1rem;
+}
+
+.admin-claim-breakdown meter::-moz-meter-bar {
+  background: var(--plum);
+  border-radius: 1rem;
+}
+
+.admin-active-rule {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.16rem 0.65rem;
+}
+
+.admin-active-rule small { grid-column: 1 / -1; }
+.admin-active-rule strong { font-size: 1.55rem; line-height: 1; }
+.admin-active-rule span { font-size: 0.85rem; overflow-wrap: anywhere; }
+
+.admin-scheme-metrics {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin: 0;
+  gap: 0;
+  font-size: 0.8rem;
+}
+
+.admin-scheme-metrics > * {
+  margin: 0;
+  border-bottom: 0.0625rem solid color-mix(in srgb, var(--white) 18%, transparent);
+  padding: 0.42rem 0;
+}
+
+.admin-scheme-metrics dd {
+  padding-inline-start: 0.5rem;
+  font-weight: 650;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-dashboard-notice, .admin-dashboard-empty {
+  color: color-mix(in srgb, var(--white) 86%, transparent);
+  font-size: 0.78rem;
+}
+
+.audit-glass-suite.is-compact .admin-budget-card {
+  grid-column: 1 / -1;
+  min-height: auto;
+}
+
+.admin-budget-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.55rem;
+}
+
+.admin-budget-form label {
+  flex: 1 1 10rem;
+  min-width: 0;
+  color: inherit;
+}
+
+.admin-budget-form input {
+  margin: 0;
+}
+
+@media (max-width: 30rem) {
+  .admin-claim-kpis {
+    grid-auto-flow: row;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: none;
+    gap: 0.45rem 0.65rem;
+  }
+  .admin-claim-kpis dd { text-align: right; }
+}
+
 @media (max-width: 1120px) {
   .audit-glass-suite.is-compact {
     grid-template-columns: 1fr;
@@ -6305,3 +6458,145 @@ button.active-cases-card:hover {
   letter-spacing: 0.01em;
   color: #ffffff;
 }
+
+/* ========================================================
+   OFFICER OVERVIEW LIQUID GLASS CARDS (matches Auditor glass suite)
+   ======================================================== */
+.overview-stats-suite .overview-card,
+.overview-stats-suite button.overview-card,
+.overview-stats-suite .active-cases-card,
+.overview-stats-suite button.active-cases-card {
+  --ink: #ffffff;
+  --soft-ink: rgba(255, 255, 255, 0.72);
+  --muted: rgba(255, 255, 255, 0.62);
+  --color-text-primary: #ffffff;
+  --color-text-secondary: rgba(255, 255, 255, 0.68);
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 45%, rgba(255, 255, 255, 0.015) 100%),
+    rgba(14, 15, 19, 0.54);
+  backdrop-filter: blur(34px) saturate(185%);
+  -webkit-backdrop-filter: blur(34px) saturate(185%);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 20px;
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+}
+
+.overview-stats-suite .overview-card:hover,
+.overview-stats-suite button.overview-card:hover,
+.overview-stats-suite .active-cases-card:hover,
+.overview-stats-suite button.active-cases-card:hover {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.08) 45%, rgba(255, 255, 255, 0.025) 100%),
+    rgba(18, 20, 26, 0.62);
+  border-color: rgba(255, 255, 255, 0.34);
+  box-shadow:
+    0 22px 50px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+  transform: translateY(-2px);
+}
+
+.overview-stats-suite .overview-card-title,
+.overview-stats-suite .active-cases-card .overview-card-title {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.overview-stats-suite .overview-live-badge {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: #ffffff;
+}
+
+.overview-stats-suite .live-dot {
+  background: #34d399;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.85);
+}
+
+.overview-stats-suite .overview-big-num,
+.overview-stats-suite .stack-metric-num {
+  color: #ffffff;
+}
+
+.overview-stats-suite .overview-sub-meta,
+.overview-stats-suite .overview-empty,
+.overview-stats-suite .stack-metric-denom,
+.overview-stats-suite .bubbles-legend-footer {
+  color: rgba(255, 255, 255, 0.64);
+}
+
+.overview-stats-suite .bubbles-legend-footer {
+  border-top-color: rgba(255, 255, 255, 0.14);
+}
+
+.overview-stats-suite .cluster-avatar,
+.overview-stats-suite .mini-av {
+  border-color: rgba(255, 255, 255, 0.42);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.overview-stats-suite .cluster-counter {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.36);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.overview-stats-suite .prop-bubble {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.overview-stats-suite .prop-bubble.big {
+  background: radial-gradient(circle at 30% 30%, rgba(52, 211, 153, 0.44), rgba(16, 185, 129, 0.2));
+  border-color: rgba(110, 231, 183, 0.48);
+  color: #ecfdf5;
+}
+
+.overview-stats-suite .prop-bubble.medium {
+  background: radial-gradient(circle at 30% 30%, rgba(129, 140, 248, 0.46), rgba(99, 102, 241, 0.22));
+  border-color: rgba(165, 180, 252, 0.48);
+  color: #eef2ff;
+}
+
+.overview-stats-suite .prop-bubble.small {
+  background: radial-gradient(circle at 30% 30%, rgba(251, 191, 36, 0.44), rgba(217, 119, 6, 0.22));
+  border-color: rgba(253, 224, 71, 0.46);
+  color: #fffbeb;
+}
+
+.overview-stats-suite .prop-bubble.mini {
+  background: radial-gradient(circle at 30% 30%, rgba(244, 63, 94, 0.46), rgba(190, 18, 60, 0.24));
+  border-color: rgba(253, 164, 175, 0.46);
+  color: #fff1f2;
+}
+
+.overview-stats-suite .stack-urgent-badge {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(251, 191, 36, 0.38);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .overview-stats-suite .overview-card,
+  .overview-stats-suite button.overview-card,
+  .overview-stats-suite .active-cases-card,
+  .overview-stats-suite button.active-cases-card {
+    background: rgba(14, 15, 19, 0.92);
+  }
+}
+
+.workspace.lite .overview-stats-suite .overview-card,
+.workspace.lite .overview-stats-suite button.overview-card,
+.workspace.lite .overview-stats-suite .active-cases-card,
+.workspace.lite .overview-stats-suite button.active-cases-card {
+  background: rgba(14, 15, 19, 0.92);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+

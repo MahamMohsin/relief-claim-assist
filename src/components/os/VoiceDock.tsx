@@ -600,15 +600,16 @@ export function VoiceDock({ profile, citizenId, offline, lite, transcript, onAct
         <textarea
           ref={textareaRef}
           rows={1}
-          className="glass-voice-input"
+          className={"glass-voice-input" + (lang === "ur" ? " is-urdu" : "")}
+          dir={lang === "ur" ? "rtl" : "ltr"}
           aria-label="Type a relief assistant command"
           placeholder={
             recording
               ? lang === "ur"
-                ? "سن رہا ہے…"
-                : "Listening…"
+                ? "سن رہا ہے… (بھیجنے کے لیے مائیک دبائیں یا ⁦T⁩ چھوڑیں)"
+                : "Listening… (Tap mic or release T to send)"
               : lang === "ur"
-                ? "اپنے بوٹ سے کچھ بھی کہیں، یا بولنے کے لیے T دبائیں..."
+                ? "اپنے بوٹ سے کچھ بھی کہیں، یا بولنے کے لیے ⁦T⁩ دبائیں..."
                 : "Ask your bot anything to do, or hold T to talk..."
           }
           value={input}

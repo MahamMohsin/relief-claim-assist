@@ -13,6 +13,7 @@ import { syncQueue } from "@/src/lib/offline/syncEngine";
 import { apps, appTitle } from "./launcher";
 import { MiniApps, type ViewContext } from "./MiniApps";
 import { AuditorGlassSuite, type SafetyMetric } from "./AuditVaultView";
+import { AdminDashboard } from "./AdminDashboard";
 import { DesktopWindow, type LaunchOrigin } from "./DesktopWindow";
 import { VoiceDock } from "./os/VoiceDock";
 import { AgentCursor } from "./os/AgentCursor";
@@ -290,22 +291,26 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
       }));
     }
     setOpenApps(prev => prev.includes(appId) ? prev : [...prev, appId]);
+    // Opening an app that is minimized (tray chip, tile, nav, assistant) restores it.
     setMinimizedApps(prev => prev.filter(id => id !== appId));
     focusApp(appId);
   }
 
   // Focus the most recent window that is still visible (open and not minimized).
   function focusNextVisible(leaving: MiniApp) {
-    const visible = openApps.filter(id => id !== leaving && !minimizedApps.includes(id));
+    const visible = zOrder.filter(id => id !== leaving && openApps.includes(id) && !minimizedApps.includes(id));
     setActiveApp(visible.length > 0 ? visible[visible.length - 1] : null);
   }
 
   function closeAppWindow(appId: MiniApp) {
     setOpenApps(prev => prev.filter(id => id !== appId));
+    setMinimizedApps(prev => prev.filter(id => id !== appId));
     setZOrder(prev => {
       const next = prev.filter(id => id !== appId);
       if (activeApp === appId) {
-        setActiveApp(next.length > 0 ? next[next.length - 1] : null);
+        // Hand focus to the top-most window that is still visible (not minimized).
+        const visible = next.filter(id => !minimizedApps.includes(id));
+        setActiveApp(visible.length > 0 ? visible[visible.length - 1] : null);
       }
       return next;
     });
@@ -747,10 +752,12 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                   />
                 )}
 
-                {["officer", "admin"].includes(profile.role) && (
+                {profile.role === "admin" && <AdminDashboard key={profile.id} offline={offline} version={version} onOpen={openAppWindow} />}
+
+                {profile.role === "officer" && (
                   overview ? <div className="overview-stats-suite">
                     <button type="button" className="overview-card active-cases-card"
-                      onClick={() => openAppWindow(profile.role === "officer" ? "review" : "audit")}>
+                      onClick={() => openAppWindow("review")}>
                       <div className="overview-card-header">
                         <span className="overview-card-title">Active cases</span>
                         <span className="overview-live-badge"><span className="live-dot" />{overview.review} in review</span>
@@ -766,7 +773,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                       </div>
                     </button>
                     <button type="button" className="overview-card bubbles-breakdown-card"
-                      onClick={() => openAppWindow(profile.role === "officer" ? "review" : "audit")}>
+                      onClick={() => openAppWindow("review")}>
                       <span className="overview-card-title">Claims by status</span>
                       <div className="proportional-bubbles-stage">
                         {([["Approved", overview.approved, "big"], ["In review", overview.review, "medium"],

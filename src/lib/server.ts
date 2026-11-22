@@ -17,6 +17,7 @@ export async function gateway<T>(action: string, args: object = {}): Promise<T> 
   if (!proof) throw new ApiError(503, "The relief database gateway is not configured.");
   const { data, error } = await client.rpc("relief_gateway", { action, args, proof });
   if (error) {
+    if (error.code === "PT409") throw new ApiError(409, error.message);
     if (error.code === "42501" || error.code === "PGRST301") {
       throw new ApiError(401, "Sign in with a demo persona.");
     }

@@ -70,7 +70,7 @@ function Notice({ text, warning = false }: { text: string; warning?: boolean }) 
 function StateTag({ value }: { value: string }) {
   const color = ["approved", "paid", "granted", "genuine", "readable"].includes(value) ? "green"
     : ["rejected", "scam", "suspect", "failed"].includes(value) ? "red"
-    : ["needs_proof", "revoked", "unreadable", "pending"].includes(value) ? "amber" : "neutral";
+    : ["needs_proof", "revoked", "unreadable", "pending", "awaiting_funds"].includes(value) ? "amber" : "neutral";
   return <span className={"pill " + color}>{title(value)}</span>;
 }
 function Spinner() {
@@ -335,7 +335,7 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
   const badge = (status: string) => ["approved", "paid", "granted", "genuine", "readable"].includes(status)
     ? "success" as const
     : ["rejected", "scam", "suspect", "failed"].includes(status) ? "error" as const
-    : ["needs_proof", "revoked", "unreadable"].includes(status) ? "warning" as const
+    : ["needs_proof", "revoked", "unreadable", "awaiting_funds"].includes(status) ? "warning" as const
     : ["submitted", "in_review"].includes(status) ? "info" as const : "neutral" as const;
 
   return <div className="view-stack">
@@ -433,26 +433,34 @@ function ClaimView({ ctx }: { ctx: ViewContext }) {
       </HStack>
       {loading && !claims ? <Spinner /> : !claims?.length ? <p className="empty">{ctx.offline ? "Saved drafts are available offline. Reconnect to see submitted claims." : "This family has no claims yet."}</p> :
         <VStack gap={2} paddingBlockStart={3}>
-          {claims.map(item => <Card key={item.id} variant="muted" padding={3}>
+          {claims.map(item => {
+            const awaitingFunds = item.funding_status === "awaiting_funds";
+            const displayStatus = awaitingFunds ? "awaiting_funds" : item.status;
+            return <Card key={item.id} variant="muted" padding={3}>
             <VStack gap={2}>
               <HStack gap={2} justify="between" wrap="wrap">
-                <HStack gap={2} wrap="wrap"><strong>Claim {short(item.id)}</strong><Badge label={title(item.status)} variant={badge(item.status)} /></HStack>
+                <HStack gap={2} wrap="wrap"><strong>Claim {short(item.id)}</strong><Badge label={title(displayStatus)} variant={badge(displayStatus)} /></HStack>
                 <Button variant="ghost" size="sm" label={opened === item.id ? "Hide details" : "View details"} onClick={() => setOpened(opened === item.id ? undefined : item.id)} />
               </HStack>
               <small>{new Date(item.updated_at).toLocaleDateString()} · {item.amount_pkr ? currency(item.amount_pkr) : "Draft amount pending"}</small>
               {opened === item.id && <VStack gap={2}>
-                <ol className="timeline"><li>Draft created</li>{item.status !== "draft" && <li>Submitted to the relief scheme</li>}<li>{title(item.status)}{item.rule_version_used ? " · Rule v" + item.rule_version_used : ""}</li>{item.payment && <li>Payment {item.payment.status}</li>}</ol>
+                <ol className="timeline"><li>Draft created</li>{item.status !== "draft" && <li>Submitted to the relief scheme</li>}<li>{title(item.status)}{item.rule_version_used ? " · Rule v" + item.rule_version_used : ""}</li>{awaitingFunds ? <li>Awaiting funds</li> : item.payment && <li>Payment {item.payment.status}</li>}</ol>
+                {awaitingFunds && <p lang={ctx.voiceLang} dir={ctx.voiceLang === "ur" ? "rtl" : "ltr"}>
+                  {ctx.voiceLang === "ur" ? "آپ کی درخواست منظور ہو گئی ہے۔ ادائیگی کے لیے فنڈز کا انتظار ہے۔"
+                    : "An officer approved this claim. Payment is waiting for the scheme to have enough funds."}
+                </p>}
                 {item.citizen_reason_en && <p>{item.citizen_reason_en}</p>}
                 {item.citizen_reason_ur && <p lang="ur" dir="rtl">{item.citizen_reason_ur}</p>}
                 <p className="muted breakable">Claim ID: {item.id}</p>
-                {item.payment && <p className="receipt"><CircleDollarSign size={21} /> {currency(item.payment.amount_pkr)} · <strong>{item.payment.raast_ref}</strong> · {title(item.payment.status)}</p>}
+                {item.payment && !awaitingFunds && <p className="receipt"><CircleDollarSign size={21} /> {currency(item.payment.amount_pkr)} · <strong>{item.payment.raast_ref}</strong> · {title(item.payment.status)}</p>}
                 <HStack gap={2} wrap="wrap">
                   {["draft", "needs_proof"].includes(item.status) && <Button variant="primary" label={item.status === "draft" ? "Edit draft" : "Update evidence"} onClick={() => start(item)} />}
                   {item.citizen_reason_en && <Button variant="secondary" label="Play decision" icon={<AudioLines size={16} />} onClick={() => void speakText(item.citizen_reason_ur || item.citizen_reason_en!, item.citizen_reason_ur ? "ur" : "en", ctx.lite || ctx.offline).then(setMessage)} />}
                 </HStack>
               </VStack>}
             </VStack>
-          </Card>)}
+            </Card>;
+          })}
         </VStack>}
     </Card>}
   </div>;
@@ -665,6 +673,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
     return () => { delete cuaEngine.search.review; };
   }, []);
   const claim = data?.find(item => item.id === selected);
+  const awaitingFunds = claim?.funding_status === "awaiting_funds";
 
   const activeColumns = useMemo(() => {
     if (statusFilter === "accepted") {
@@ -687,7 +696,9 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
         ? { claimId: claim.id, decision, reason, reasonUr, aiSummary: aiSummary?.summary || claim.ai_summary }
         : { claimId: claim.id, outcome });
       setDecision(updated.status === "needs_proof" ? "more_proof" : "approve");
-      setNotice(action === "review" ? "Officer decision recorded and sent to applicant." : outcome === "paid" ? "Simulated payment issued." : "Simulated payment failed. The officer can retry it.");
+      setNotice(action === "review"
+        ? updated.funding_status === "awaiting_funds" ? "Officer approval recorded. The claim is awaiting funds." : "Officer decision recorded and sent to applicant."
+        : outcome === "paid" ? "Simulated payment issued." : "Simulated payment failed. Funds remain reserved for a retry.");
       setReason(""); setReasonUr(""); ctx.refresh();
     } catch (error) { setProblem(getMessage(error)); }
     finally { setBusy(false); }
@@ -811,7 +822,6 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
           <p className="breakable">{claim.id}</p>
         </div>
       </div>
-
       {/* Top Visual Metrics Bar */}
       <div className="claim-detail-metrics-bar">
         <div className="claim-metric-card">
@@ -851,6 +861,9 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
         </div>
       </div>
 
+      <div className="facts two"><div><small>Rule version</small><strong>v{claim.rule_version_used ?? "–"}</strong></div><div><small>Payment</small><strong>{awaitingFunds ? "Awaiting funds" : title(claim.payment_status)}</strong></div></div>
+      {awaitingFunds && <Notice text="Approved claims wait here until the administrator makes more budget available." warning />}
+      <p>{claim.handoff_notes}</p>
       {Boolean(claim.reports) && <Notice text={String(claim.reports) + " missing payment report(s) on this case."} warning />}
 
       <Notice text={problem} warning /><Notice text={notice} />
@@ -942,9 +955,9 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
             )}
             {claim.status === "approved" && claim.payment_status !== "paid" && <>
               <button className="secondary" type="button" disabled={busy || ctx.offline} onClick={() => void update("disburse")}>
-                {claim.payment_status === "failed" ? "Retry simulated payment" : "Issue simulated payment"}
+                {awaitingFunds ? "Check funds and issue payment" : claim.payment_status === "failed" ? "Retry simulated payment" : "Issue simulated payment"}
               </button>
-              {claim.payment_status === "pending" && <button className="secondary" type="button" disabled={busy || ctx.offline}
+              {claim.payment_status === "pending" && !awaitingFunds && <button className="secondary" type="button" disabled={busy || ctx.offline}
                 onClick={() => void update("disburse", "failed")}>Simulate payment failure</button>}
             </>}
           </div>
@@ -954,7 +967,7 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
         </div>
       )}
 
-      {claim.payment && <p className="receipt">{claim.payment.raast_ref} · {currency(claim.payment.amount_pkr)} · {title(claim.payment.status)}</p>}
+      {claim.payment && !awaitingFunds && <p className="receipt">{claim.payment.raast_ref} · {currency(claim.payment.amount_pkr)} · {title(claim.payment.status)}</p>}
 
       {/* Attached Evidence */}
       {claim.documents && claim.documents.length > 0 && (
