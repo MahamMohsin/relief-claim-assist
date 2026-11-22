@@ -41,10 +41,10 @@ export async function GET() {
 
     const info = getAgentKeyInfo(owner.userId);
     return NextResponse.json({
+      ...info,
       personaId: owner.userId,
       ownerName: owner.userName,
       ownerRole: owner.userRole,
-      ...info,
     });
   } catch (error) {
     return NextResponse.json(
@@ -111,11 +111,11 @@ export async function POST(request: Request) {
 
     const updated = getAgentKeyInfo(owner.userId);
     return NextResponse.json({
+      ...updated,
       success: true,
       personaId: owner.userId,
       ownerName: owner.userName,
       ownerRole: owner.userRole,
-      ...updated,
       message: `WhatsApp Agent connected strictly to ${owner.userName} (${owner.userRole}).`,
     });
   } catch (error) {
