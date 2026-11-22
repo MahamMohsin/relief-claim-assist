@@ -20,6 +20,7 @@ import { Grid } from "@astryxdesign/core/Grid";
 import { Icon } from "@astryxdesign/core/Icon";
 import { HStack, VStack } from "@astryxdesign/core/Layout";
 import { NumberInput } from "@astryxdesign/core/NumberInput";
+import { ProgressBar } from "@astryxdesign/core/ProgressBar";
 import { Selector } from "@astryxdesign/core/Selector";
 import { Tab, TabList } from "@astryxdesign/core/TabList";
 import { Heading, Text } from "@astryxdesign/core/Text";
@@ -284,15 +285,29 @@ export function BusinessSchemesView({ ctx }: { ctx: ViewContext }) {
                   <VStack gap={0.5}>
                     <Heading level={4}>{scheme.name}</Heading>
                     <Text type="supporting" color="secondary">
-                      {scheme.code} · {scheme.fundingType} · Up to {pkr(scheme.maxAmountPkr)}
+                      {scheme.fundingType} · Up to {pkr(scheme.maxAmountPkr)}
                     </Text>
                   </VStack>
 
-                  <Text type="supporting">{scheme.summary}</Text>
+                  <ProgressBar
+                    label={`Match score ${score}%`}
+                    value={hasProfileFilters ? score : scheme.size === "small" ? 80 : 65}
+                    max={100}
+                    variant={
+                      !hasProfileFilters
+                        ? "accent"
+                        : fit === "recommended"
+                          ? "success"
+                          : fit === "not_eligible"
+                            ? "warning"
+                            : "accent"
+                    }
+                    isLabelHidden
+                  />
 
                   <HStack gap={1} wrap="wrap">
                     <Token
-                      label={`Turnover ≤ ${pkr(scheme.maxMonthlyRevenuePkr)}/mo`}
+                      label={`≤ ${pkr(scheme.maxMonthlyRevenuePkr)}/mo`}
                       size="sm"
                       color="gray"
                     />
@@ -305,7 +320,7 @@ export function BusinessSchemesView({ ctx }: { ctx: ViewContext }) {
 
                   {hasProfileFilters && reasons.length > 0 && (
                     <Text type="supporting" color="secondary">
-                      {reasons.join(" · ")}
+                      {reasons.slice(0, 2).join(" · ")}
                     </Text>
                   )}
 
