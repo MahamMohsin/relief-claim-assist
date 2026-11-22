@@ -3228,6 +3228,28 @@ html, body {
   font-size: 0.78rem;
 }
 
+.audit-glass-suite.is-compact .admin-budget-card {
+  grid-column: 1 / -1;
+  min-height: auto;
+}
+
+.admin-budget-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.55rem;
+}
+
+.admin-budget-form label {
+  flex: 1 1 10rem;
+  min-width: 0;
+  color: inherit;
+}
+
+.admin-budget-form input {
+  margin: 0;
+}
+
 @media (max-width: 30rem) {
   .admin-claim-kpis {
     grid-auto-flow: row;

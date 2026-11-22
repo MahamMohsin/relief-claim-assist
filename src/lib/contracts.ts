@@ -29,6 +29,8 @@ export const ruleSchema = z.object({
   confidence_threshold: z.number().min(0.5).max(1),
 });
 
+const budgetAmount = z.number().int().min(0).max(999999999999);
+
 export const actions = {
   profile: z.object({}),
   claims: z.object({ citizenId: person }),
@@ -41,6 +43,8 @@ export const actions = {
   }).refine(data => Boolean(data.fixture) !== Boolean(data.image), "Choose one synthetic document source."),
   queue: z.object({}),
   overview: z.object({}),
+  scheme_budget: z.object({}),
+  set_scheme_budget: z.object({ totalPkr: budgetAmount, expectedTotalPkr: budgetAmount, reason: z.string().trim().min(5).max(300) }),
   staff_queue: z.object({}),
   decide_staff: z.object({ userId: uuid, decision: z.enum(["active", "rejected"]) }),
   review: z.object({ claimId: uuid, decision: z.enum(["assign", "more_proof", "escalate", "approve", "reject", "close"]),
@@ -84,9 +88,12 @@ export type ClaimStatus = "draft" | "submitted" | "needs_proof" | "in_review" | 
 export type Payment = { id: string; raast_ref: string; amount_pkr: number; status: "pending" | "paid" | "failed"; disbursed_at: string | null };
 export type Overview = { active: number; review: number; proof: number; approved: number; rejected: number;
   closed: number; paid: number; new_this_month: number; priority: number };
+export type SchemeBudget = { total_pkr: number; available_pkr: number; reserved_pkr: number; paid_pkr: number;
+  awaiting_claims: number; funded_claims: number };
 export type Evidence = { id: string; doc_type: string; file_url: string | null; tamper_flag: boolean; tamper_reason: string | null;
   blur_score: number | null; verified_status: string; ocr_json: { summary?: string; fields?: Record<string, string> } };
 export type Claim = { id: string; citizen_id: string; citizen_name?: string; status: ClaimStatus; payment_status: Payment["status"];
+  funding_status?: "awaiting_funds" | "reserved" | "paid" | null;
   amount_pkr: number; payload_json: Partial<Payload>; citizen_reason_en: string | null; citizen_reason_ur: string | null;
   rule_version_used: number | null; ai_confidence: number | null; ai_route: string | null; handoff_notes: string | null;
   assigned_officer_id: string | null; updated_at: string; created_at?: string; reports?: number; payment?: Payment | null; documents?: Evidence[] };
