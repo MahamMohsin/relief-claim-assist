@@ -1283,6 +1283,9 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
 
   const claim = data?.find(item => item.id === selected);
   const awaitingFunds = claim?.funding_status === "awaiting_funds";
+  const relatedClaims = claim
+    ? (data ?? []).filter(item => item.citizen_id === claim.citizen_id && item.id !== claim.id && item.status !== "draft")
+    : [];
 
   const reviewStateRef = useRef({ data, selected, claim, statusFilter, sortOrder });
   reviewStateRef.current = { data, selected, claim, statusFilter, sortOrder };
@@ -1606,6 +1609,23 @@ function ReviewView({ ctx }: { ctx: ViewContext }) {
 
       <div className="facts two"><div><small>Rule version</small><strong>v{claim.rule_version_used ?? "–"}</strong></div><div><small>Payment</small><strong>{awaitingFunds ? "Awaiting funds" : title(claim.payment_status)}</strong></div></div>
       {awaitingFunds && <Notice text="Approved claims wait here until the administrator makes more budget available." warning />}
+      {relatedClaims.length > 0 && (
+        <VStack gap={2}>
+          <Notice text="Possible duplicate claim. This applicant has other submitted claims. Compare them before recording a decision." warning />
+          <details key={claim.id}>
+            <summary className="cursor-pointer font-semibold">Other submitted claims ({relatedClaims.length})</summary>
+            <ul>
+              {relatedClaims.map(item => (
+                <li key={item.id}>
+                  <Button variant="secondary"
+                    label={`Open claim ${item.id.slice(0, 8)} · ${title(item.status)}${item.payment_status === "paid" ? " · Paid" : ""}`}
+                    onClick={() => pick(item)} />
+                </li>
+              ))}
+            </ul>
+          </details>
+        </VStack>
+      )}
       <p>{claim.handoff_notes}</p>
       {Boolean(claim.reports) && <Notice text={String(claim.reports) + " missing payment report(s) on this case."} warning />}
 
