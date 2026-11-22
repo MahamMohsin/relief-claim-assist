@@ -935,34 +935,78 @@ function FamilyView({ ctx }: { ctx: ViewContext }) {
       if (cuaEngine.family) cuaEngine.family = null;
     };
   }, []);
-  return <Card padding={6}>
-    <HStack justify="between" hAlign="start" gap={4} wrap="wrap">
-      <VStack gap={0.5}><h2>Synthetic family directory</h2><p>Switching clears the previous family’s form and voice session.</p></VStack>
-      <Badge label={(data?.length ?? 0) + " families"} />
-    </HStack>
-    <VStack gap={2} paddingBlockStart={3}>
+  const totalFamilies = data?.length ?? 0;
+  const consentedCount = (data ?? []).filter(f => f.consent === "granted").length;
+  const consentPct = totalFamilies > 0 ? Math.round((consentedCount / totalFamilies) * 100) : 0;
+
+  return <Card padding={5}>
+    <VStack gap={3} width="100%">
+      <HStack justify="between" vAlign="center" gap={3} wrap="wrap" width="100%">
+        <HStack gap={2} vAlign="center">
+          <UsersRound size={20} color="#0f766e" />
+          <VStack gap={0.5}>
+            <h2 style={{ margin: 0 }}>Families</h2>
+            <small style={{ color: "#6b7280" }}>
+              {consentedCount} of {totalFamilies} consented · {activeFamily ? `Active: ${activeFamily.full_name}` : "Tap a family to switch"}
+            </small>
+          </VStack>
+        </HStack>
+        <Badge label={`${consentedCount}/${totalFamilies} ready`} variant={consentedCount > 0 ? "success" : "neutral"} />
+      </HStack>
+      <ProgressBar
+        label="Consented households"
+        value={consentPct}
+        max={100}
+        variant="success"
+        isLabelHidden
+      />
       <div data-cua="family-search" style={{ width: "100%" }}>
-        <TextInput label="Find a family" value={search} onChange={setSearch} placeholder="Name or demo area" />
+        <TextInput label="Find a family" value={search} onChange={setSearch} placeholder="Name or area" />
       </div>
       {(error || problem) && <Banner status="error" title={error || problem} />}
-      {loading && !data ? <Spinner /> : <VStack gap={1}>
-        {data?.filter(family => (family.full_name + " " + family.village_area).toLowerCase().includes(search.toLowerCase())).map(family =>
-          <Card key={family.id} variant="muted" padding={3}>
-            <HStack justify="between" gap={2} wrap="wrap">
-              <VStack gap={0.5}><strong>{family.full_name}</strong><small>{family.village_area}</small></VStack>
-              <HStack gap={2}>
-                {(ctx.unsentByFamily[family.id] ?? 0) > 0 && <Badge label={ctx.unsentByFamily[family.id] + " unsent"} variant="warning" />}
-                <Badge label={title(family.consent)} variant={family.consent === "granted" ? "success" : "warning"} />
-                <span data-cua={`family-switch-${family.id}`} style={{ display: "inline-flex" }}>
-                  <Button variant="secondary" size="sm" label="Switch" isDisabled={ctx.offline || Boolean(switching)} isLoading={switching === family.id} onClick={async () => {
-                    setSwitching(family.id); setProblem("");
-                    try { await ctx.selectFamily(family); } catch (error) { setProblem(getMessage(error)); }
-                    finally { setSwitching(undefined); }
-                  }} />
-                </span>
+      {loading && !data ? <Spinner /> : <VStack gap={1.5} width="100%">
+        {data?.filter(family => (family.full_name + " " + family.village_area).toLowerCase().includes(search.toLowerCase())).map(family => {
+          const isActive = family.id === ctx.citizen;
+          const initials = family.full_name.split(" ").filter(Boolean).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+          return (
+            <Card key={family.id} variant={isActive ? "green" : "muted"} padding={3}>
+              <HStack justify="between" vAlign="center" gap={2} wrap="wrap">
+                <HStack gap={2} vAlign="center">
+                  <span style={{
+                    width: 34, height: 34, borderRadius: 10, display: "grid", placeItems: "center",
+                    fontWeight: 700, fontSize: "0.78rem", flexShrink: 0,
+                    background: isActive ? "#0f766e" : "#e5e7eb", color: isActive ? "#ffffff" : "#111827",
+                  }}>
+                    {initials}
+                  </span>
+                  <VStack gap={0.5}>
+                    <strong>{family.full_name}</strong>
+                    <small style={{ color: "#6b7280" }}>{family.village_area}</small>
+                  </VStack>
+                </HStack>
+                <HStack gap={2} vAlign="center">
+                  {(ctx.unsentByFamily[family.id] ?? 0) > 0 && <Badge label={ctx.unsentByFamily[family.id] + " unsent"} variant="warning" />}
+                  <Badge label={title(family.consent)} variant={family.consent === "granted" ? "success" : "warning"} />
+                  <span data-cua={`family-switch-${family.id}`} style={{ display: "inline-flex" }}>
+                    <Button
+                      variant={isActive ? "primary" : "secondary"}
+                      size="sm"
+                      label={isActive ? "Active" : "Switch"}
+                      icon={isActive ? <Check size={14} /> : undefined}
+                      isDisabled={ctx.offline || Boolean(switching)}
+                      isLoading={switching === family.id}
+                      onClick={async () => {
+                        setSwitching(family.id); setProblem("");
+                        try { await ctx.selectFamily(family); } catch (error) { setProblem(getMessage(error)); }
+                        finally { setSwitching(undefined); }
+                      }}
+                    />
+                  </span>
+                </HStack>
               </HStack>
-            </HStack>
-          </Card>)}
+            </Card>
+          );
+        })}
       </VStack>}
     </VStack>
   </Card>;
