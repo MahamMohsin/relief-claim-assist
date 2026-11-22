@@ -36,6 +36,8 @@ export type ViewContext = {
   selectFamily: (family: Family) => Promise<void>;
   prefill: Extract<UIAction, { type: "prefill_fields" }> | null;
   stepNav: "evidence" | "review" | "submit" | "list" | null;
+  /** Unsent offline items per family id for the signed-in user. */
+  unsentByFamily: Record<string, number>;
   voiceLang: "en" | "ur";
   go: (app: MiniApp | null) => void;
   refresh: () => void;
@@ -763,6 +765,7 @@ function FamilyView({ ctx }: { ctx: ViewContext }) {
             <HStack justify="between" gap={2} wrap="wrap">
               <VStack gap={0.5}><strong>{family.full_name}</strong><small>{family.village_area}</small></VStack>
               <HStack gap={2}>
+                {(ctx.unsentByFamily[family.id] ?? 0) > 0 && <Badge label={ctx.unsentByFamily[family.id] + " unsent"} variant="warning" />}
                 <Badge label={title(family.consent)} variant={family.consent === "granted" ? "success" : "warning"} />
                 <span data-cua={`family-switch-${family.id}`} style={{ display: "inline-flex" }}>
                   <Button variant="secondary" size="sm" label="Switch" isDisabled={ctx.offline || Boolean(switching)} isLoading={switching === family.id} onClick={async () => {

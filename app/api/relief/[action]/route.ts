@@ -29,6 +29,16 @@ export async function POST(request: Request, context: RouteContext<"/api/relief/
     const body = headerKey && raw && typeof raw === "object" && !("key" in raw) ? { ...raw, key: headerKey } : raw;
     const checked = actions[operation].safeParse(body);
     if (!checked.success) throw new ApiError(400, checked.error.issues[0]?.message ?? "Invalid fields.");
+    // Requests replayed from the offline queue name the user who queued them. If another account is signed in now
+    // (for example after a sign-in in another tab), refuse before anything runs, so a queued claim can never be filed
+    // under the signed-in user's own record. 409 owner_mismatch keeps the item queued on the device for its owner.
+    const queueOwner = request.headers.get("x-queue-owner");
+    if (queueOwner !== null) {
+      const signedIn = await gateway<Profile>("profile");
+      if (signedIn.id !== queueOwner) {
+        throw new ApiError(409, "This item was saved by a different account. Sign in as that account to send it.", "owner_mismatch");
+      }
+    }
 
     let result;
     switch (operation) {
