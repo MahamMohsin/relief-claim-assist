@@ -1,63 +1,79 @@
 import { NextResponse } from "next/server";
-import { gateway } from "@/src/lib/server";
+import { authClient, gateway } from "@/src/lib/server";
 import type { Profile } from "@/src/lib/contracts";
 import {
   ensureAgentPollers,
   getAgentKeyInfo,
+  refreshStoredAgentOwnerContext,
   removeAgentApiKey,
+  runAgentTestMessage,
   saveAgentApiKey,
   testAgentApiKey,
+  type SaveAgentKeyProfile,
 } from "@/src/lib/whatsapp/official-agent";
 
-export async function GET(request: Request) {
+async function requireAuthenticatedOwner(): Promise<SaveAgentKeyProfile> {
+  const profile = await gateway<Profile>("profile");
+  const client = await authClient();
+  const [{ data: userData }, { data: sessionData }] = await Promise.all([
+    client.auth.getUser(),
+    client.auth.getSession(),
+  ]);
+
+  return {
+    userId: profile.id,
+    userName: profile.full_name,
+    userRole: profile.role,
+    citizenId: profile.citizen_id,
+    email: userData.user?.email ?? null,
+    accessToken: sessionData.session?.access_token ?? null,
+    refreshToken: sessionData.session?.refresh_token ?? null,
+  };
+}
+
+export async function GET() {
   try {
     ensureAgentPollers();
-    const url = new URL(request.url);
-    const queryPersona = url.searchParams.get("persona");
+    const owner = await requireAuthenticatedOwner();
 
-    let profile: Profile | null = null;
-    try {
-      profile = await gateway<Profile>("profile");
-    } catch {}
+    // Keep owner's stored context & refresh token synced if they already have a key
+    refreshStoredAgentOwnerContext(owner);
 
-    const personaId = profile?.id || queryPersona || "fatima";
-    const info = getAgentKeyInfo(personaId);
-
+    const info = getAgentKeyInfo(owner.userId);
     return NextResponse.json({
-      personaId,
+      personaId: owner.userId,
+      ownerName: owner.userName,
+      ownerRole: owner.userRole,
       ...info,
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load agent key info." },
-      { status: 500 }
+      { error: error instanceof Error ? error.message : "Authentication required." },
+      { status: 401 }
     );
   }
 }
 
 export async function POST(request: Request) {
   try {
+    const owner = await requireAuthenticatedOwner();
+
     const body = (await request.json().catch(() => ({}))) as {
-      action?: "connect" | "disconnect" | "test";
+      action?: "connect" | "disconnect" | "test" | "test_chat";
       apiKey?: string;
       agentName?: string;
-      persona?: string;
+      text?: string;
     };
 
-    let profile: Profile | null = null;
-    try {
-      profile = await gateway<Profile>("profile");
-    } catch {}
-
-    const personaId = profile?.id || body.persona || "fatima";
     const action = body.action || "connect";
 
     if (action === "disconnect") {
-      removeAgentApiKey(personaId);
+      removeAgentApiKey(owner.userId);
       return NextResponse.json({
         success: true,
+        personaId: owner.userId,
         isConfigured: false,
-        message: "WhatsApp Agent API key removed.",
+        message: `WhatsApp Agent API key removed for ${owner.userName}.`,
       });
     }
 
@@ -70,23 +86,37 @@ export async function POST(request: Request) {
       return NextResponse.json(test);
     }
 
-    // Default: connect
+    if (action === "test_chat") {
+      const text = body.text?.trim();
+      if (!text) {
+        return NextResponse.json({ error: "Message text is required." }, { status: 400 });
+      }
+      const result = await runAgentTestMessage(owner, text);
+      return NextResponse.json({
+        success: true,
+        ...result,
+      });
+    }
+
+    // Default: connect strictly for this authenticated user
     const apiKey = body.apiKey?.trim();
     if (!apiKey) {
       return NextResponse.json({ error: "Please enter your WhatsApp Agent API key." }, { status: 400 });
     }
 
-    const result = await saveAgentApiKey(personaId, apiKey, body.agentName || "Ali");
+    const result = await saveAgentApiKey(owner, apiKey, body.agentName || "Ali");
     if (!result.success) {
       return NextResponse.json({ error: result.error || "Invalid API key" }, { status: 400 });
     }
 
-    const updated = getAgentKeyInfo(personaId);
+    const updated = getAgentKeyInfo(owner.userId);
     return NextResponse.json({
       success: true,
-      personaId,
+      personaId: owner.userId,
+      ownerName: owner.userName,
+      ownerRole: owner.userRole,
       ...updated,
-      message: "WhatsApp Agent successfully connected! You can now chat directly with your agent in WhatsApp.",
+      message: `WhatsApp Agent connected strictly to ${owner.userName} (${owner.userRole}).`,
     });
   } catch (error) {
     return NextResponse.json(

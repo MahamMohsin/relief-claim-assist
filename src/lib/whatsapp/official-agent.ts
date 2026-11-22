@@ -1,14 +1,23 @@
 import fs from "node:fs";
 import path from "node:path";
-import { askMimo } from "@/src/lib/ai/mimo";
+import type { Persona, Role } from "@/src/lib/contracts";
 import { recordWhatsAppMessage } from "./server";
-import { getToolsForRole } from "./tools";
+import { runScopedAssistantTurn } from "./agent";
+import { inferDemoPersona, type ScopedUserIdentity } from "./scoped-gateway";
 
 const AGENT_KEYS_FILE = path.resolve(process.cwd(), ".whatsapp-agent-keys.json");
 const WHATSAPP_AGENT_BASE_URL = "https://api.whatsapp.com/agent/v1";
 
 export type StoredAgentKey = {
+  /** Authenticated Supabase profile.id — each user gets their own completely isolated entry */
   personaId: string;
+  userName: string;
+  userRole: Role;
+  citizenId: string | null;
+  personaSlug?: Persona | "custom";
+  email?: string | null;
+  accessToken?: string | null;
+  refreshToken?: string | null;
   apiKey: string;
   agentName: string;
   connectedAt: string;
@@ -21,14 +30,29 @@ interface AgentKeyStore {
   keys: Record<string, StoredAgentKey>;
 }
 
-// In-memory active pollers map
-const activePollers = new Map<string, { abortController: AbortController; isRunning: boolean }>();
+// In-memory active pollers map — strictly one isolated AbortController loop per userId
+declare global {
+  // eslint-disable-next-line no-var
+  var __rca_whatsapp_pollers_map:
+    | Map<string, { abortController: AbortController; isRunning: boolean }>
+    | undefined;
+  // eslint-disable-next-line no-var
+  var __rca_whatsapp_pollers_inited: boolean | undefined;
+}
+
+function getActivePollers() {
+  if (!globalThis.__rca_whatsapp_pollers_map) {
+    globalThis.__rca_whatsapp_pollers_map = new Map();
+  }
+  return globalThis.__rca_whatsapp_pollers_map;
+}
 
 function readAgentKeyStore(): AgentKeyStore {
   try {
     if (fs.existsSync(AGENT_KEYS_FILE)) {
       const data = fs.readFileSync(AGENT_KEYS_FILE, "utf-8");
-      return JSON.parse(data);
+      const parsed = JSON.parse(data) as Partial<AgentKeyStore>;
+      return { keys: parsed.keys || {} };
     }
   } catch {}
   return { keys: {} };
@@ -108,9 +132,13 @@ export async function testAgentApiKey(apiKey: string): Promise<{
 }
 
 /**
- * Send an outbound message from your agent to a WhatsApp user
+ * Send an outbound message from this user's own WhatsApp agent
  */
-export async function sendAgentMessage(apiKey: string, toRecipient: string, bodyText: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
+export async function sendAgentMessage(
+  apiKey: string,
+  toRecipient: string,
+  bodyText: string,
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
     const res = await fetch(`${WHATSAPP_AGENT_BASE_URL}/messages`, {
       method: "POST",
@@ -169,17 +197,41 @@ export async function sendAgentTypingStatus(apiKey: string, messageId: string): 
   }
 }
 
+export type SaveAgentKeyProfile = {
+  userId: string;
+  userName: string;
+  userRole: Role;
+  citizenId: string | null;
+  email?: string | null;
+  accessToken?: string | null;
+  refreshToken?: string | null;
+};
+
 /**
- * Save an API key for a persona and start its polling worker
+ * Save an isolated API key strictly for one authenticated user and start its dedicated polling worker.
+ * Prevents two different users from binding the exact same WhatsApp Agent API key so their data stays 100% separate.
  */
 export async function saveAgentApiKey(
-  personaId: string,
+  owner: SaveAgentKeyProfile,
   apiKey: string,
   agentName = "Ali",
 ): Promise<{ success: boolean; maskedKey: string; error?: string }> {
   const cleanKey = apiKey.trim();
-  const test = await testAgentApiKey(cleanKey);
 
+  // Enforce 1-to-1 isolation: do not allow reusing another user's active WhatsApp Agent API key
+  const store = readAgentKeyStore();
+  const conflict = Object.values(store.keys).find(
+    k => k.personaId !== owner.userId && k.apiKey.trim() === cleanKey,
+  );
+  if (conflict) {
+    return {
+      success: false,
+      maskedKey: "",
+      error: `This WhatsApp Agent API key is already linked to another account (${conflict.userName || "another user"}). Each user must create and connect their own separate WhatsApp Agent key so data stays private.`,
+    };
+  }
+
+  const test = await testAgentApiKey(cleanKey);
   if (!test.valid) {
     return {
       success: false,
@@ -188,23 +240,36 @@ export async function saveAgentApiKey(
     };
   }
 
-  const store = readAgentKeyStore();
-  const existing = store.keys[personaId];
+  const existing = store.keys[owner.userId];
+  const inferredPersona = inferDemoPersona({
+    email: owner.email,
+    name: owner.userName,
+    role: owner.userRole,
+    persona: existing?.personaSlug,
+  });
 
   const entry: StoredAgentKey = {
-    personaId,
+    personaId: owner.userId,
+    userName: owner.userName,
+    userRole: owner.userRole,
+    citizenId: owner.citizenId,
+    personaSlug: inferredPersona ?? "custom",
+    email: owner.email ?? existing?.email ?? null,
+    accessToken: owner.accessToken ?? existing?.accessToken ?? null,
+    refreshToken: owner.refreshToken ?? existing?.refreshToken ?? null,
     apiKey: cleanKey,
-    agentName: agentName || existing?.agentName || "Ali",
+    agentName: agentName.trim() || existing?.agentName || "Ali",
     connectedAt: existing?.connectedAt || new Date().toISOString(),
     lastActiveAt: new Date().toISOString(),
     agentNumericId: test.agentId || existing?.agentNumericId || null,
-    lastOffset: existing?.lastOffset ?? null,
+    // Reset offset when switching to a brand new API key
+    lastOffset: existing?.apiKey === cleanKey ? (existing?.lastOffset ?? null) : null,
   };
 
-  store.keys[personaId] = entry;
+  store.keys[owner.userId] = entry;
   writeAgentKeyStore(store);
 
-  // Restart poller
+  // Start isolated poller strictly for this user
   startAgentPoller(entry);
 
   return {
@@ -214,13 +279,62 @@ export async function saveAgentApiKey(
 }
 
 /**
- * Remove an API key for a persona
+ * Syncs fresh profile/session metadata onto an existing stored agent key without exposing anything
  */
-export function removeAgentApiKey(personaId: string): boolean {
-  stopAgentPoller(personaId);
+export function refreshStoredAgentOwnerContext(owner: SaveAgentKeyProfile) {
   const store = readAgentKeyStore();
-  if (store.keys[personaId]) {
-    delete store.keys[personaId];
+  const existing = store.keys[owner.userId];
+  if (!existing) return;
+
+  let changed = false;
+  if (owner.userName && existing.userName !== owner.userName) {
+    existing.userName = owner.userName;
+    changed = true;
+  }
+  if (owner.userRole && existing.userRole !== owner.userRole) {
+    existing.userRole = owner.userRole;
+    changed = true;
+  }
+  if (owner.citizenId !== undefined && existing.citizenId !== owner.citizenId) {
+    existing.citizenId = owner.citizenId;
+    changed = true;
+  }
+  if (owner.email && existing.email !== owner.email) {
+    existing.email = owner.email;
+    changed = true;
+  }
+  if (owner.accessToken && existing.accessToken !== owner.accessToken) {
+    existing.accessToken = owner.accessToken;
+    changed = true;
+  }
+  if (owner.refreshToken && existing.refreshToken !== owner.refreshToken) {
+    existing.refreshToken = owner.refreshToken;
+    changed = true;
+  }
+  const inferred = inferDemoPersona({
+    email: existing.email,
+    name: existing.userName,
+    role: existing.userRole,
+    persona: existing.personaSlug,
+  });
+  if (inferred && existing.personaSlug !== inferred) {
+    existing.personaSlug = inferred;
+    changed = true;
+  }
+
+  if (changed) {
+    writeAgentKeyStore(store);
+  }
+}
+
+/**
+ * Remove an API key strictly for one user
+ */
+export function removeAgentApiKey(userId: string): boolean {
+  stopAgentPoller(userId);
+  const store = readAgentKeyStore();
+  if (store.keys[userId]) {
+    delete store.keys[userId];
     writeAgentKeyStore(store);
     return true;
   }
@@ -228,22 +342,26 @@ export function removeAgentApiKey(personaId: string): boolean {
 }
 
 /**
- * Get stored key info for a persona
+ * Get stored key info strictly for one userId (never falls back to another user!)
  */
-export function getAgentKeyInfo(personaId: string): {
+export function getAgentKeyInfo(userId: string): {
   isConfigured: boolean;
   maskedKey: string | null;
   agentName: string | null;
+  ownerName: string | null;
+  ownerRole: Role | null;
   connectedAt: string | null;
   lastActiveAt: string | null;
 } {
   const store = readAgentKeyStore();
-  const item = store.keys[personaId];
+  const item = store.keys[userId];
   if (!item) {
     return {
       isConfigured: false,
       maskedKey: null,
       agentName: null,
+      ownerName: null,
+      ownerRole: null,
       connectedAt: null,
       lastActiveAt: null,
     };
@@ -252,50 +370,128 @@ export function getAgentKeyInfo(personaId: string): {
     isConfigured: true,
     maskedKey: maskApiKey(item.apiKey),
     agentName: item.agentName,
+    ownerName: item.userName || null,
+    ownerRole: item.userRole || null,
     connectedAt: item.connectedAt,
     lastActiveAt: item.lastActiveAt,
   };
 }
 
+function buildScopedIdentityFromEntry(entry: StoredAgentKey): ScopedUserIdentity {
+  const role: Role = entry.userRole || "citizen";
+  const name = entry.userName || "Relief User";
+  const persona = entry.personaSlug || inferDemoPersona({ email: entry.email, name, role }) || "custom";
+
+  return {
+    userId: entry.personaId,
+    name,
+    role,
+    citizenId: entry.citizenId ?? null,
+    persona,
+    email: entry.email ?? null,
+    accessToken: entry.accessToken ?? null,
+    refreshToken: entry.refreshToken ?? null,
+    onTokensRefreshed: tokens => {
+      const store = readAgentKeyStore();
+      if (store.keys[entry.personaId]) {
+        store.keys[entry.personaId].accessToken = tokens.accessToken;
+        store.keys[entry.personaId].refreshToken = tokens.refreshToken;
+        writeAgentKeyStore(store);
+      }
+    },
+  };
+}
+
 /**
- * Stop active poller
+ * Run an isolated in-app test message through this user's own scoped WhatsApp Agent
  */
-export function stopAgentPoller(personaId: string) {
-  const existing = activePollers.get(personaId);
+export async function runAgentTestMessage(
+  owner: SaveAgentKeyProfile,
+  text: string,
+): Promise<{ reply: string; toolsUsed: string[]; agentName: string }> {
+  refreshStoredAgentOwnerContext(owner);
+  const store = readAgentKeyStore();
+  const entry = store.keys[owner.userId];
+  const agentName = entry?.agentName || "Ali";
+
+  const scopedUser: ScopedUserIdentity = entry
+    ? buildScopedIdentityFromEntry(entry)
+    : {
+        userId: owner.userId,
+        name: owner.userName,
+        role: owner.userRole,
+        citizenId: owner.citizenId,
+        persona: inferDemoPersona({ email: owner.email, name: owner.userName, role: owner.userRole }) ?? "custom",
+        email: owner.email ?? null,
+        accessToken: owner.accessToken ?? null,
+        refreshToken: owner.refreshToken ?? null,
+      };
+
+  recordWhatsAppMessage({
+    direction: "inbound",
+    from: `${owner.userName} (Test Console)`,
+    to: `${agentName} [${owner.userName}]`,
+    text,
+  });
+
+  const turn = await runScopedAssistantTurn(scopedUser, text, "whatsapp");
+
+  recordWhatsAppMessage({
+    direction: "outbound",
+    from: `${agentName} [${owner.userName}]`,
+    to: `${owner.userName} (Test Console)`,
+    text: turn.reply,
+    toolsUsed: turn.toolsUsed.length ? turn.toolsUsed : ["official_agent_mimo"],
+  });
+
+  return {
+    reply: turn.reply,
+    toolsUsed: turn.toolsUsed,
+    agentName,
+  };
+}
+
+/**
+ * Stop active poller for one user
+ */
+export function stopAgentPoller(userId: string) {
+  const activePollers = getActivePollers();
+  const existing = activePollers.get(userId);
   if (existing) {
     existing.abortController.abort();
     existing.isRunning = false;
-    activePollers.delete(personaId);
-    console.log(`[wa-agent] Stopped poller for persona: ${personaId}`);
+    activePollers.delete(userId);
+    console.log(`[wa-agent] Stopped isolated poller for user: ${userId}`);
   }
 }
 
 /**
- * Start long-poll loop for a WhatsApp Agent
+ * Start dedicated long-poll loop for a single user's WhatsApp Agent.
+ * Strictly scoped to THIS user's data, role, and API key.
  */
 export function startAgentPoller(entry: StoredAgentKey) {
   stopAgentPoller(entry.personaId);
 
+  const activePollers = getActivePollers();
   const abortController = new AbortController();
   activePollers.set(entry.personaId, { abortController, isRunning: true });
 
-  const roleForPersona: "citizen" | "helper" | "officer" | "auditor" | "admin" =
-    entry.personaId === "kamran"
-      ? "admin"
-      : entry.personaId === "tariq"
-        ? "officer"
-        : entry.personaId === "zainab"
-          ? "helper"
-          : entry.personaId === "auditor"
-            ? "auditor"
-            : "citizen";
-
   (async () => {
     let offset: number | null = entry.lastOffset ?? null;
-    console.log(`[wa-agent] Started official WhatsApp Agent poller for ${entry.personaId} (role: ${roleForPersona}, agent: ${entry.agentName})`);
+    console.log(
+      `[wa-agent] Started isolated WhatsApp Agent poller for ${entry.userName || entry.personaId} (role: ${entry.userRole || "citizen"}, agent: ${entry.agentName})`,
+    );
 
     while (!abortController.signal.aborted) {
       try {
+        // Reload freshest stored user metadata on each loop iteration
+        const freshStore = readAgentKeyStore();
+        const currentEntry = freshStore.keys[entry.personaId];
+        if (!currentEntry || !currentEntry.apiKey) {
+          console.log(`[wa-agent] Key removed for ${entry.personaId}, halting poller.`);
+          break;
+        }
+
         let url = `${WHATSAPP_AGENT_BASE_URL}/updates?limit=50&timeout=15`;
         if (offset !== null) {
           url += `&offset=${offset}`;
@@ -304,14 +500,13 @@ export function startAgentPoller(entry: StoredAgentKey) {
         const res = await fetch(url, {
           method: "GET",
           headers: {
-            Authorization: `Bearer ${entry.apiKey}`,
+            Authorization: `Bearer ${currentEntry.apiKey}`,
           },
           signal: abortController.signal,
         });
 
         if (abortController.signal.aborted) break;
 
-        // HTTP 204: timeout with nothing to deliver
         if (res.status === 204) {
           continue;
         }
@@ -320,9 +515,12 @@ export function startAgentPoller(entry: StoredAgentKey) {
           const data = await res.json();
           if (data?.next_offset !== undefined) {
             offset = data.next_offset;
-            // update in store occasionally
-            entry.lastOffset = offset;
-            entry.lastActiveAt = new Date().toISOString();
+            const persistStore = readAgentKeyStore();
+            if (persistStore.keys[entry.personaId]) {
+              persistStore.keys[entry.personaId].lastOffset = offset;
+              persistStore.keys[entry.personaId].lastActiveAt = new Date().toISOString();
+              writeAgentKeyStore(persistStore);
+            }
           }
 
           const entries = data?.entry || [];
@@ -330,62 +528,51 @@ export function startAgentPoller(entry: StoredAgentKey) {
             const changes = ent?.changes || [];
             for (const ch of changes) {
               const messages = ch?.value?.messages || [];
-              const contacts = ch?.value?.contacts || [];
 
               for (const msg of messages) {
                 if (msg.type !== "text" && !msg.text?.body) continue;
-                const senderId = msg.from; // e.g. "user:50972923564215"
+                const senderId = msg.from;
                 const textBody = msg.text.body.trim();
                 const wamid = msg.id;
+                const ownerLabel = currentEntry.userName || currentEntry.personaId;
 
-                console.log(`[wa-agent] 💬 Inbound message on ${entry.agentName} from ${senderId}: "${textBody}"`);
+                console.log(
+                  `[wa-agent] Inbound on ${currentEntry.agentName} [${ownerLabel}] from ${senderId}: "${textBody}"`,
+                );
 
-                // Record inbound message
                 recordWhatsAppMessage({
                   direction: "inbound",
                   from: senderId,
-                  to: entry.agentName,
+                  to: `${currentEntry.agentName} [${ownerLabel}]`,
                   text: textBody,
                 });
 
-                // Show typing indicator & mark read
                 if (wamid) {
-                  void sendAgentTypingStatus(entry.apiKey, wamid);
+                  void sendAgentTypingStatus(currentEntry.apiKey, wamid);
                 }
 
-                // Process through MiMo AI with role-scoped tools
-                const tools = getToolsForRole(roleForPersona);
-                const toolsPrompt = tools.map(t => `- **${t.name}**: ${t.description}`).join("\n");
-
-                const systemPrompt = `You are the official Relief Claim Assist WhatsApp Agent for Pakistan Flood Relief.
-User persona context: Role: ${roleForPersona}, ID: ${entry.personaId}.
-Available capabilities for this user role:
-${toolsPrompt}
-
-Answer the user directly and informatively in clear, professional English (or Urdu if they ask in Urdu).
-Keep answers formatted nicely for WhatsApp using asterisks for bold (*text*), bullet points (•), and emojis where helpful.`;
-
                 try {
-                  const mimoInput = `User Message: "${textBody}"\n\nPlease provide the direct WhatsApp response to the user.`;
-                  const replyText = await askMimo(systemPrompt, mimoInput);
+                  // Execute strictly scoped assistant turn for THIS key's owner ONLY
+                  const scopedUser = buildScopedIdentityFromEntry(currentEntry);
+                  const turn = await runScopedAssistantTurn(scopedUser, textBody, "whatsapp");
 
-                  // Send reply to WhatsApp
-                  const sendRes = await sendAgentMessage(entry.apiKey, senderId, replyText);
+                  const sendRes = await sendAgentMessage(currentEntry.apiKey, senderId, turn.reply);
 
-                  // Record outbound message
                   recordWhatsAppMessage({
                     direction: "outbound",
-                    from: entry.agentName,
+                    from: `${currentEntry.agentName} [${ownerLabel}]`,
                     to: senderId,
-                    text: replyText,
-                    toolsUsed: ["official_agent_mimo"],
+                    text: turn.reply,
+                    toolsUsed: turn.toolsUsed.length ? turn.toolsUsed : ["official_agent_mimo"],
                   });
 
-                  console.log(`[wa-agent] ✅ Bot reply sent to WhatsApp user ${senderId} (messageId: ${sendRes.messageId || "ok"})`);
+                  console.log(
+                    `[wa-agent] Reply sent via ${currentEntry.agentName} [${ownerLabel}] to ${senderId} (messageId: ${sendRes.messageId || "ok"})`,
+                  );
                 } catch (aiErr) {
-                  console.error("[wa-agent] Error generating/sending AI reply:", aiErr);
+                  console.error("[wa-agent] Error generating/sending scoped AI reply:", aiErr);
                   await sendAgentMessage(
-                    entry.apiKey,
+                    currentEntry.apiKey,
                     senderId,
                     "⚠️ We encountered a temporary delay processing your request. Please try again in a moment.",
                   );
@@ -396,43 +583,36 @@ Keep answers formatted nicely for WhatsApp using asterisks for bold (*text*), bu
           continue;
         }
 
-        // Rate limit 429
         if (res.status === 429) {
-          console.warn("[wa-agent] Rate limit reached. Backing off for 10 seconds...");
+          console.warn(`[wa-agent] Rate limit for ${entry.personaId}. Backing off 10s...`);
           await new Promise(r => setTimeout(r, 10000));
           continue;
         }
 
-        // Token invalid 401
         if (res.status === 401) {
           console.error(`[wa-agent] WhatsApp API token rejected for ${entry.personaId}. Halting poller.`);
           break;
         }
 
-        // Other HTTP errors (500, 503)
         await new Promise(r => setTimeout(r, 5000));
       } catch (err: unknown) {
         if (abortController.signal.aborted) break;
-        // Network timeout / connection reset
-        console.warn(`[wa-agent] Polling loop notice: ${err instanceof Error ? err.message : String(err)}. Re-polling in 3s...`);
+        console.warn(
+          `[wa-agent] Polling loop notice (${entry.personaId}): ${err instanceof Error ? err.message : String(err)}. Re-polling in 3s...`,
+        );
         await new Promise(r => setTimeout(r, 3000));
       }
     }
   })();
 }
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __rca_whatsapp_pollers_inited: boolean | undefined;
-}
-
 /**
- * Initializes pollers for all saved agent keys upon server boot
+ * Initializes isolated pollers for all saved per-user agent keys upon server boot
  */
 export function initAllAgentPollers() {
   const store = readAgentKeyStore();
   const keys = Object.values(store.keys);
-  console.log(`[wa-agent] Initializing ${keys.length} stored WhatsApp Agent pollers...`);
+  console.log(`[wa-agent] Initializing ${keys.length} isolated WhatsApp Agent pollers...`);
   for (const k of keys) {
     if (k.apiKey) {
       startAgentPoller(k);
@@ -446,4 +626,3 @@ export function ensureAgentPollers() {
     initAllAgentPollers();
   }
 }
-
