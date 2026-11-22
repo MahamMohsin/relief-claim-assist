@@ -1916,13 +1916,15 @@ th { background: var(--faint); color: var(--forest); }
   --muted: var(--text-on-dark-muted);
   --forest: #ffffff;
   color: #ffffff;
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 50%, rgba(255, 255, 255, 0.01) 100%),
-    rgba(19, 74, 65, 0.6);
-  backdrop-filter: blur(40px) saturate(185%);
-  -webkit-backdrop-filter: blur(40px) saturate(185%);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  /* The chat panel is the same smoked glass as the dashboard widgets, so the
+     wallpaper behind it is blurred the same way. The prefixed property has to
+     come first: written the other way round the CSS minifier drops the
+     standard one and the panel stops blurring at all. */
+  background: var(--widget-surface);
+  -webkit-backdrop-filter: var(--widget-blur);
+  backdrop-filter: var(--widget-blur);
+  border: var(--widget-border);
+  box-shadow: var(--widget-shadow);
   border-radius: 22px;
   padding: 0.45rem 0.55rem;
   display: flex;
@@ -2306,11 +2308,13 @@ th { background: var(--faint); color: var(--forest); }
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  /* The input pill sits on the dark chat panel, so it is a light translucent
+     fill over the blurred panel rather than a green tint of its own. */
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 50%, rgba(255, 255, 255, 0.015) 100%),
-    rgba(19, 74, 65, 0.58);
-  backdrop-filter: blur(32px) saturate(185%);
-  -webkit-backdrop-filter: blur(32px) saturate(185%);
+    rgba(255, 255, 255, 0.06);
+  -webkit-backdrop-filter: var(--widget-blur);
+  backdrop-filter: var(--widget-blur);
   border-radius: 9999px;
   padding: 0.22rem 0.38rem 0.22rem 0.55rem;
   border: 1px solid rgba(255, 255, 255, 0.22);
@@ -6455,8 +6459,17 @@ button.active-cases-card:hover {
 .workspace.lite .relief-stats-widget,
 .workspace.lite .ios-history-widget.compact,
 .workspace.lite .overview-card,
-.workspace.lite .audit-glass-card {
+.workspace.lite .audit-glass-card,
+.workspace.lite .voice-dock-glass {
   background: var(--glass-solid);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* The chat input pill keeps a lighter fill on the solid panel, so the input
+   row still reads as a control rather than disappearing into it. */
+.workspace.lite .voice-glass-form {
+  background: rgba(255, 255, 255, 0.08);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
