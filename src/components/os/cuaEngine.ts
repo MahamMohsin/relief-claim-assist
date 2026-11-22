@@ -313,9 +313,8 @@ class CuaEngine {
       await this.clickElement(icon, `Opening ${title}`, gen, () => {
         this.bridge?.openApp(app);
       });
-    } else {
-      this.bridge.openApp(app);
     }
+    this.bridge?.openApp(app);
     // Wait for Apple spring window launch animation to settle
     return await this.sleep(420, gen);
   }

@@ -444,6 +444,18 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
     if (action.type === "show_jev_badge" || action.type === "ask_clarification") {
       return;
     }
+    // Guaranteed window opening for any app-specific action
+    if (action.type === "open_mini_app") {
+      openAppWindow(action.app);
+    } else if (action.type === "ask_policy_visual") {
+      openAppWindow("policy");
+    } else if (action.type === "check_scam_visual") {
+      openAppWindow("scam");
+    } else if (action.type === "start_new_claim" || action.type === "prefill_fields" || action.type === "claim_back_to_list" || action.type === "advance_claim_step") {
+      openAppWindow("claim");
+    } else if (action.type === "privacy_correction_visual" || action.type === "privacy_helper_consent_visual") {
+      openAppWindow("privacy");
+    }
     cuaEngine.dispatch(action);
   }
 
