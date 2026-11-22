@@ -113,15 +113,32 @@ export function PolicyChatView({ ctx }: { ctx: ViewContext }) {
   const [busy, setBusy] = useState(false);
   const activeController = useRef<AbortController | null>(null);
   const askRef = useRef<(raw: string) => Promise<void>>(async () => {});
+  const resetRef = useRef<() => void>(() => {});
+  const turnsRef = useRef(turns);
+  turnsRef.current = turns;
 
   useEffect(() => {
     cuaEngine.policy = {
+      getSnapshot: () => {
+        const list = turnsRef.current;
+        const latest = list[list.length - 1];
+        return {
+          turnsCount: list.length,
+          latestQuestion: latest?.question,
+          latestAnswer: latest?.result?.answer?.slice(0, 320),
+          latestCitations: latest?.result?.citations?.map(c => c.section_code),
+          policyVersion: latest?.result?.policy_version,
+        };
+      },
       setDraft: value => {
         setDraft(value);
         setInputError("");
       },
       ask: question => {
         void askRef.current(question);
+      },
+      reset: () => {
+        resetRef.current();
       },
     };
     return () => {
@@ -238,6 +255,8 @@ export function PolicyChatView({ ctx }: { ctx: ViewContext }) {
     setDraft("");
     setInputError("");
   }
+
+  resetRef.current = resetChat;
 
   const emptyState = (
     <VStack gap={5} padding={5} hAlign="center" width="100%" maxWidth={680}>

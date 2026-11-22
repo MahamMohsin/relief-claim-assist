@@ -152,15 +152,38 @@ export function ScamChatView({ ctx }: { ctx: ViewContext }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const activeController = useRef<AbortController | null>(null);
   const submitRef = useRef<(rawText: string, explicitImage?: PendingImage | null) => Promise<void>>(async () => {});
+  const reportMissingRef = useRef<(reference?: string) => Promise<void>>(async () => {});
+  const resetRef = useRef<() => void>(() => {});
+  const turnsRef = useRef(turns);
+  turnsRef.current = turns;
 
   useEffect(() => {
     cuaEngine.scam = {
+      getSnapshot: () => {
+        const list = turnsRef.current;
+        const latest = list[list.length - 1];
+        const ref = latest?.result?.payment?.raast_ref || latest?.result?.detected_reference;
+        return {
+          turnsCount: list.length,
+          latestVerdict: latest?.result?.jev_label,
+          latestReference: ref,
+          latestPaymentStatus: latest?.result?.payment?.status,
+          canReportMissing: Boolean(ref) && latest?.reportState !== "reported",
+          latestReported: latest?.reportState === "reported",
+        };
+      },
       setDraft: value => {
         setDraft(value);
         setInputError("");
       },
       check: text => {
         void submitRef.current(text, null);
+      },
+      reportMissing: async reference => {
+        await reportMissingRef.current(reference);
+      },
+      reset: () => {
+        resetRef.current();
       },
     };
     return () => {
@@ -343,6 +366,26 @@ export function ScamChatView({ ctx }: { ctx: ViewContext }) {
     setAttachment(null);
     setInputError("");
   }
+
+  resetRef.current = resetChat;
+  reportMissingRef.current = async reference => {
+    const list = turnsRef.current;
+    const targetTurn = [...list].reverse().find(t => {
+      const ref = t.result?.payment?.raast_ref || t.result?.detected_reference;
+      if (!ref) return false;
+      return !reference || ref.toLowerCase() === reference.toLowerCase();
+    });
+    if (targetTurn) {
+      await reportMissingPayment(targetTurn);
+    } else if (reference && reference.trim()) {
+      const ref = reference.trim();
+      if (ctx.offline) {
+        await ctx.enqueue("report", { reference: ref, message: `Missing payment reported via assistant for ${ref}` });
+      } else {
+        await api("report", { reference: ref, message: `Missing payment reported via assistant for ${ref}`, key: crypto.randomUUID() });
+      }
+    }
+  };
 
   const canSendCurrent = !ctx.offline && !busy && (draft.trim().length > 0 || Boolean(attachment));
 
@@ -704,19 +747,21 @@ export function ScamChatView({ ctx }: { ctx: ViewContext }) {
                                 </VStack>
                               </HStack>
                               {reportableRef && (
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  label={
-                                    turn.reportState === "reported"
-                                      ? "Reported"
-                                      : "Report missing payment"
-                                  }
-                                  icon={<Icon icon={Flag} size="sm" />}
-                                  isLoading={turn.reportState === "reporting"}
-                                  isDisabled={turn.reportState === "reported"}
-                                  onClick={() => void reportMissingPayment(turn)}
-                                />
+                                <span data-cua="scam-report-btn" style={{ display: "inline-flex" }}>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    label={
+                                      turn.reportState === "reported"
+                                        ? "Reported"
+                                        : "Report missing payment"
+                                    }
+                                    icon={<Icon icon={Flag} size="sm" />}
+                                    isLoading={turn.reportState === "reporting"}
+                                    isDisabled={turn.reportState === "reported"}
+                                    onClick={() => void reportMissingPayment(turn)}
+                                  />
+                                </span>
                               )}
                             </HStack>
                           </Card>
