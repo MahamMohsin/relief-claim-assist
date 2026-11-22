@@ -116,7 +116,9 @@ export async function POST(request: Request) {
     const input = streamSchema.safeParse(await readJson(request));
     if (!input.success) throw new ApiError(400, "Provide a short assistant command.");
     const profile = await gateway<Profile>("profile");
-    const citizenId = profile.role === "helper" ? input.data.citizenId ?? null : profile.citizen_id;
+    const citizenId = ["helper", "officer", "admin"].includes(profile.role)
+      ? (input.data.citizenId ?? profile.citizen_id ?? null)
+      : profile.citizen_id;
     const { runId, prompt, locale, screenContext } = input.data;
     await gateway("agent_guard", { citizenId });
     if (active.has(profile.id)) throw new ApiError(409, "Finish or stop the active assistant request first.");
@@ -155,9 +157,10 @@ export async function POST(request: Request) {
           if (cancelled) return;
           confidence = decision.confidence;
           const threshold = scheme.config.confidence_threshold;
-          const isGreeting = decision.label === "greeting" || decision.label === "workspace_control";
+          const isGeneralControl = decision.label === "greeting" || decision.label === "workspace_control" || decision.label === "dashboard";
+          const restrictedIntent = Boolean(decision.app) && !canOpen(profile.role, decision.app!) && confidence >= threshold;
           const explicitTarget = decision.app && canOpen(profile.role, decision.app) ? decision.app : null;
-          const explicitAccepted = (Boolean(explicitTarget) && confidence >= threshold) || isGreeting;
+          const explicitAccepted = (Boolean(explicitTarget) && confidence >= threshold) || isGeneralControl || restrictedIntent;
 
           // If the user is already inside an open mini-app and sends a follow-up (e.g., "15000 and 4 people",
           // "next step", "attach readable sample", "yes save it"), stay in the active app instead of asking
@@ -169,19 +172,19 @@ export async function POST(request: Request) {
           const continuedInActive = !explicitAccepted && decision.label !== "ambiguous" && Boolean(validActiveApp);
 
           target = explicitTarget ?? (continuedInActive ? validActiveApp : null);
-          if (continuedInActive || isGreeting) {
+          if (continuedInActive || isGeneralControl) {
             confidence = Math.max(confidence, threshold, 0.92);
           }
-          const accepted = isGreeting || (Boolean(target) && confidence >= threshold);
+          const accepted = isGeneralControl || restrictedIntent || (Boolean(target) && confidence >= threshold);
           emitAction({
             type: "show_jev_badge",
             label: continuedInActive ? `${target} (active context)` : decision.label,
             confidence,
-            route: accepted && target ? target : isGreeting ? "general" as MiniApp : "clarification",
+            route: accepted && target ? target : (isGeneralControl || restrictedIntent) ? "general" : "clarification",
             model: decision.model,
           });
           await gateway("agent_trace", { citizenId, event: "jev_route", model: decision.model, confidence,
-            outcome: accepted ? (target ?? "greeting") : "clarification", detail: { route: decision.label, continuedInActive, threshold, runId } });
+            outcome: accepted ? (target ?? decision.label) : "clarification", detail: { route: decision.label, continuedInActive, restrictedIntent, threshold, runId } });
           if (!accepted) {
             const options = (Object.keys(appRoles) as MiniApp[]).filter(app => canOpen(profile.role, app));
             emitAction({ type: "ask_clarification", question: locale === "ur"
@@ -267,6 +270,41 @@ export async function POST(request: Request) {
                 ? "مائی پرائیویسی کھول دی گئی ہے۔ آپ رضامندی کا انتظام کر سکتے ہیں یا ڈیٹا کی درستگی کی درخواست کر سکتے ہیں۔"
                 : "Opened My Privacy for you. You can manage consent or request a record correction.";
             }
+          } else if (target === "profile") {
+            emitAction({ type: "open_mini_app", app: "profile" });
+            guidance = locale === "ur"
+              ? "پروفائل کھول دی گئی ہے۔ آپ اپنا شناختی کارڈ، یوٹیلیٹی بل یا ملازمت کا ثبوت دیکھ یا شامل کر سکتے ہیں۔"
+              : "Opened My Profile for you. You can view or upload CNIC, utility bill, or job proof documents.";
+          } else if (target === "family") {
+            emitAction({ type: "open_mini_app", app: "family" });
+            guidance = locale === "ur"
+              ? "فیملی سوئچ کھول دیا گیا ہے۔ آگے بڑھنے کے لیے ایک خاندان منتخب کریں۔"
+              : "Opened Family Switch for you. Select a family to work on their claims or profile.";
+          } else if (target === "review") {
+            emitAction({ type: "open_mini_app", app: "review" });
+            guidance = locale === "ur"
+              ? "ریویو ڈیسک کھول دیا گیا ہے۔ آپ زیر التواء درخواستوں کا جائزہ لے سکتے ہیں۔"
+              : "Opened Review Desk for you. You can inspect pending cases, generate AI summaries, and record decisions.";
+          } else if (target === "rules") {
+            emitAction({ type: "open_mini_app", app: "rules" });
+            guidance = locale === "ur"
+              ? "رول اسٹوڈیو کھول دیا گیا ہے۔ آپ اہلیت کے قواعد کی نقل یا اشاعت کر سکتے ہیں۔"
+              : "Opened Rule Studio for you. You can edit, simulate, or publish eligibility rules and manage staff access.";
+          } else if (target === "audit") {
+            emitAction({ type: "open_mini_app", app: "audit" });
+            guidance = locale === "ur"
+              ? "آڈٹ والٹ کھول دیا گیا ہے۔ آپ آڈٹ ایونٹس اور سیفٹی میٹرکس دیکھ سکتے ہیں۔"
+              : "Opened Audit Vault for you. You can inspect audit events and safety evaluation metrics.";
+          } else if (target === "users") {
+            emitAction({ type: "open_mini_app", app: "users" });
+            guidance = locale === "ur"
+              ? "صارفین کی ڈائریکٹری کھول دی گئی ہے۔"
+              : "Opened the Registered Users directory for you.";
+          } else if (target === "whatsapp") {
+            emitAction({ type: "open_mini_app", app: "whatsapp" });
+            guidance = locale === "ur"
+              ? "واٹس ایپ ایجنٹ ایپ کھول دی گئی ہے۔"
+              : "Opened WhatsApp AI Agent for you. You can manage your API key or inspect live messages.";
           } else {
             guidance = locale === "ur"
               ? "متعلقہ ایپ کھول دی گئی ہے۔ ادائیگی سے پہلے افسر کا فیصلہ ضروری ہے۔"
@@ -299,7 +337,9 @@ async function control(request: Request, method: "abort" | "steer") {
     if (!parsed.success) throw new ApiError(400, "The active request ID is required.");
     const profile = await gateway<Profile>("profile");
     const run = active.get(profile.id);
-    const citizenId = profile.role === "helper" ? parsed.data.citizenId ?? null : profile.citizen_id;
+    const citizenId = ["helper", "officer", "admin"].includes(profile.role)
+      ? (parsed.data.citizenId ?? profile.citizen_id ?? null)
+      : profile.citizen_id;
     if (!run || run.id !== parsed.data.runId || citizenId !== run.citizen) throw new ApiError(404, "This assistant request has finished.");
     if (method === "abort") run.abort();
     else {
