@@ -213,6 +213,7 @@ export type UIAction = { type: "open_mini_app"; app: MiniApp }
   | { type: "whatsapp_set_key"; key: string; agentName?: string }
   | { type: "whatsapp_disconnect" }
   | { type: "whatsapp_send_test"; text: string }
+  | { type: "google_messages_action"; action: "regenerate_key" | "pair" | "open_window" | "refresh_qr" | "set_phone" | "toggle_auto_prompt" | "disconnect" | "simulate_sms"; phone?: string; text?: string }
   | { type: "close_window"; app: MiniApp }
   | { type: "close_all_windows" }
   | { type: "minimize_window"; app: MiniApp }
