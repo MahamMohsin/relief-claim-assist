@@ -61,6 +61,20 @@ export async function queued(owner: string, citizen: string) {
     .sort((first, second) => first.created - second.created);
 }
 
+/** Every queued item of this user, across all families (helpers queue for several families). */
+export async function queuedForOwner(owner: string) {
+  return (await (await database()).getAll("mutations"))
+    .filter(item => item.owner === owner)
+    .sort((first, second) => first.created - second.created);
+}
+
+/** Unsent item count per family for this user. */
+export async function countByCitizen(owner: string) {
+  const counts: Record<string, number> = {};
+  for (const item of await queuedForOwner(owner)) counts[item.citizen] = (counts[item.citizen] ?? 0) + 1;
+  return counts;
+}
+
 export async function complete(item: Mutation, claimId?: string) {
   const db = await database();
   const tx = db.transaction(["mutations", "aliases", "drafts"], "readwrite");

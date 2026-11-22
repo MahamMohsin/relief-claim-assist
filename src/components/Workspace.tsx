@@ -9,7 +9,11 @@ import { ArrowLeft, ArrowRight, ArrowUpRight, Award, Bell, CheckCircle2, Chevron
 import { canOpen, personas, type Audit, type Claim, type Family, type MiniApp, type Overview, type Persona, type Profile } from "@/src/lib/contracts";
 import { api, jsonRequest } from "@/src/lib/client";
 import { pick, strings, useLang, waitingToSend } from "@/src/lib/i18n";
-import { queued, pushMutation, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
+import { countByCitizen, queued, queuedForOwner, pushMutation, wipeDraft, type Mutation } from "@/src/lib/offline/queue";
+import { Dialog, DialogHeader } from "@astryxdesign/core/Dialog";
+import { Button } from "@astryxdesign/core/Button";
+import { HStack } from "@astryxdesign/core/HStack";
+import { VStack } from "@astryxdesign/core/VStack";
 import { syncQueue } from "@/src/lib/offline/syncEngine";
 import { apps, appTitle } from "./launcher";
 import { MiniApps, type ViewContext } from "./MiniApps";
@@ -79,6 +83,10 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   const [lite, setLite] = useState(false);
   const { lang } = useLang(); // app-wide language, toggled by the voice dock pill
   const [pending, setPending] = useState<Mutation[]>([]);
+  // Unsent items per family for this user (helpers queue for several families).
+  const [unsentByFamily, setUnsentByFamily] = useState<Record<string, number>>({});
+  // Set when sign-out is attempted with unsent items: the count shown in the confirm dialog.
+  const [signOutUnsent, setSignOutUnsent] = useState<number | null>(null);
   const [busy, setBusy] = useState<Persona | "signout" | null>(null);
   const [headMessage, setHeadMessage] = useState("");
   const [version, setVersion] = useState(0);
@@ -124,7 +132,10 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
 
   const reloadQueue = useCallback(async () => {
     if (!owner) return;
-    try { setPending(await queued(owner, scope)); } catch { setHeadMessage("Offline storage is unavailable in this browser."); }
+    try {
+      setPending(await queued(owner, scope));
+      setUnsentByFamily(await countByCitizen(owner));
+    } catch { setHeadMessage("Offline storage is unavailable in this browser."); }
   }, [owner, scope]);
 
   const synchronize = useCallback(async (manual = false, flush = false) => {
@@ -133,7 +144,21 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
     activeCall.current = controller;
     setSyncing(true);
     try {
-      const count = await syncQueue({ owner, citizen: scope, manual, flush, signal: controller.signal, onTranscript: setTranscript });
+      // Nothing queued for this user: skip the session check and the flush.
+      if (!(await queuedForOwner(owner)).length) return;
+      // Re-check who is signed in right now (another tab may have switched accounts; cookies are shared).
+      // Items stay queued for their owner until that account is signed in here.
+      const current = await api<Profile>("profile", {}, controller.signal);
+      if (current.id !== owner) {
+        setHeadMessage("A different account is signed in now. Unsent items were kept on this device for " + (profile?.full_name ?? "their owner") + ".");
+        return;
+      }
+      const { synced: count, ownerMismatch } = await syncQueue({
+        owner, citizen: scope, manual, flush, signal: controller.signal, onTranscript: setTranscript,
+        // Helper "Sync now" sends every family's items (each with its own family id; the server checks consent).
+        allFamilies: manual && profile?.role === "helper",
+      });
+      if (ownerMismatch) setHeadMessage("A different account is signed in now. Unsent items were kept on this device.");
       if (count && !controller.signal.aborted) {
         setVersion(value => value + 1);
         setHeadMessage(count + (count === 1 ? " queued item synced." : " queued items synced."));
@@ -147,7 +172,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
         setSyncing(false);
       }
     }
-  }, [owner, scope, offline, reloadQueue]);
+  }, [owner, scope, offline, reloadQueue, profile?.role, profile?.full_name]);
 
   // Flush the outbox as soon as the connection returns or the app regains focus.
   useEffect(() => {
@@ -411,8 +436,14 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
     } finally { setBusy(null); }
   }
 
-  async function signOut() {
+  async function signOut(force = false) {
     if (offline || busy) return;
+    if (!force && owner) {
+      // Unsent items stay on this device after sign-out: ask first. Nothing is deleted.
+      const unsent = (await queuedForOwner(owner).catch(() => [])).length;
+      if (unsent > 0) { setSignOutUnsent(unsent); return; }
+    }
+    setSignOutUnsent(null);
     setBusy("signout");
     try {
       const response = await fetch("/api/auth/demo", { method: "DELETE" });
@@ -612,7 +643,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
   const status = offline ? "Offline" : "Online";
   const failed = pending.find(item => item.failure);
   const context: ViewContext | null = profile ? {
-    profile, citizen, offline, version, enqueue, selectFamily, prefill, stepNav, voiceLang: lang,
+    profile, citizen, offline, version, enqueue, selectFamily, prefill, stepNav, voiceLang: lang, unsentByFamily,
     go: changeApp, refresh: () => setVersion(current => current + 1), lite,
   } : null;
 
@@ -810,7 +841,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                                   <Wifi size={15} />
                                   <span>2G Lite mode</span>
                                 </button>
-                                {pending.length > 0 && (
+                                {(pending.length > 0 || Object.keys(unsentByFamily).length > 0) && (
                                   <button
                                     type="button"
                                     className="liquid-action-btn wide"
@@ -818,7 +849,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
                                     onClick={() => void synchronize(true)}
                                   >
                                     <Cloud size={15} />
-                                    <span lang={lang}>{syncing ? pick(strings.syncing, lang) : pick(strings.syncNow, lang) + " · " + waitingToSend[lang](pending.length)}</span>
+                                    <span lang={lang}>{syncing ? pick(strings.syncing, lang) : pick(strings.syncNow, lang) + " · " + waitingToSend[lang](profile?.role === "helper" ? Object.values(unsentByFamily).reduce((a, b) => a + b, 0) : pending.length)}</span>
                                   </button>
                                 )}
                               </div>
@@ -1251,6 +1282,18 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
       </div>}
       {profile && <AgentCursor />}
 
+      <Dialog isOpen={signOutUnsent !== null} onOpenChange={open => { if (!open) setSignOutUnsent(null); }} width={420} padding={4} purpose="form">
+        <VStack gap={3} width="100%">
+          <DialogHeader title="Unsent items on this device" onOpenChange={open => { if (!open) setSignOutUnsent(null); }} />
+          <p>You have {signOutUnsent} unsent {signOutUnsent === 1 ? "item" : "items"}. Sign out anyway? They will stay on this device until you sign in again.</p>
+          <HStack gap={2} justify="end" wrap="wrap">
+            <Button variant="secondary" label={pick(strings.syncNow, lang)} isDisabled={offline || syncing}
+              onClick={() => { setSignOutUnsent(null); void synchronize(true); }} />
+            <Button variant="primary" label="Sign out anyway" onClick={() => void signOut(true)} />
+          </HStack>
+        </VStack>
+      </Dialog>
+
       {/* Centered macOS-style horizontal persona switcher dock */}
       {chooser && profile && portalHost && createPortal(
         <div className="persona-macos-dock-scrim" onClick={() => setChooser(false)}>
@@ -1296,7 +1339,7 @@ export function Workspace({ initialProfile, showLogin = false, demoRegistrationE
               <button
                 type="button"
                 className="persona-macos-dock-item logout"
-                onClick={signOut}
+                onClick={() => void signOut()}
                 disabled={Boolean(busy) || offline}
                 title="Sign out"
               >
